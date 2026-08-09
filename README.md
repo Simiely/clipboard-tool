@@ -1,0 +1,51 @@
+# 剪贴板 📋
+
+多用户剪贴板管理工具（tools-center 平台工具，Node 零依赖）。
+
+## 功能
+
+- **单一万能入口**：粘贴自动识别（URL→链接 / 其他→文本）、拖放/选择文件→文件条目、Ctrl+V 粘贴图片/文件；检测到复制内容自动弹出大窗口
+- **一键复制 / 双击编辑**：文本/链接复制内容，图片点击直接复制到系统剪贴板（ClipboardItem），其他文件点击下载
+- **智能排序**：使用次数优先 → 标签相近归拢 → 内容相似归拢（10 字符片段倒排索引，毫秒级）
+- **拼音首字母搜索**：内置 3755 常用字映射表，`sf` 可搜到"身份"
+- **标签体系**：点选已有标签 + 输入新建，列表标签过滤
+- **多用户**：无密码零摩擦进入 / 可选密码锁，会话 token 内存态（服务重启需重登）
+- **WebDAV 备份同步**：单向全量备份 + 双向合并同步（墓碑机制防删除复活、全部清空不传播删除、定时自动同步默认 12h、可选同步文件实体）
+- **安全**：UUID 白名单防路径穿越、原子写、登录限流、上传黑名单（拒可执行/脚本类）、下载强制 attachment
+
+## 技术栈
+
+- 后端：Node.js（内置 `http` + `fetch`，零第三方依赖）
+- 前端：原生 HTML/JS（Alpine 式轻量、无框架）
+- 存储：JSON 文件（原子写），WebDAV 用 HTTP 协议直连
+
+## 运行
+
+```bash
+node server.mjs [port]        # 默认 8130
+# 数据目录默认 ./data（可用 CAP_STORAGE_DIR 覆盖）
+```
+
+## 测试
+
+```bash
+# 冒烟测试（需先启动独立实例，勿对真实数据目录跑）
+CAP_STORAGE_DIR=/tmp/clip-test PORT=8131 node server.mjs 8131
+TEST_PORT=8131 node scripts/smoke-test.mjs
+
+# WebDAV 端到端（需再起 mock WebDAV）
+node scripts/mock-webdav.mjs 8180 /tmp/mock-webdav
+node scripts/test-webdav-sync.mjs
+node scripts/test-auto-sync.mjs
+```
+
+## 目录结构
+
+```
+server.mjs          # 入口：HTTP 装配 + 路由 + 静态服务 + 过期清扫 + 自动同步定时器
+manifest.json       # tools-center 平台声明
+lib/core/           # 纯业务逻辑（store/clips/users/files/webdav）
+lib/routes/         # 路由薄层 + 会话中间件
+public/index.html   # 单文件前端
+scripts/            # 测试与工具脚本（mock WebDAV、冒烟、集成、拼音表生成）
+```
