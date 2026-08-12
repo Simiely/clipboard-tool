@@ -1,12 +1,12 @@
 # AGENTS.md · 项目规则
 
-> 📌 **文档基线**：2026-08-12（commit `7c3685b`）完成四件套重写（README / AGENTS / DEVELOPMENT / CHANGELOG）
+> 📌 **文档基线**：2026-08-12（commit `97f57ae` 之后，v0.4.5 逻辑核验加固 + 图片预览）
 > **更新文档/代码后，请更新此行**（日期 + 新 commit hash），并在 CHANGELOG 追加版本
 
 ## 技术栈
 - Node.js 22+（ESM，`.mjs`），**零第三方依赖**（只用 node:http / node:fs / node:path / node:crypto / node:url）
 - 平台：tools-center（manifest V2，`runtime: node` + `entry: server.mjs` + `port: 8130` + `capabilities: ["storage"]`）
-- 前端：单文件 `public/index.html`（988 行），原生 JS 零框架、无构建，深色主题
+- 前端：`public/index.html`（结构+CSS，125 行）+ `public/app.js`（JS，v0.4.0 拆分），原生 JS 零框架、无构建，深色主题
 - 存储：JSON 文件（原子写：tmp + rename），无数据库；WebDAV 用 HTTP 直连（Basic 认证）
 
 ## 关键坑（3~5 条，越具体越好）
@@ -14,7 +14,9 @@
 - **平台反代注入 `__BASE__`**：前端资源/API 路径必须用 `window.__BASE__ + "/api/.."`，不能写死 `/api/..`（独立运行时 `__BASE__=""`）；前端统一走 `api(path)` / `apiBlob(path)` 封装
 - **数据只写 `CAP_STORAGE_DIR`**（config.js 单点封装），不要写代码目录（可能被更新覆盖）；独立运行 fallback `./.data/`；端口从 `process.argv[2]` 读，不写死
 - **排序/归拢逻辑只在服务端实现**（`lib/core/clips.js` 的 sortClips / groupByTags / groupSimilar），前端只渲染——改排序只动 clips.js，不要在前端重排
+- **前端 JS 在 `public/app.js`**（v0.4.0 拆分）：改前端逻辑只动 app.js；结构/CSS 在 index.html；server.mjs 的 `/app.js` 静态路由别删
 - **测试脚本非幂等**：`scripts/test-webdav-sync.mjs` 用固定用户名（"WebDAV测试"），重跑前必须清空测试数据目录（`C:/Temp/clipboard-test`）或删掉残留用户，否则 409；smoke-test 已用随机后缀无此问题
+- **会话已落盘**（v0.3.0）：token 存 `sessions.json`（30 天过期），重启不掉线；改密/删号/登出联动销毁——改动会话逻辑必须保持"内存缓存 + 文件持久层"（verifyToken 高频，别改成每请求读文件）
 
 ## 约定
 - UI 标签用中文；注释用中文；文件名/变量用英文
@@ -22,6 +24,8 @@
 - 所有资源 id（userId/clipId/fileId）一律 UUID 白名单校验（`assertId` + `ID_RE`），防路径穿越
 - 文件上传黑名单只拒可执行/脚本类（config.js BLOCKED_MIME/BLOCKED_EXT），下载**强制 attachment** + nosniff（防执行）——不要改成 inline
 - WebDAV 同步语义（与 edge-multi-account-cookie 对齐）：单独删除 → 记墓碑传播删除；全部清空 → 不记墓碑（= 想从网上同步）；双向按 updatedAt 取最新
+- **滚动归档**（v0.2.0）：`saveClips` 内部自动滚动超限条目进 `<uid>.archive.json`（零丢失），**同步快照只含活跃区**（归档是本地扩展）；归档条目前端只读（archived 标记）；清空/删用户/过期清扫都要覆盖归档文件
+- **Windows 沙箱删除**（v0.3.1）：`rmForce` 的 unlinkSync/rmdirSync 在 safe-delete 拦截下"抛错但实际已删"——已容错吞掉；判定删除结果用"文件是否存在"，别用"是否抛错"
 
 ## 常用命令
 ```bash
