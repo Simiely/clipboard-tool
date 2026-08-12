@@ -1,0 +1,40 @@
+# AGENTS.md · 项目规则
+
+> 📌 **文档基线**：2026-08-12（commit `b21a6eb`）完成四件套重写（README / AGENTS / DEVELOPMENT / CHANGELOG）
+> **更新文档/代码后，请更新此行**（日期 + 新 commit hash），并在 CHANGELOG 追加版本
+
+## 技术栈
+- Node.js 22+（ESM，`.mjs`），**零第三方依赖**（只用 node:http / node:fs / node:path / node:crypto / node:url）
+- 平台：tools-center（manifest V2，`runtime: node` + `entry: server.mjs` + `port: 8130` + `capabilities: ["storage"]`）
+- 前端：单文件 `public/index.html`（988 行），原生 JS 零框架、无构建，深色主题
+- 存储：JSON 文件（原子写：tmp + rename），无数据库；WebDAV 用 HTTP 直连（Basic 认证）
+
+## 关键坑（3~5 条，越具体越好）
+- **Windows 上 `fs.rmSync` 的 safe-delete 机制会抛错**：Node 22 部分路径下 `rmSync` 走回收站逻辑报 `[safe-delete] 操作失败`——删除文件/目录一律用 `lib/core/store.js` 的 `rmForce()`（确定性递归删除），不要直接用 fs.rmSync
+- **平台反代注入 `__BASE__`**：前端资源/API 路径必须用 `window.__BASE__ + "/api/.."`，不能写死 `/api/..`（独立运行时 `__BASE__=""`）；前端统一走 `api(path)` / `apiBlob(path)` 封装
+- **数据只写 `CAP_STORAGE_DIR`**（config.js 单点封装），不要写代码目录（可能被更新覆盖）；独立运行 fallback `./.data/`；端口从 `process.argv[2]` 读，不写死
+- **排序/归拢逻辑只在服务端实现**（`lib/core/clips.js` 的 sortClips / groupByTags / groupSimilar），前端只渲染——改排序只动 clips.js，不要在前端重排
+- **测试脚本非幂等**：`scripts/test-webdav-sync.mjs` 用固定用户名（"WebDAV测试"），重跑前必须清空测试数据目录（`C:/Temp/clipboard-test`）或删掉残留用户，否则 409；smoke-test 已用随机后缀无此问题
+
+## 约定
+- UI 标签用中文；注释用中文；文件名/变量用英文
+- API 返回统一 `{ ok, ... }` 或 `{ ok:false, error }`；错误带 HTTP 状态码（`store.js httpError`）
+- 所有资源 id（userId/clipId/fileId）一律 UUID 白名单校验（`assertId` + `ID_RE`），防路径穿越
+- 文件上传黑名单只拒可执行/脚本类（config.js BLOCKED_MIME/BLOCKED_EXT），下载**强制 attachment** + nosniff（防执行）——不要改成 inline
+- WebDAV 同步语义（与 edge-multi-account-cookie 对齐）：单独删除 → 记墓碑传播删除；全部清空 → 不记墓碑（= 想从网上同步）；双向按 updatedAt 取最新
+
+## 常用命令
+```bash
+node server.mjs 8130               # 独立运行（开发调试，数据落 ./.data/）
+# 冒烟测试（独立数据目录实例）
+CAP_STORAGE_DIR=C:/Temp/clipboard-test node server.mjs 8131
+TEST_PORT=8131 node scripts/smoke-test.mjs
+# WebDAV 集成测试（再起 mock WebDAV）
+node scripts/mock-webdav.mjs 8180 C:/Temp/mock-webdav
+node scripts/test-webdav-sync.mjs
+node scripts/test-auto-sync.mjs
+node --check server.mjs            # 语法检查
+```
+
+## 详细规则（按需 @引用）
+- 单项目文档规范见 knowledge-base：`单项目规范/README.md`（四件套 + 文档基线断点续传）
