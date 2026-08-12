@@ -49,3 +49,9 @@ lib/routes/         # 路由薄层 + 会话中间件
 public/index.html   # 单文件前端
 scripts/            # 测试与工具脚本（mock WebDAV、冒烟、集成、拼音表生成）
 ```
+
+## 文档
+
+- [开发文档 DEVELOPMENT.md](DEVELOPMENT.md) — 架构说明与关键问题记录
+- [变更日志 CHANGELOG.md](CHANGELOG.md) — 版本记录
+- [AI 项目规则 AGENTS.md](AGENTS.md) — 技术栈 / 关键坑 / 约定
