@@ -205,6 +205,7 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 - 2026-08-12（v0.4.3）：架构评估 v2 三项落地——hover 状态显式化（previewState）/ openDataModal 拆 WebDAV 区（renderWebdavSection）/ 重复检测抽纯函数（findDuplicateClip）
 - 2026-08-12（v0.4.4）：函数粒度拆分（架构评估 v3 量化落地）——clipCard CC49→15（make*Btn 工厂 + bindImageHoverPreview）/ openPasteModal CC46→22（savePasteContent + autoFillPasteModal），app.js 无 CC>22
 - 2026-08-12（v0.4.5）：逻辑核验加固（状态图验证方法论）——3 处异步补 guard（logoutBtn/archChk/用户卡 enterUser）+ findDuplicateClip 字段兜底
+- 2026-08-12~13（v0.5.0-设计稿）：主页面整体 UI 重构设计稿（design-preview.html）——常用优先分区直达/等高网格/渐进式披露卡片/磨砂玻璃深色系/5 磨砂弹窗/极窄顶栏 ⋯ 菜单。**未落地**，续作点见 CHANGELOG v0.5.0-设计稿
 
 ## 测试
 
