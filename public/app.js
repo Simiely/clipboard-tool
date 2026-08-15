@@ -437,46 +437,36 @@ function renderTagPicker(container, selected, allTags, onChange) {
   render();
 }
 
-// ---------- 主页面 ----------
+// ---------- 主页面（v0.6.4 · 双行工具栏版式） ----------
 function renderMain() {
   const v = $("#view");
   v.replaceChildren(); // 修复 U-7：renderMain 自清空——保存后直接调用时不再叠出第二套界面（用户看到 2 个输入框的根因）
+  // 顶栏（v0.6.4：一键同步移入工具行 ops，顶栏更轻）
   const tb = el("div", "topbar");
   tb.append(el("span", "t-logo", "📋"), el("h1", "", "剪贴板"));
   const who = el("div", "who");
   const dot = el("span", "dot"); dot.style.background = state.current.color;
   const pwBtn = el("button", "btn sm ghost", "密码");
   const dataBtn = el("button", "btn sm ghost", "数据管理");
-  const syncBtn = el("button", "btn sm ghost", "一键同步"); // v0.4.2：顶栏直达 WebDAV 同步
   const logoutBtn = el("button", "btn sm ghost", "退出");
   // v0.4.2：设置拆为「密码」+「数据管理」两个入口
   pwBtn.onclick = () => openPasswordModal();
   dataBtn.onclick = () => openDataModal();
-  // v0.4.2：一键同步——直接调 WebDAV 同步并刷新列表（等同数据管理弹窗的「一键同步」）
-  syncBtn.onclick = guard(syncBtn, async () => {
-    try {
-      const r = await api("/api/sync/run", { method: "POST" });
-      await loadClips(); renderTagbar(); renderList();
-      flash("同步完成：远端" + (r.remoteExisted ? "有备份" : "无备份") + (r.uploaded ? " · 已上传" : " · 本地空跳过上传"));
-    } catch (e) { errToast(e.message); }
-  });
-  // v0.4.2：删除「切换」按钮（与退出重复）——退出即销毁服务端会话并回用户选择页
   // v0.4.5：补 guard 防连点（逻辑核验 P2-1）
   logoutBtn.onclick = guard(logoutBtn, async () => {
     await api("/api/session", { method: "DELETE" }).catch(()=>{}); // 销毁服务端会话
     LS.del("cur"); state.current = null; userEditMode = false;
     await loadUsers(); render();
   });
-  who.append(dot, el("span", "", state.current.name), pwBtn, dataBtn, syncBtn, logoutBtn);
+  who.append(dot, el("span", "", state.current.name), pwBtn, dataBtn, logoutBtn);
   tb.append(who); v.append(tb);
 
-  // 小入口：常态只占一行，点击或检测到复制内容时自动弹出大窗口（openPasteModal）
-  const trigger = el("div", "paste-trigger", "📥 存入内容 — 点击打开，复制内容后自动弹出");
-  trigger.onclick = () => openPasteModal();
-  v.append(trigger);
-  // 工具栏：搜索（300ms 防抖）+ 列数选择（1~4 列或自适应，记住偏好）
-  const toolbar = el("div", "toolbar");
-  const search = el("input"); search.type = "search"; search.placeholder = "搜索内容 / 标题 / 标签…"; search.value = state.filter.q;
+  // 工具条（v0.6.4 双行：行1 搜索+存入 / 行2 类型+标签+操作）
+  const tool = el("div", "tb");
+  // —— 行1：搜索 + 存入小按钮（右置，点开大弹窗）
+  const row1 = el("div", "row1");
+  const search = el("input"); search.type = "search"; search.className = "search";
+  search.placeholder = "搜索内容 / 标题 / 标签…"; search.value = state.filter.q;
   // 一边输入一边筛选：本地即时过滤（100ms 微防抖只防极速输入时的 DOM 重建，无网络请求）
   let searchTimer = null;
   search.oninput = () => {
@@ -486,29 +476,14 @@ function renderMain() {
       renderList();
     }, 100);
   };
-  const colsSel = el("select");
-  colsSel.title = "每行显示列数";
-  for (const [v, l] of [["auto", "自适应"], ["1", "1 列"], ["2", "2 列"], ["3", "3 列"], ["4", "4 列"]]) {
-    const o = el("option", "", l); o.value = v; colsSel.append(o);
-  }
-  colsSel.value = state.cols;
-  colsSel.onchange = () => {
-    state.cols = colsSel.value;
-    LS.set("cols", state.cols);
-    renderList(); // 仅重渲染列表，不动其他区域
-  };
-  // 含归档开关：归档条目是只读历史（滚动归档 v0.2.0），勾选才从后端拉取合并
-  const archLbl = el("label", "opt"); archLbl.style.cssText = "display:flex;align-items:center;gap:4px;color:var(--muted);font-size:12px;cursor:pointer;white-space:nowrap";
-  archLbl.title = "归档只存本地，不参与 WebDAV 同步";
-  const archChk = el("input"); archChk.type = "checkbox"; archChk.checked = !!state.filter.archived;
-  // v0.4.5：补 guard 防连点（逻辑核验 P2-1——快速切换勾选避免并发加载竞态）
-  archChk.onchange = guard(archChk, async () => {
-    state.filter.archived = archChk.checked;
-    await loadClips(); renderTagbar(); renderList();
-  });
-  archLbl.append(archChk, "含归档");
-  toolbar.append(search, colsSel, archLbl); v.append(toolbar);
-
+  const storeBtn = el("button", "store-btn", "");
+  storeBtn.append(el("span", "plus", "＋"), el("span", "", "存入"));
+  storeBtn.title = "存入内容 — 粘贴 / 拖文件 / Ctrl+V 后自动弹出";
+  storeBtn.onclick = () => openPasteModal(); // v0.6.4：存入入口收缩为右置小按钮
+  row1.append(search, storeBtn);
+  tool.append(row1);
+  // —— 行2：类型分段 + 标签栏 + 右侧操作（含归档 / 列数 / 一键同步）
+  const row2 = el("div", "row2");
   // ⑥ 类型分类 Tab：全部 / 文本 / 链接 / 文件（前端过滤，数据量小无需后端）
   const TYPE_TABS = [["all", "全部"], ["text", "文本"], ["link", "链接"], ["file", "文件"]];
   const typetab = el("div", "typetab");
@@ -520,14 +495,56 @@ function renderMain() {
     tt.onclick = () => { state.filter.type = v; renderTypeTab(); renderList(); };
     typetab.append(tt);
   }
-  v.append(typetab);
+  row2.append(typetab);
+  // 标签栏容器（renderTagbar 渲染到此，v0.6.4）
+  const tagbarWrap = el("div", "tagbar-wrap");
+  row2.append(tagbarWrap);
+  // 右侧操作
+  const ops = el("div", "ops");
+  // 含归档开关：归档条目是只读历史（滚动归档 v0.2.0），勾选才从后端拉取合并
+  const archLbl = el("label", "opt"); archLbl.title = "归档只存本地，不参与 WebDAV 同步";
+  const archChk = el("input"); archChk.type = "checkbox"; archChk.checked = !!state.filter.archived;
+  // v0.4.5：补 guard 防连点（逻辑核验 P2-1——快速切换勾选避免并发加载竞态）
+  archChk.onchange = guard(archChk, async () => {
+    state.filter.archived = archChk.checked;
+    await loadClips(); renderTagbar(); renderList();
+  });
+  archLbl.append(archChk, "含归档");
+  // 列数选择（1~4 列或自适应，记住偏好）
+  const colsSel = el("select");
+  colsSel.title = "每行显示列数";
+  for (const [v, l] of [["auto", "自适应"], ["1", "1 列"], ["2", "2 列"], ["3", "3 列"], ["4", "4 列"]]) {
+    const o = el("option", "", l); o.value = v; colsSel.append(o);
+  }
+  colsSel.value = state.cols;
+  colsSel.onchange = () => {
+    state.cols = colsSel.value;
+    LS.set("cols", state.cols);
+    renderList(); // 仅重渲染列表，不动其他区域
+  };
+  // 一键同步（v0.4.2 顶栏 → v0.6.4 移入工具行）
+  const syncBtn = el("button", "btn sm ghost", "↻ 同步");
+  syncBtn.title = "WebDAV 一键同步";
+  syncBtn.onclick = guard(syncBtn, async () => {
+    try {
+      const r = await api("/api/sync/run", { method: "POST" });
+      await loadClips(); renderTagbar(); renderList();
+      flash("同步完成：远端" + (r.remoteExisted ? "有备份" : "无备份") + (r.uploaded ? " · 已上传" : " · 本地空跳过上传"));
+    } catch (e) { errToast(e.message); }
+  });
+  ops.append(archLbl, colsSel, syncBtn);
+  row2.append(ops);
+  tool.append(row2);
+  v.append(tool);
 
-  renderTagbar(v);
+  renderTagbar(tagbarWrap);
   renderList(v);
 }
 
-function renderTagbar(v = $("#view")) {
-  const old = $(".tagbar", v); if (old) old.remove();
+/** 标签栏：渲染到指定容器（v0.6.4 起渲染进 .tagbar-wrap；无参时自动查找该容器，兜底 #view） */
+function renderTagbar(container) {
+  if (!container) container = $(".tagbar-wrap") || $("#view");
+  const old = $(".tagbar", container); if (old) old.remove();
   const bar = el("div", "tagbar");
   const all = el("span", "tag" + (state.filter.tag ? " off" : " on"), "全部");
   all.onclick = () => { state.filter.tag = ""; renderTagbar(); renderList(); }; // 前端即时过滤
@@ -543,7 +560,7 @@ function renderTagbar(v = $("#view")) {
   mgmtBtn.style.marginLeft = "auto"; // 推到最右
   mgmtBtn.onclick = () => openTagManageModal();
   bar.append(mgmtBtn);
-  v.append(bar);
+  container.append(bar);
 }
 
 // ---------- 标签管理弹窗（v0.4.2：独立窗口，由标签栏「管理」按钮打开） ----------
@@ -596,7 +613,7 @@ function openTagManageModal() {
   refresh();
 }
 /** 删除/编辑等低频操作后重载（与后端排序/计数保持一致；高频过滤走前端 renderList） */
-async function refreshList() { await loadClips(); renderTagbar($("#view")); renderList($("#view")); }
+async function refreshList() { await loadClips(); renderTagbar(); renderList($("#view")); }
 
 /** 拼音首字母缩写搜索（零依赖）：GB2312 一级汉字 3755 字 → 首字母映射表（pypinyin 生成）。
  *  例："身份"→"sf"；搜索词 "sf" 可命中标题/标签含"身份"的条目。多音字取常用读音，近似即可。 */
