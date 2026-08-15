@@ -272,19 +272,14 @@ function setUserEditMode(on) {
 
 async function renderUserSelect() {
   const v = $("#view");
-  const hero = el("div", "hero");
-  hero.style.position = "relative";
-  // 全局编辑按钮：点击进入编辑模式 → 所有卡片右上角显示删除按钮（再点「完成」或点空白退出）
-  const editAllBtn = el("button", "btn sm ghost edit-all-btn", "编辑");
-  editAllBtn.style.cssText = "position:absolute;top:6px;right:4px";
-  editAllBtn.onclick = (e) => {
-    e.stopPropagation();
-    setUserEditMode(!userEditMode);
-  };
-  hero.append(editAllBtn, el("div", "logo", "📋"), el("h1", "", "剪贴板"), el("p", "", "点击进入 · 支持新建用户 · 数据彼此隔离"));
-  v.append(hero);
+  const wall = el("div", "wall");
+  // 品牌区（v0.6.3 极简墙：印章 logo + 衬线标题 + 副标）
+  const brand = el("div", "brand");
+  brand.append(el("div", "mark", "剪"), el("h1", "serif", "剪贴板"), el("div", "sub", "SELECT A PERSON · 选择身份进入"));
+  wall.append(brand);
+  // 用户网格
   const grid = el("div", "user-grid");
-  if (!state.users.length) grid.append(el("div", "empty", "还没有用户，点下方新建一个"));
+  if (!state.users.length) grid.append(el("div", "empty-state", "还没有用户，点下方新建一个"));
   for (const u of state.users) {
     const card = el("div", "user-card");
     const av = el("div", "avatar", u.name.slice(0, 1).toUpperCase());
@@ -294,10 +289,20 @@ async function renderUserSelect() {
     card.onclick = guard(card, () => enterUser(u));
     grid.append(card);
   }
-  const addBtn = el("button", "add-user", "＋ 新建用户");
+  // 新建用户：虚线占位卡（极简墙风格）
+  const addBtn = el("div", "add-user");
+  addBtn.append(el("span", "plus", "＋"), el("span", "", "新建用户"));
   addBtn.onclick = () => openUserModal();
   grid.append(addBtn);
-  v.append(grid);
+  wall.append(grid);
+  // 底部操作：编辑胶囊（点空白处退出见 boot 委托）
+  const actions = el("div", "user-actions");
+  const editAllBtn = el("button", "btn ghost edit-all-btn", "编辑");
+  editAllBtn.onclick = (e) => { e.stopPropagation(); setUserEditMode(!userEditMode); };
+  actions.append(editAllBtn);
+  wall.append(actions);
+  wall.append(el("div", "user-foot", "LOCAL JSON · 数据隔离"));
+  v.append(wall);
   // 渲染后恢复编辑模式（删除用户后 render 重建时保持）
   if (userEditMode) setUserEditMode(true);
 }
@@ -680,7 +685,9 @@ function makeDeleteBtn(c) {
   btn.onclick = (e) => {
     e.stopPropagation();
     askConfirm("删除这条内容？", guard(btn, async () => {
-      await api("/api/clips/" + c.id, { method: "DELETE" }).catch(e2 => errToast(e2.message));
+      // P-101 修复：必须检查返回值——失败时 errToast 已提示，不得再报"已删除"（此前无条件 flash 误导用户）
+      const r = await api("/api/clips/" + c.id, { method: "DELETE" }).catch(e2 => errToast(e2.message));
+      if (!r) return;
       flash("已删除"); // UI 走查 U-5：删除成功也有反馈
       refreshList();
     }), "删除");
@@ -1416,7 +1423,9 @@ function renderWebdavSection(modal) {
         davFiles.checked = !!r.syncFiles;
         davAuto.checked = !!r.autoSync;
         davInt.value = Math.max(1, Math.round((r.intervalMin || 720) / 60));
+        // P-104：自动同步上次失败不再静默——状态区展示失败原因（成功则正常显示）
         davStatus.textContent = "已配置：" + r.url + (r.autoSync ? " · 每 " + davInt.value + " 小时自动同步" : "");
+        if (r.lastSyncError) davStatus.textContent += " · ⚠ 上次自动同步失败：" + r.lastSyncError;
       }
     } catch {}
   })();
