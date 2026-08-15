@@ -4,7 +4,7 @@
 
 clipboard-tool 是 tools-center 平台的一个**多用户剪贴板管理工具**：粘贴自动识别（URL→链接 / 其他→文本 / 图片文件→文件条目）、一键复制、双击编辑、标签体系、拼音首字母搜索、智能排序（复制次数→标签相近→内容相似）、可选密码锁、WebDAV 备份同步。Node 22+ 零依赖，JSON 文件存储，双模式运行（平台托管 / 独立运行）。
 
-**UI 演进**（v0.6.2+）：暗黑新拟态 + **酒红金配色**（对齐 dark-design-style-guide 主页示意 mock：中性黑灰底 `#1A1A1A/#2F2F2F` + 金主强调 `#C9A96E` + 砖红点缀 `#AE4D4D`；设计令牌全在 `index.html :root`，改主题只动令牌 + `users.js PALETTE`，app.js 禁止硬编码颜色）。v0.6.3 起首页（用户选择页）为**极简墙布局**：印章品牌区 + 紧凑卡网格 + 底部编辑胶囊（见 CHANGELOG）。
+**UI 演进**（v0.6.2+）：暗黑新拟态 + **酒红金配色**（对齐 dark-design-style-guide 主页示意 mock：中性黑灰底 `#1A1A1A/#2F2F2F` + 金主强调 `#C9A96E` + 砖红点缀 `#AE4D4D`；设计令牌全在 `index.html :root`，改主题只动令牌 + `users.js PALETTE`，app.js 禁止硬编码颜色）。v0.6.3 起首页（用户选择页）为**极简墙布局**（印章品牌区 + 紧凑卡网格 + 底部编辑胶囊）；v0.6.4 起主页面为**双行工具栏**（行1 搜索+存入右置 / 行2 类型+标签+操作，`renderTagbar` 渲染进 `.tagbar-wrap`）。详见 CHANGELOG。
 
 ## 架构说明
 
