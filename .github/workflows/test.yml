@@ -1,0 +1,72 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }} on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+        node: [22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # 语法校验全部源码
+      - name: Syntax check
+        run: |
+          node --check server.mjs
+          node --check public/app.js
+          for f in lib/core/*.js lib/routes/*.js scripts/*.mjs; do node --check "$f"; done
+
+      # 启动独立数据目录实例（smoke 用）——Windows 用 C:/Temp 绝对路径
+      - name: Start test instance
+        run: node server.mjs 8131 &
+        env:
+          CAP_STORAGE_DIR: C:/Temp/clipboard-test
+        shell: bash
+        if: runner.os == 'Windows'
+
+      - name: Start test instance (Linux)
+        run: node server.mjs 8131 &
+        env:
+          CAP_STORAGE_DIR: /tmp/clipboard-test
+        shell: bash
+        if: runner.os != 'Windows'
+
+      - name: Smoke test
+        run: node scripts/smoke-test.mjs
+        env:
+          TEST_PORT: "8131"
+
+      # WebDAV 集成测试：mock WebDAV + 再起一个实例
+      - name: Start mock WebDAV (Windows)
+        run: node scripts/mock-webdav.mjs 8180 C:/Temp/mock-webdav &
+        shell: bash
+        if: runner.os == 'Windows'
+
+      - name: Start mock WebDAV (Linux)
+        run: node scripts/mock-webdav.mjs 8180 /tmp/mock-webdav &
+        shell: bash
+        if: runner.os != 'Windows'
+
+      - name: WebDAV integration test
+        run: node scripts/test-webdav-sync.mjs
+        env:
+          TEST_PORT: "8131"
+          TEST_DATA_DIR: ${{ runner.os == 'Windows' && 'C:/Temp/clipboard-test' || '/tmp/clipboard-test' }}
+
+      - name: Auto-sync test
+        run: node scripts/test-auto-sync.mjs
+        env:
+          TEST_PORT: "8131"
+          TEST_DATA_DIR: ${{ runner.os == 'Windows' && 'C:/Temp/clipboard-test' || '/tmp/clipboard-test' }}
