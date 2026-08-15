@@ -1,12 +1,12 @@
 # AGENTS.md · 项目规则
 
-> 📌 **文档基线**：2026-08-15（v0.6.0：暗黑新拟态 UI 迁移 + 富文本双格式复制；v0.5.x 见历史）
+> 📌 **文档基线**：2026-08-15（v0.6.3 @ `2701662`：首页改版极简墙——`renderUserSelect` 重写 + 用户区 CSS，零逻辑改动；v0.6.2 见下）
 > **更新文档/代码后，请更新此行**（日期 + 新 commit hash），并在 CHANGELOG 追加版本
 
 ## 技术栈
 - Node.js 22.7+（ESM，`.mjs` 入口 / `lib` 下 `.js` 由 `package.json` 的 `"type": "module"` 声明），**零第三方依赖**（只用 node:http / node:fs / node:path / node:crypto / node:url）
 - 平台：tools-center（manifest V2，`runtime: node` + `entry: server.mjs` + `port: 8130` + `capabilities: ["storage"]`）
-- 前端：`public/index.html`（结构+CSS，**暗黑新拟态 Neumorphism**：双阴影浮雕、设计令牌全在 `:root`）+ `public/app.js`，原生 JS 零框架、无构建
+- 前端：`public/index.html`（结构+CSS，**暗黑新拟态 Neumorphism**：双阴影浮雕、设计令牌全在 `:root`；v0.6.2 起为**酒红金**配色——依据 dark-design-style-guide「酒红金」#0A0A0A/#1A1A1A/#8B0000/#C9A96E/#FFFFFF，强调=酒红+金、阴影高光暖棕，改主题只动 `:root` 令牌与 users.js PALETTE，app.js 禁止硬编码颜色）+ `public/app.js`，原生 JS 零框架、无构建
 - 存储：JSON 文件（原子写：tmp + rename），无数据库；WebDAV 用 HTTP 直连（Basic 认证）
 
 ## 关键坑（3~5 条，越具体越好）
@@ -20,6 +20,9 @@
 - **测试脚本已参数化（P0-2）**：`test-webdav-sync.mjs`/`test-auto-sync.mjs` 读 `TEST_PORT`（默认 8131）+ `TEST_DATA_DIR`（默认 `C:/Temp/clipboard-test`），与 smoke-test 风格一致；webdav 测试用固定用户名（"WebDAV测试"），重跑前必须清空测试数据目录或删掉残留用户，否则 409；smoke-test 已用随机后缀无此问题
 - **mock-webdav 路径（P0-3）**：`dataDir` 请用绝对路径（如 `C:/Temp/mock-webdav`）；safeJoin 已统一 `path.resolve` 两侧，`/tmp/...` 相对路径在 Windows 下也正常，但建议仍用绝对路径避免歧义
 - **会话已落盘**（v0.3.0）：token 存 `sessions.json`（30 天过期），重启不掉线；改密/删号/登出联动销毁——改动会话逻辑必须保持"内存缓存 + 文件持久层"（verifyToken 高频，别改成每请求读文件）
+- **删除操作必须检查 API 返回值（P-101，v0.6.1）**：前端所有"删除/清空/置顶"类操作 `.catch(errToast)` 吞错后，必须 `if (r)` 守卫成功提示——曾发生 `makeDeleteBtn` 无条件 `flash("已删除")`，网络/会话失败时误报成功。新写删除类代码照此办理
+- **墓碑仅在配置 WebDAV 后记录（P-102，v0.6.1）**：`deleteClip` 只返回 `{ ok, fileId, tombstone }` 不落盘；路由层 `getSyncConfig(userId)` 存在才调 `recordTombstone`——未配置同步的用户删除不再产生墓碑文件
+- **拼音搜索仅前端生效（P-103）**：`renderList` 的拼音匹配只在搜索框输入路径；后端 `listClips` 的 `q` 是子串匹配（无拼音）——`?q=拼音` 直链/刷新不命中拼音，属预期，勿当 bug 修
 
 ## 约定
 - UI 标签用中文；注释用中文；文件名/变量用英文
