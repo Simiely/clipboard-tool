@@ -16,6 +16,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = path.join(__dirname, "public", "index.html");
 const APP_JS = path.join(__dirname, "public", "app.js"); // v0.4.0：前端 JS 拆独立文件
 
+// P1-4：静态资源启动时读入内存缓存，避免每次请求 readFileSync（高频路径）
+// 开发期改 index.html/app.js 需重启服务生效（平台托管/独立运行均为常规操作）。
+const STATIC = {
+  html: { type: "text/html; charset=utf-8", body: fs.readFileSync(INDEX_HTML) },
+  js: { type: "text/javascript; charset=utf-8", body: fs.readFileSync(APP_JS) },
+};
+
 // 后台过期清扫：60s 周期，删除过期条目并联动清理文件实体
 setInterval(() => {
   try {
@@ -40,22 +47,22 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === "/health") {
       return sendJson(res, 200, { ok: true, name: "clipboard" });
     }
-    // 静态页面
+    // 静态页面（P1-4：内存缓存，启动时读入）
     if (url.pathname === "/" || url.pathname === "/index.html") {
       res.writeHead(200, {
-        "Content-Type": "text/html; charset=utf-8",
+        "Content-Type": STATIC.html.type,
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
       });
-      return res.end(fs.readFileSync(INDEX_HTML));
+      return res.end(STATIC.html.body);
     }
-    // 前端 JS（v0.4.0 拆分独立文件）
+    // 前端 JS（v0.4.0 拆分独立文件；P1-4：内存缓存）
     if (url.pathname === "/app.js") {
       res.writeHead(200, {
-        "Content-Type": "text/javascript; charset=utf-8",
+        "Content-Type": STATIC.js.type,
         "X-Content-Type-Options": "nosniff",
       });
-      return res.end(fs.readFileSync(APP_JS));
+      return res.end(STATIC.js.body);
     }
     // API 路由
     const r = matchRoute(url, req.method);
