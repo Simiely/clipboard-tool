@@ -1,11 +1,12 @@
 # 剪贴板 📋
 
-多用户剪贴板管理工具（tools-center 平台工具，Node 零依赖）。
+多用户剪贴板管理工具（tools-center 平台工具，Node 零依赖）。暗黑新拟态（Neumorphism）界面。
 
 ## 功能
 
 - **单一万能入口**：粘贴自动识别（URL→链接 / 其他→文本）、拖放/选择文件→文件条目、Ctrl+V 粘贴图片/文件；检测到复制内容自动弹出大窗口
 - **一键复制 / 双击编辑**：文本/链接复制内容，图片点击直接复制到系统剪贴板（ClipboardItem），其他文件点击下载
+- **富文本双格式复制（v0.6.0）**：从网页/Word 复制带格式内容 → 存入时自动检测 `text/html`，卡片显示 **🅡 富文本按钮**——点它粘贴到 Word/飞书保留格式，点卡片复制纯文本
 - **智能排序**：星标置顶 → 使用次数优先 → 标签相近归拢 → 内容相似归拢（10 字符片段倒排索引，毫秒级）
 - **拼音首字母搜索**：内置 3755 常用字映射表，`sf` 可搜到"身份"
 - **标签体系**：点选已有标签 + 输入新建，列表标签过滤
@@ -21,14 +22,14 @@
 ## 技术栈
 
 - 后端：Node.js（内置 `http` + `fetch`，零第三方依赖）
-- 前端：原生 HTML/JS（Alpine 式轻量、无框架）
+- 前端：原生 HTML/JS（Alpine 式轻量、无框架），暗黑新拟态双阴影浮雕风格（设计令牌集中在 `:root`）
 - 存储：JSON 文件（原子写），WebDAV 用 HTTP 协议直连
 
 ## 运行
 
 ```bash
 node server.mjs [port]        # 默认 8130
-# 数据目录默认 ./data（可用 CAP_STORAGE_DIR 覆盖）
+# 数据目录默认 ./.data（可用 CAP_STORAGE_DIR 覆盖）
 ```
 
 ## 测试
@@ -42,17 +43,25 @@ TEST_PORT=8131 node scripts/smoke-test.mjs
 node scripts/mock-webdav.mjs 8180 /tmp/mock-webdav
 node scripts/test-webdav-sync.mjs
 node scripts/test-auto-sync.mjs
+
+# 富文本 html 字段单测（v0.6.0，无需起服务，独立数据目录）
+node scripts/test-html-field.mjs
 ```
+
+> Windows 提示：`/tmp/...` 是类 Unix 路径写法；Windows 下请用绝对路径
+> （如 `C:/Temp/clip-test`、`C:/Temp/mock-webdav`），数据目录同样传给
+> `TEST_DATA_DIR` 保持一致（`TEST_DATA_DIR=C:/Temp/clipboard-test node scripts/test-webdav-sync.mjs`）。
 
 ## 目录结构
 
 ```
 server.mjs          # 入口：HTTP 装配 + 路由 + 静态服务 + 过期清扫 + 自动同步定时器
 manifest.json       # tools-center 平台声明
+package.json        # 工程元数据：type:module + Node>=22.7 + npm scripts（start/smoke/test:webdav/test:auto-sync/test）
 lib/core/           # 纯业务逻辑（store/clips/users/files/webdav）
 lib/routes/         # 路由薄层 + 会话中间件
-public/index.html   # 单文件前端
-scripts/            # 测试与工具脚本（mock WebDAV、冒烟、集成、拼音表生成）
+public/index.html   # 单文件前端（暗黑新拟态，设计令牌在 :root）
+scripts/            # 测试与工具脚本（mock WebDAV、冒烟、集成、html 字段单测、复杂度测量）
 ```
 
 ## 文档

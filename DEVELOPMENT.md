@@ -8,11 +8,11 @@ clipboard-tool 是 tools-center 平台的一个**多用户剪贴板管理工具*
 
 ```
 server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动同步 60s)
-  ├── lib/core/        纯业务逻辑（不碰 HTTP）
+  ├── lib/core/        纯业务逻辑（不碰 HTTP；.js 扩展名，由 package.json type:module 声明 ESM）
   │   ├── config.js    全局配置单一来源（端口/输入边界/上传黑名单/UUID 白名单）
   │   ├── store.js     JSON 原子读写 + assertId + httpError + rmForce
   │   ├── clips.js     条目域：CRUD + 复制计数 + 排序/搜索/标签 + 墓碑 + 过期清扫
-  │   ├── users.js     用户域：scrypt 密码 + 内存会话 token + 登录限流
+  │   ├── users.js     用户域：scrypt 密码 + 会话 token（内存缓存+文件落盘）+ 登录限流
   │   ├── files.js     文件域：上传边界 + 归属校验 + 物理存取
   │   └── webdav.js    WebDAV 备份同步：双向合并 + 墓碑裁决 + 实体同步 + 定时自动同步
   ├── lib/routes/      路由薄层（分段匹配零正则 + 会话中间件）
@@ -37,14 +37,15 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 
 ## 关键问题与方案
 
-### 问题：Windows 上 Node 22 `fs.rmSync` 抛 safe-delete 错误
+### 问题：AI 沙箱里 `fs.rmSync` 报 `[safe-delete] 操作失败`（v0.3.1 容错 / 2026-08-14 澄清根源）
 
-**TL;DR**：Node 22 Windows 的 `rmSync` 走回收站（safe-delete）机制，部分路径下抛 `[safe-delete] 操作失败: Some operations were aborted`——删除一律用自写 `rmForce()`。
+**TL;DR**：WorkBuddy（AI 沙箱）通过 `NODE_OPTIONS=--require=genie-safe-delete.cjs` 注入安全删除 shim，把 `fs.rmSync`/`fs.rm` 猴补丁为"送回收站"（genie-trash 二进制），该二进制在 Windows 11 无交互上下文返回 exit 1 + "Some operations were aborted"，但文件实际已删除。删除一律用自写 `rmForce()`（逐个 try/catch 容错）。
 
-- 问题：删除用户数据/文件实体时 `fs.rmSync(path, { recursive: true, force: true })` 偶发抛错
-- 根因：Node 22 引入的 safe-delete 回收站机制与某些路径/权限组合不兼容
-- 解决：`lib/core/store.js` 实现 `rmForce()`——stat 判断类型后手动 `readdir + 递归` 或 `unlink`，确定性删除、不存在静默
-- 预防：项目内所有删除路径（删用户/删文件/过期清扫）统一走 `rmForce`，禁止直接用 fs.rmSync
+- 现象：删除用户数据/文件实体时 `fs.rmSync(path, { recursive: true, force: true })` 抛 `[safe-delete] 操作失败: Some operations were aborted`
+- 根因（2026-08-14 实测澄清，非 Node 22 原生行为）：`fs.rmSync.name === "wrappedRmSync"`——被 WorkBuddy 注入的 genie-safe-delete.cjs shim 包裹；shim 把"回收站操作被系统中止"（E_ABORT/DE_OPCANCELLED，无交互桌面下 IFileOperation 常见）误判为删除失败并抛错，但删除实际完成
+- 边界：**仅 AI 沙箱环境触发**（用户手动 `node xxx.js` 时 NODE_OPTIONS 为空，rmSync 原生正常）；且非全局——用户主目录/项目目录抛错，`C:\Temp` 等部分路径正常（与回收站/受保护目录相关）
+- 解决：`lib/core/store.js` 实现 `rmForce()`——stat 判断类型后手动 `readdir + 递归` 或 `unlink`，每步 try/catch 吞掉（"抛错但实际已删"），以"文件是否存在"判定结果
+- 预防：项目内所有删除路径（删用户/删文件/过期清扫）统一走 `rmForce`；排查删除类报错先看 NODE_OPTIONS 是否有 genie-safe-delete，别归咎于 Node 本身
 
 ### 问题：平台反代挂在 `/tool/<id>/` 子路径，前端路径写死会 404
 
@@ -205,7 +206,10 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 - 2026-08-12（v0.4.3）：架构评估 v2 三项落地——hover 状态显式化（previewState）/ openDataModal 拆 WebDAV 区（renderWebdavSection）/ 重复检测抽纯函数（findDuplicateClip）
 - 2026-08-12（v0.4.4）：函数粒度拆分（架构评估 v3 量化落地）——clipCard CC49→15（make*Btn 工厂 + bindImageHoverPreview）/ openPasteModal CC46→22（savePasteContent + autoFillPasteModal），app.js 无 CC>22
 - 2026-08-12（v0.4.5）：逻辑核验加固（状态图验证方法论）——3 处异步补 guard（logoutBtn/archChk/用户卡 enterUser）+ findDuplicateClip 字段兜底
-- 2026-08-12~13（v0.5.0-设计稿）：主页面整体 UI 重构设计稿（design-preview.html）——常用优先分区直达/等高网格/渐进式披露卡片/磨砂玻璃深色系/5 磨砂弹窗/极窄顶栏 ⋯ 菜单。**未落地**，续作点见 CHANGELOG v0.5.0-设计稿
+- 2026-08-12~13（v0.5.0-设计稿）：主页面整体 UI 重构设计稿（design-preview.html）——常用优先分区直达/等高网格/渐进式披露卡片/磨砂玻璃深色系/5 磨砂弹窗/极窄顶栏 ⋯ 菜单。**未落地**。⚠️ **2026-08-14 已废弃**：UI 重构确定不做，设计稿已删除（v0.5.2）
+- 2026-08-14（v0.5.1-P0 修正批）：补 package.json（type:module + engines + npm scripts）；测试脚本参数化（TEST_PORT/TEST_DATA_DIR）；mock-webdav safeJoin 路径修复（path.resolve 统一两侧，相对路径不再 400）；safe-delete 根源澄清（WorkBuddy shim 注入，非 Node 原生）；README .data 纠偏
+- 2026-08-14（v0.5.2）：取消 UI 重构，删除 design-preview.html 设计稿
+- 2026-08-15（v0.6.0）：**暗黑新拟态 UI 迁移**（依据《UI迁移手册.md》：双阴影浮雕/去边框/分段控件/新拟态开关/主色粉→蓝紫；修复 transform 劫持 fixed 定位的图片预览浮层"飘远" bug）+ **富文本双格式复制**（条目 `html` 字段 ≤512KB、`copyRich` 双 MIME 写剪贴板、卡片 🅡 按钮；决策不上数据库——JSON 规模足够且保零依赖）+ 新增 `cc-measure.mjs`/`test-html-field.mjs`
 
 ## 测试
 
@@ -213,5 +217,7 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 - `scripts/test-webdav-sync.mjs`：WebDAV 端到端 19 项（墓碑传播/清空恢复/实体同步）——需 mock WebDAV 8180
 - `scripts/test-auto-sync.mjs`：自动同步（间隔到期触发）
 - `scripts/mock-webdav.mjs`：极简 WebDAV 服务器（MKCOL/PUT/GET/DELETE + Basic admin:admin123）
+- `scripts/test-html-field.mjs`：富文本 html 字段单测 10 项（新建/截断/更新/清空/导出/导入）——无需起服务
+- `scripts/cc-measure.mjs`：圈复杂度/认知复杂度/LOC 测量（AST 级 tokenizer）
 
 **注意**：webdav 测试固定用户名非幂等，重跑前清空测试数据目录（见 AGENTS.md 关键坑）。

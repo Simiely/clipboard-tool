@@ -1,15 +1,18 @@
 // scripts/test-auto-sync.mjs - 定时自动同步测试（模块直测 runAutoSync 到期判定）
-// 前置：隔离实例 8131 + mock-webdav 8180 运行中；test-webdav-sync.mjs 已跑（有 WebDAV 配置用户）
+// 前置：隔离实例 + mock-webdav 8180 运行中；test-webdav-sync.mjs 已跑（有 WebDAV 配置用户）
+// 参数：TEST_PORT（被测实例端口，默认 8131）、TEST_DATA_DIR（被测实例数据目录，默认 C:/Temp/clipboard-test）
 import fs from "node:fs";
 
-const BASE = "http://127.0.0.1:8131";
+const PORT = process.env.TEST_PORT || "8131";
+const DATA_DIR = process.env.TEST_DATA_DIR || "C:/Temp/clipboard-test";
+const BASE = "http://127.0.0.1:" + PORT;
 const DAV = "http://127.0.0.1:8180/dav/";
 const AUTH = { Authorization: "Basic " + Buffer.from("admin:admin123").toString("base64") };
 let pass = 0, fail = 0;
 const ok = (n, c) => { c ? pass++ : fail++; console.log((c ? "✅" : "❌") + " " + n); };
 
 // 动态 import 模块（先设 CAP_STORAGE_DIR，ESM 静态 import 会提前，必须动态）
-process.env.CAP_STORAGE_DIR = "C:/Temp/clipboard-test";
+process.env.CAP_STORAGE_DIR = DATA_DIR;
 const webdav = await import("../lib/core/webdav.js");
 
 // 找 WebDAV 测试用户（test-webdav-sync 创建）
@@ -20,7 +23,7 @@ const uid = u.id;
 
 // 1. 配置 autoSync=true、intervalMin=1 分钟、lastSyncAt=0（立即到期）
 webdav.saveSyncConfig(uid, { url: DAV, user: "admin", pass: "admin123", syncFiles: false, autoSync: true, intervalMin: 1 });
-const cfgFile = "C:/Temp/clipboard-test/users/" + uid + ".webdav.json";
+const cfgFile = DATA_DIR + "/users/" + uid + ".webdav.json";
 const cfg1 = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
 cfg1.lastSyncAt = 0; // 强制到期
 fs.writeFileSync(cfgFile, JSON.stringify(cfg1, null, 2));

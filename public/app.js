@@ -13,6 +13,8 @@ const LS = { get:(k,d)=>{ try{ return JSON.parse(localStorage.getItem(k)) ?? d; 
 let suppressAutoPasteUntil = 0;
 // 用户选择页编辑模式状态（v0.3.1：删除用户后保持编辑状态，点击空白处退出）
 let userEditMode = false;
+// 待存入的富文本 html（从剪贴板 text/html 读取，存入弹窗关闭时清空；无富文本来源则为空）
+let pendingHtml = "";
 
 // ---------- API（统一带 token，10s 超时防永久挂起——第三轮 F-1） ----------
 const REQ_TIMEOUT = 10000;
@@ -102,6 +104,56 @@ function copyText(text) {
     return navigator.clipboard.writeText(text).then(() => true, () => legacyCopy(text));
   }
   return Promise.resolve(legacyCopy(text));
+}
+
+/**
+ * 富文本复制：同时写入 text/html + text/plain 双格式（剪贴板存两份）。
+ * 粘贴到 Word/飞书/Notion 取 text/html 保留格式；粘贴到纯文本编辑器取 text/plain。
+ * 降级：execCommand + copy 事件注入双格式（老浏览器/非安全上下文）。
+ */
+async function copyRich(html, text) {
+  const plain = text || "";
+  if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== "undefined") {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([plain], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    } catch { /* 落 execCommand 兜底 */ }
+  }
+  // 降级：隐藏容器 + Range 选中 + copy 事件注入双格式
+  try {
+    const holder = document.createElement("div");
+    holder.innerHTML = html;
+    holder.style.position = "fixed"; holder.style.top = "-9999px"; holder.style.left = "-9999px";
+    document.body.appendChild(holder);
+    const range = document.createRange();
+    range.selectNodeContents(holder);
+    const sel = window.getSelection();
+    sel.removeAllRanges(); sel.addRange(range);
+    const listener = (e) => {
+      e.clipboardData.setData("text/html", html);
+      e.clipboardData.setData("text/plain", plain);
+      e.preventDefault();
+    };
+    document.addEventListener("copy", listener);
+    const ok = document.execCommand("copy");
+    document.removeEventListener("copy", listener);
+    sel.removeAllRanges();
+    document.body.removeChild(holder);
+    return ok;
+  } catch { return legacyCopy(plain); }
+}
+
+/** 纯文本 → 简单富文本 HTML（换行转段落，URL 转可点链接；仅"有富文本来源"时用，手动输入不生成） */
+function textToHtml(text) {
+  const esc = String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return "<div>" + esc.split(/\n{2,}/).map(p =>
+    "<p>" + p.replace(/\n/g, "<br>").replace(/(https?:\/\/\S+)/g, '<a href="$1">$1</a>') + "</p>"
+  ).join("") + "</div>";
 }
 function legacyCopy(text) {
   try {
@@ -642,6 +694,30 @@ function makeJsonBtn(c) {
   btn.onclick = (e) => { e.stopPropagation(); openJsonPreview(c); };
   return btn;
 }
+
+/** 富文本复制按钮（🅡）：有 html 的文本条目显示——点它复制富文本（剪贴板写入双格式），与单击复制纯文本并存 */
+function makeRichBtn(c) {
+  const btn = el("button", "btn sm ghost", "🅡");
+  btn.title = "复制富文本（粘贴到 Word/飞书保留格式）";
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    guard(btn, async () => {
+      suppressAutoPasteUntil = Date.now() + 800; // 来源抑制：本次复制不触发自动弹窗
+      const ok = await copyRich(c.html || "", c.content || "");
+      if (ok) {
+        flash("富文本已复制（含格式）", e.clientX, e.clientY);
+        if (c.type !== "file") {
+          api("/api/clips/" + c.id + "/copy", { method: "POST" }).then(() => {
+            c.copyCount = (c.copyCount || 0) + 1;
+            const span = $(".copycnt", e.target.closest(".clip-card"));
+            if (span) span.textContent = "复制 " + c.copyCount + " 次";
+          }).catch(() => {});
+        }
+      } else errToast("富文本复制失败");
+    });
+  };
+  return btn;
+}
 /** 卡片内容预览区：图片缩略图 / 文本链接摘要 */
 function makeCardPreview(c) {
   const imgUrl = () => BASE + "/api/files/" + c.fileId + "?token=" + encodeURIComponent(state.current?.token || "");
@@ -714,6 +790,7 @@ function clipCard(c) {
   if (c.archived) ops.append(el("span", "badge", "归档")); // 归档只读：不提供编辑/删除（v0.2.0）
   else ops.append(makeEditBtn(c), makeDeleteBtn(c));
   if (c.type === "text" && looksLikeJson(c.content)) ops.append(makeJsonBtn(c));
+  if (c.type === "text" && c.html) ops.append(makeRichBtn(c)); // 富文本条目：额外提供富文本复制按钮（🅡）
   row1.append(typeBadge, title, ops);
   card.append(row1, makeCardPreview(c), makeCardMeta(c));
 
@@ -750,7 +827,7 @@ function bindImageHoverPreview(c, card) {
     previewState.scale = Math.min(3.0, Math.max(0.5, previewState.scale + (delta > 0 ? step : -step)));
     if (previewState.scale !== before) applyScale();
   };
-  // 框体尺寸 + 定位：跟随图片大小（受视口限制），显示在卡片正上方
+  // 框体尺寸 + 定位：跟随图片大小（受视口限制），显示在卡片正上方（间隙 4px，贴卡片防"飘远"）
   const reposition = () => {
     if (!previewState.open) return;
     const img = previewState.box.querySelector("img");
@@ -762,7 +839,7 @@ function bindImageHoverPreview(c, card) {
     const r = card.getBoundingClientRect();
     let left = r.left + r.width / 2 - bw / 2;
     left = Math.max(8, Math.min(left, window.innerWidth - bw - 8));
-    const top = (r.top - bh - 8 >= 8) ? (r.top - bh - 8) : Math.min(r.bottom + 8, window.innerHeight - bh - 8);
+    const top = (r.top - bh - 4 >= 8) ? (r.top - bh - 4) : Math.min(r.bottom + 4, window.innerHeight - bh - 8);
     previewState.box.style.left = left + "px";
     previewState.box.style.top = top + "px";
   };
@@ -1052,8 +1129,11 @@ async function savePasteContent({ content, pickedFile, adv, m }) {
     } else {
       // 自动标题：未填别名时取首行前 20 字
       const autoTitle = content.split("\n")[0].trim().slice(0, 20);
-      await api("/api/clips", { method: "POST", json: { type: "text", title: adv.title || autoTitle, content, ...adv } });
+      // 富文本：仅当剪贴板有 text/html 来源时携带（无来源则为纯文本条目，卡片只显示 1 个复制按钮）
+      const html = pendingHtml || "";
+      await api("/api/clips", { method: "POST", json: { type: "text", title: adv.title || autoTitle, content, ...(html ? { html } : {}), ...adv } });
     }
+    pendingHtml = ""; // 存入成功清空富文本暂存
     m.remove(); // 成功关弹窗
     return true;
   } catch (e) { errToast(e.message); return false; }
@@ -1066,6 +1146,21 @@ async function savePasteContent({ content, pickedFile, adv, m }) {
  */
 async function autoFillPasteModal(ta, typeBadge, pick, auto, updateBadge) {
   try {
+    pendingHtml = ""; // 每次打开重置，避免残留上次的富文本
+    // 先读富文本：剪贴板带 text/html 时记录（有格式来源才存双版本；普通复制无此类型）
+    if (navigator.clipboard && navigator.clipboard.read) {
+      const items = await navigator.clipboard.read().catch(() => []);
+      for (const item of items) {
+        if (item.types.includes("text/html")) {
+          try {
+            const blob = await item.getType("text/html");
+            const html = await blob.text();
+            if (html && html.length < 512 * 1024) pendingHtml = html;
+          } catch {}
+          break;
+        }
+      }
+    }
     if (navigator.clipboard && navigator.clipboard.readText) {
       const t = await navigator.clipboard.readText().catch(() => "");
       if (t && !ta.value) {
@@ -1289,6 +1384,8 @@ function openDataModal() {
 // 参考 edge-multi-account-cookie 设计：墓碑同步/清空不传播/双向取最新
 function renderWebdavSection(modal) {
   modal.append(el("label", "", "WebDAV 备份（跨设备同步）"));
+  // P1-2：归档不参与同步的显式说明（归档只存本地，同步快照只含活跃区）
+  modal.append(el("div", "dav-hint", "同步范围：活跃区条目（归档只存本地，不参与 WebDAV 同步）"));
   const davUrl = el("input"); davUrl.placeholder = "服务器目录地址，如 https://dav.example.com/clipboard";
   const davUser = el("input"); davUser.placeholder = "用户名";
   const davPass = el("input"); davPass.type = "password"; davPass.placeholder = "密码（留空复用已保存）";

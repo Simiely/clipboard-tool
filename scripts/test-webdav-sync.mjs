@@ -1,5 +1,8 @@
-// scripts/test-webdav-sync.mjs - WebDAV 端到端集成测试（需先起隔离实例 8131 + mock-webdav 8180）
-const BASE = "http://127.0.0.1:8131";
+// scripts/test-webdav-sync.mjs - WebDAV 端到端集成测试（需先起隔离实例 + mock-webdav 8180）
+// 参数：TEST_PORT（被测实例端口，默认 8131）、TEST_DATA_DIR（被测实例数据目录，默认 C:/Temp/clipboard-test）
+const PORT = process.env.TEST_PORT || "8131";
+const DATA_DIR = process.env.TEST_DATA_DIR || "C:/Temp/clipboard-test";
+const BASE = "http://127.0.0.1:" + PORT;
 const DAV = "http://127.0.0.1:8180/dav/";
 async function req(method, path, { token, json } = {}) {
   const headers = {};
@@ -64,7 +67,7 @@ ok("远端快照未被清空覆盖", snap2.clips.length >= 1);
 
 // 7. 墓碑文件落盘确认
 const fs = await import("node:fs");
-const tombs = JSON.parse(fs.readFileSync("C:/Temp/clipboard-test/users/" + uid + ".tombstones.json", "utf8"));
+const tombs = JSON.parse(fs.readFileSync(DATA_DIR + "/users/" + uid + ".tombstones.json", "utf8"));
 ok("墓碑文件落盘(含A)", tombs.some(t => t.id === c1.data.clip.id));
 
 // 8. 实体同步：上传文件条目 → 勾选 syncFiles → 同步 → 远端 files/ 有实体
@@ -84,7 +87,7 @@ const fRemote = await fetch(DAV + "files/" + uid + "/" + up2.file.fileId + ".png
 ok("实体同步:远端有文件", fRemote.status === 200 && new Uint8Array(await fRemote.arrayBuffer()).length > 0);
 
 // 9. 删除本地文件实体 → 再同步 → 从远端拉回
-const localDir = "C:/Temp/clipboard-test/files/" + uid;
+const localDir = DATA_DIR + "/files/" + uid;
 const localFile = fs.readdirSync(localDir).find(f => f.startsWith(up2.file.fileId + "."));
 fs.unlinkSync(localDir + "/" + localFile);
 ok("本地文件已删(模拟丢失)", !fs.existsSync(localDir + "/" + localFile));

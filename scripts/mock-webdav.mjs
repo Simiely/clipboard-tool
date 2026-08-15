@@ -1,12 +1,14 @@
 // scripts/mock-webdav.mjs - 极简 WebDAV 服务器（仅测试用：MKCOL/PUT/GET/DELETE + Basic 认证）
 // 用法：node scripts/mock-webdav.mjs <port> [<dataDir>]
 // 认证：user=admin pass=admin123（与测试配置一致）；数据存内存 + 落盘 dataDir
+// 注意（Windows）：dataDir 请用绝对路径（如 C:/Temp/mock-webdav），
+//   path.join 对相对路径（如 /tmp/...）产出无盘符路径，与 path.resolve 比较会恒 false（P0-3 修复：两侧统一 resolve）。
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 
 const PORT = parseInt(process.argv[2] || "8180", 10);
-const DATA = process.argv[3] || path.join(process.cwd(), ".data", "mock-webdav");
+const DATA = path.resolve(process.argv[3] || path.join(process.cwd(), ".data", "mock-webdav"));
 fs.mkdirSync(DATA, { recursive: true });
 
 function authOk(req) {
@@ -15,9 +17,11 @@ function authOk(req) {
   return h === expect;
 }
 
+/** 路径拼接 + 防穿越：两侧统一 path.resolve 归一化（相对/绝对路径均一致判定），
+ *  结果必须在 dataDir 内，否则返回 null（400 bad path）。 */
 function safeJoin(dir, rel) {
-  const p = path.join(DATA, rel.replace(/^\//, ""));
-  if (!p.startsWith(path.resolve(DATA))) return null;
+  const p = path.resolve(path.join(dir, rel.replace(/^\//, "")));
+  if (!p.startsWith(path.resolve(dir) + path.sep) && p !== path.resolve(dir)) return null;
   return p;
 }
 
