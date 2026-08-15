@@ -1,6 +1,50 @@
 # CHANGELOG.md
 
-## v0.5.0-设计稿 (2026-08-12~13)
+## v0.6.0 (2026-08-15)
+
+### 暗黑新拟态 UI 迁移 + 富文本双格式复制
+
+**🎨 UI 迁移（暗黑新拟态 Neumorphism，依据《UI迁移手册.md》）**
+- 设计令牌全换：背景 `#1c1f26` / 面板 `#232730` / 内嵌 `#191c22`，主强调色粉 `#ff9292` → 蓝紫 `#7f9dff`
+- 风格核心：**双阴影浮雕**（凸起=外阴影、凹陷=内阴影、按压=阴影反转），全界面去 1px 描边；阴影偏移统一 1px（贴合感），圆角 14-18px
+- 组件改造：按钮四态、输入框凹陷内嵌、类型 Tab 改分段控件（凹陷轨道+凸起选中）、checkbox 伪装新拟态开关、搜索框胶囊+放大镜图标
+- 布局对齐：容器 720→960px、hero 紧凑化、卡片间距 16px、顶栏整条浮雕面板
+- **关键修复**：`.clip-card` hover/active 去掉 `transform`——卡片内部挂 `position:fixed` 的图片预览浮层，transform 会创建 containing block 使 fixed 相对卡片而非视口，导致浮层定位错乱（浮层"飘远"根因）
+- 图片 hover 预览浮层与卡片间隙 8px → 4px（贴合卡片）
+
+**📋 富文本双格式复制（content 纯文本 + html 富文本并存）**
+- 后端：条目新增可选 `html` 字段（`MAX_HTML: 512KB`）；创建/编辑/导入净化全覆盖，导出/WebDAV 天然携带
+- 前端：存入时检测剪贴板 `text/html` → 有富文本来源则存双版本；卡片显示 **🅡 富文本复制按钮**（仅富文本条目）
+- 复制：`copyRich()` 剪贴板写入双 MIME（`text/html` + `text/plain`）——粘贴到 Word/飞书保留格式、记事本得纯文本；execCommand 降级兜底
+- 决策：**不上数据库**（JSON 足够：100 用户×500 条×512KB 上限；上库破坏零依赖 + WebDAV 快照协议；`node:sqlite` 仍实验性）
+
+**🛠 工具与测试**
+- 新增 `scripts/cc-measure.mjs`：AST 级圈复杂度/认知复杂度/LOC 测量工具
+- 新增 `scripts/test-html-field.mjs`：富文本 html 字段单测（新建/截断/更新/清空/导出/导入）
+- 验证：html 字段单测 10/10、冒烟 34/34、WebDAV 19/19、自动同步 3/3 全绿
+
+## v0.5.2 (2026-08-14)
+
+### 取消 UI 重构，删除设计稿（产品决策）
+
+- ❌ **删除 `design-preview.html` 设计稿**：v0.5.0 的主页面 UI 重构方案（磨砂玻璃/等高网格/渐进披露卡片）**确定不做**，设计稿文件已从仓库移除（`git rm`）
+- 影响：前端维持 v0.4.x 现有界面（index.html + app.js 不变）；CHANGELOG v0.5.0-设计稿 章节保留仅作历史记录（标注已废弃）
+- 无代码改动，纯清理
+
+## v0.5.1 (2026-08-14)
+
+### P0 修正批：工程卫生 + 文档纠偏（优化计划落地）
+
+- 🟡 **补 package.json**（P0-1）：`"type": "module"`（显式声明 ESM，消除 Node 22 模块语法探测开销）+ `engines.node >=22.7` + npm scripts（`start` / `smoke` / `test:webdav` / `test:auto-sync` / `test` 一键三套）
+- 🟡 **测试脚本参数化**（P0-2）：`test-webdav-sync.mjs` / `test-auto-sync.mjs` 的端口与数据目录改读 `TEST_PORT`（默认 8131）/ `TEST_DATA_DIR`（默认 `C:/Temp/clipboard-test`），与 smoke-test 风格统一，不再硬编码
+- 🔴 **mock-webdav safeJoin 路径修复**（P0-3）：`path.join`（相对路径无盘符）与 `path.resolve`（补盘符）不一致导致相对路径下 `startsWith` 恒 false、所有请求 400 bad path——两侧统一 `path.resolve` 归一化，且修复前缀匹配边界（`dataDir + path.sep` 精确判定），`../` 逃逸仍拦截
+- 🟡 **safe-delete 根源澄清**（P0-4）：实测确认 `fs.rmSync.name === "wrappedRmSync"` 是 **WorkBuddy AI 沙箱注入的 genie-safe-delete shim**（NODE_OPTIONS 猴补丁送回收站），非 Node 22 原生行为；用户手动运行正常。AGENTS/DEVELOPMENT 关键坑重写，rmForce 容错设计不变
+- 🟡 **README 纠偏**（P0-4）：数据目录 `./data` → `./.data`；测试命令补 Windows 绝对路径说明
+
+### 验证
+- 冒烟 34/34 无回归；WebDAV 集成 19/19 无回归；自动同步 3/3 无回归；mock-webdav 相对/绝对路径 + 逃逸用例全部通过
+
+## v0.5.0-设计稿 (2026-08-12~13) — ⚠️ 已废弃（2026-08-14 决定不做，design-preview.html 已删除）
 
 ### 主页面整体 UI 重构设计稿（未落地代码，先评审）
 
