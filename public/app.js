@@ -658,11 +658,12 @@ function renderList(v = $("#view")) {
   v.append(list);
 }
 
-// ---------- 卡片工厂（v0.4.3 拆分：clipCard 从 CC49 降到组装级，各事件按钮独立小函数） ----------
+// ---------- 卡片工厂（v0.4.3 拆分：clipCard 从 CC49 降到组装级，各事件按钮独立小函数）
+// v0.6.5 按钮样式对齐方案18：26px 方形图标钮（.ops .b），常显、hover 金、删除 hover 红 ----------
 /** 星标按钮（非归档卡片）；点击切换置顶并更新卡片样式 */
 function makePinBtn(c, card) {
   if (c.archived) return null;
-  const btn = el("button", "btn sm ghost" + (c.pinned ? " on" : ""), c.pinned ? "★" : "☆");
+  const btn = el("button", "b" + (c.pinned ? " on" : ""), c.pinned ? "★" : "☆");
   btn.title = c.pinned ? "取消置顶" : "置顶";
   btn.onclick = (e) => {
     e.stopPropagation();
@@ -670,35 +671,31 @@ function makePinBtn(c, card) {
       const r = await api("/api/clips/" + c.id + "/pin", { method: "POST" }).catch(e2 => errToast(e2.message));
       if (!r) return;
       c.pinned = r.pinned;
-      card.classList.toggle("pinned", !!r.pinned);
-      btn.textContent = r.pinned ? "★" : "☆";
-      btn.title = r.pinned ? "取消置顶" : "置顶";
+      // v0.6.5：置顶后整体刷新——顶部状态徽章实时重建（★ 置顶出现/消失）+ 后端 pinned 优先排序生效（卡片跳到最前/归位）
       flash(r.pinned ? "已置顶" : "已取消置顶");
+      refreshList();
     })();
   };
   return btn;
 }
-/** 链接卡「打开」按钮 */
-function makeOpenBtn(c) {
-  const btn = el("button", "btn sm ghost", "打开");
-  btn.onclick = (e) => { e.stopPropagation(); window.open(c.url, "_blank", "noopener"); };
-  return btn;
-}
-/** 文件卡「下载」按钮 */
+/** 文件卡「下载」按钮（图标 ↓） */
 function makeDownloadBtn(c) {
-  const btn = el("button", "btn sm ghost", "下载");
+  const btn = el("button", "b", "↓");
+  btn.title = "下载 " + (c.fileName || "");
   btn.onclick = (e) => { e.stopPropagation(); downloadFile(c); };
   return btn;
 }
-/** 「编辑」按钮 */
+/** 「编辑」按钮（图标 ✎） */
 function makeEditBtn(c) {
-  const btn = el("button", "btn sm ghost", "编辑");
+  const btn = el("button", "b", "✎");
+  btn.title = "编辑";
   btn.onclick = (e) => { e.stopPropagation(); openEditModal(c); };
   return btn;
 }
-/** 「删除」按钮（带确认） */
+/** 「删除」按钮（图标 ✕，带确认） */
 function makeDeleteBtn(c) {
-  const btn = el("button", "btn sm ghost danger", "删除");
+  const btn = el("button", "b del", "✕");
+  btn.title = "删除";
   btn.onclick = (e) => {
     e.stopPropagation();
     askConfirm("删除这条内容？", guard(btn, async () => {
@@ -713,13 +710,13 @@ function makeDeleteBtn(c) {
 }
 /** JSON 格式化预览按钮（文本可解析为 JSON 时） */
 function makeJsonBtn(c) {
-  const btn = el("button", "btn sm ghost", "{}");
+  const btn = el("button", "b", "{}");
   btn.title = "JSON 格式化预览";
   btn.onclick = (e) => { e.stopPropagation(); openJsonPreview(c); };
   return btn;
 }
 
-/** 富文本复制按钮（🅡）：有 html 的文本条目显示——点它复制富文本（剪贴板写入双格式），与单击复制纯文本并存 */
+/** 富文本复制按钮（v0.6.5 起废弃：入口已迁入内容区 makeRichSplit 右栏，保留函数防回滚） */
 function makeRichBtn(c) {
   const btn = el("button", "btn sm ghost", "🅡");
   btn.title = "复制富文本（粘贴到 Word/飞书保留格式）";
@@ -738,26 +735,91 @@ function makeRichBtn(c) {
           }).catch(() => {});
         }
       } else errToast("富文本复制失败");
-    });
+    })();
   };
   return btn;
 }
-/** 卡片内容预览区：图片缩略图 / 文本链接摘要 */
-function makeCardPreview(c) {
-  const imgUrl = () => BASE + "/api/files/" + c.fileId + "?token=" + encodeURIComponent(state.current?.token || "");
-  if (c.type === "file" && (c.fileMime || "").startsWith("image/")) {
-    const preview = el("div", "preview img-thumb");
-    const img = el("img");
-    img.loading = "lazy";
-    img.alt = c.fileName || "图片";
-    img.src = imgUrl();
-    preview.append(img);
-    return preview;
-  }
-  return el("div", "preview",
-    c.type === "link" ? c.url : c.type === "file" ? (c.fileName + " · " + fmtSize(c.fileSize)) : c.content);
+/** 富文本分栏预览（v0.6.5 方案 18 v4.1）：7:3 左右栏，天然可点、无实心按钮 */
+function makeRichSplit(c) {
+  const split = el("div", "rich-split");
+  // 左栏：普通文本（纯文本样式，点击复制纯文本）
+  const left = el("div", "half plain");
+  left.title = "单击复制纯文本";
+  const labL = el("div", "lab"); labL.append(el("b", "", "T"), el("span", "", "纯文本"));
+  const plainPv = el("div", "plain-pv", c.content || "");
+  left.append(labL, plainPv);
+  left.onclick = (e) => {
+    e.stopPropagation();
+    // 修复：guard 返回事件处理器，必须 () 调用（此前漏括号→复制逻辑从未执行）
+    guard(left, async () => {
+      suppressAutoPasteUntil = Date.now() + 800;
+      const ok = await copyText(c.content || "");
+      if (ok) {
+        flash("纯文本已复制", e.clientX, e.clientY);
+        bumpCopyCount(c, left);
+      } else errToast("复制失败，请手动选择复制");
+    })();
+  };
+  // 右栏：富文本（白名单安全渲染 c.html 的格式效果，点击复制带格式）
+  const right = el("div", "half rich");
+  right.title = "单击复制带格式（粘贴到 Word/飞书保留样式）";
+  const labR = el("div", "lab"); labR.append(el("b", "", "✦"), el("span", "", "格式"));
+  const richPv = el("div", "rich-pv");
+  richPv.append(...safeRichNodes(c.html || ""));
+  right.append(labR, richPv);
+  right.onclick = (e) => {
+    e.stopPropagation();
+    // 修复：guard 返回事件处理器，必须 () 调用（此前漏括号→复制逻辑从未执行）
+    guard(right, async () => {
+      suppressAutoPasteUntil = Date.now() + 800; // 来源抑制：本次复制不触发自动弹窗
+      const ok = await copyRich(c.html || "", c.content || "");
+      if (ok) {
+        flash("富文本已复制（含格式）", e.clientX, e.clientY);
+        bumpCopyCount(c, right);
+      } else errToast("富文本复制失败");
+    })();
+  };
+  split.append(left, right);
+  return split;
 }
-/** 卡片 meta 区：复制次数 / 标签（点击过滤）/ 过期 / 时间 */
+
+/**
+ * 富文本白名单安全渲染：DOMParser 解析原始 html，只保留格式标签（b/strong/em/i/u/h1-h4/p/br/ul/ol/li/a），
+ * 全部属性丢弃（防 XSS），其余标签仅保留文本内容。返回 DOM 节点数组。
+ */
+function safeRichNodes(html) {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const ALLOW = new Set(["B", "STRONG", "EM", "I", "U", "H1", "H2", "H3", "H4", "P", "BR", "UL", "OL", "LI", "A", "SPAN", "DIV"]);
+  const build = (node) => {
+    if (node.nodeType === 3) return document.createTextNode(node.nodeValue);
+    if (node.nodeType !== 1) return null;
+    const tag = node.tagName.toUpperCase();
+    if (!ALLOW.has(tag)) { // 非白名单标签：丢弃外壳，保留文本子内容
+      const frag = document.createDocumentFragment();
+      for (const ch of node.childNodes) { const r = build(ch); if (r) frag.append(r); }
+      return frag;
+    }
+    const elm = document.createElement(tag.toLowerCase());
+    for (const ch of node.childNodes) { const r = build(ch); if (r) elm.append(r); }
+    return elm;
+  };
+  const nodes = [];
+  for (const ch of doc.body.childNodes) { const r = build(ch); if (r) nodes.push(r); }
+  return nodes;
+}
+
+/** 复制成功后本地 +1 计数（与 handleCardClick 的计数逻辑共用） */
+function bumpCopyCount(c, root) {
+  // 仅跳过「普通文件下载」（非图片）；图片复制到剪贴板也算一次复制（P-5 计数口径）
+  const isImage = c.type === "file" && (c.fileMime || "").startsWith("image/");
+  if (c.type === "file" && !isImage) return;
+  api("/api/clips/" + c.id + "/copy", { method: "POST" }).then(() => {
+    c.copyCount = (c.copyCount || 0) + 1;
+    const span = $(".copycnt", root.closest(".clip-card"));
+    if (span) span.textContent = "复制 " + c.copyCount + " 次";
+  }).catch(() => {});
+}
+/** 卡片 meta 区：复制次数 / 标签（点击过滤）/ 时间（过期徽章已在顶部状态行，v0.6.5） */
 function makeCardMeta(c) {
   const meta = el("div", "meta");
   meta.append(el("span", "copycnt", "复制 " + (c.copyCount || 0) + " 次"));
@@ -767,7 +829,6 @@ function makeCardMeta(c) {
     tg.onclick = (e) => { e.stopPropagation(); state.filter.tag = t; renderTagbar(); renderList(); };
     meta.append(tg);
   }
-  if (c.expireAt) meta.append(el("span", "badge exp", expLabel(c.expireAt)));
   meta.append(el("span", "", fmtTime(c.updatedAt)));
   return meta;
 }
@@ -779,7 +840,7 @@ async function handleCardClick(c, card, e) {
     if ((c.fileMime || "").startsWith("image/")) {
       try {
         const ok = await copyImageToClipboard(c);
-        if (ok) flash("图片已复制，可直接粘贴", px, py);
+        if (ok) { flash("图片已复制，可直接粘贴", px, py); bumpCopyCount(c, card); } // P-5：图片复制也计数（此前漏记）
         else { errToast("此浏览器不支持复制图片，已打开预览"); openImagePreview(c); }
       } catch { errToast("图片加载失败"); }
     } else downloadFile(c);
@@ -803,20 +864,30 @@ async function handleCardClick(c, card, e) {
 function clipCard(c) {
   const card = el("div", "clip-card");
   if (c.pinned) card.classList.add("pinned"); // 星标卡片高亮描边
+  if (c.archived) card.classList.add("archived"); // 归档：降透明（v0.6.5 状态视觉化）
+  // 顶部徽章行（方案18：类型徽章 + 标题 + 状态徽章）
   const row1 = el("div", "row1");
   const typeBadge = el("span", "badge " + (c.type === "link" ? "link" : c.type === "file" ? "file" : "text"), c.type === "link" ? "链接" : c.type === "file" ? "文件" : "文本");
-  const title = el("span", "title", c.title || (c.type === "link" ? c.url : c.type === "file" ? c.fileName : (c.content || "").slice(0, 30)));
-  const ops = el("div", "ops");
-  // 操作按钮（各为独立小函数，v0.4.3）
-  const pin = makePinBtn(c, card); if (pin) ops.append(pin);
-  if (c.type === "link") ops.append(makeOpenBtn(c));
-  if (c.type === "file") ops.append(makeDownloadBtn(c));
-  if (c.archived) ops.append(el("span", "badge", "归档")); // 归档只读：不提供编辑/删除（v0.2.0）
-  else ops.append(makeEditBtn(c), makeDeleteBtn(c));
-  if (c.type === "text" && looksLikeJson(c.content)) ops.append(makeJsonBtn(c));
-  if (c.type === "text" && c.html) ops.append(makeRichBtn(c)); // 富文本条目：额外提供富文本复制按钮（🅡）
-  row1.append(typeBadge, title, ops);
-  card.append(row1, makeCardPreview(c), makeCardMeta(c));
+  const title = el("span", "title", c.title || (c.type === "link" ? hostOf(c.url) : c.type === "file" ? c.fileName : (c.content || "").slice(0, 30)));
+  const status = el("span", "status");
+  if (c.pinned) status.append(el("span", "st pin", "★ 置顶"));
+  if (c.expireAt) status.append(el("span", "st exp", "⏳ " + expLabel(c.expireAt)));
+  if (c.archived) status.append(el("span", "st arch", "归档"));
+  // 右上角操作组：只放 ✕ 删除（☆ 收藏/置顶回到底部）
+  const topOps = el("div", "ops top");
+  if (!c.archived) topOps.append(makeDeleteBtn(c));
+  row1.append(typeBadge, title, status, topOps);
+  // 底部 meta 行：信息 + 其余操作（☆ 收藏 / ✎ 编辑 / ↓ 下载 / {} JSON）
+  const foot = el("div", "foot");
+  foot.append(makeCardMeta(c));
+  const footOps = el("div", "ops");
+  const pin = makePinBtn(c, card); if (pin) footOps.append(pin);
+  if (c.type === "file") footOps.append(makeDownloadBtn(c));
+  if (!c.archived) footOps.append(makeEditBtn(c));
+  if (c.type === "text" && looksLikeJson(c.content)) footOps.append(makeJsonBtn(c));
+  // v0.6.5：富文本复制入口在内容区左右分栏；链接打开为内容区金色主按钮——ops 不重复添加
+  if (footOps.children.length) foot.append(footOps);
+  card.append(row1, makeCardBody(c), foot);
 
   // 图片卡片 hover 预览（v0.4.3 状态显式化 + 独立函数）：默认 100%，滚轮缩放（50%~300%）
   //  - 状态收敛为单一对象 previewState（open/scale/timer/box/drag），不再散落闭包变量（防布尔失控，架构评估 v2 #1）
@@ -825,8 +896,81 @@ function clipCard(c) {
 
   // 单击复制 / 双击编辑（v0.4.2：复制成功提示跟随鼠标点击位置）
   card.onclick = (e) => handleCardClick(c, card, e);
-  card.ondblclick = (e) => { if (e.target.closest(".ops") || c.archived) return; openEditModal(c); }; // 归档只读
+  card.ondblclick = (e) => { if (e.target.closest(".ops") || e.target.closest(".rich-split") || c.archived) return; openEditModal(c); }; // 归档只读；分栏点击已 stopPropagation 但双击仍拦
   return card;
+}
+
+/** 从 URL 提取域名（链接卡金色标题用） */
+function hostOf(url) {
+  try { return new URL(url).hostname; } catch { return (url || "").replace(/^https?:\/\//, "").split("/")[0]; }
+}
+
+/** 卡片内容区（方案18 各类型专属） */
+function makeCardBody(c) {
+  // 富文本：左右分栏（v0.6.5 已落地）
+  if (c.type === "text" && c.html) return makeRichSplit(c);
+  // JSON：代码窗（金色键名/绿色字符串，等宽缩进）
+  if (c.type === "text" && looksLikeJson(c.content)) return makeJsonPreview(c);
+  // 图片：cover 撑满内容区
+  if (c.type === "file" && (c.fileMime || "").startsWith("image/")) {
+    const preview = el("div", "imgwrap");
+    const img = el("img");
+    img.loading = "lazy";
+    img.alt = c.fileName || "图片";
+    img.src = BASE + "/api/files/" + c.fileId + "?token=" + encodeURIComponent(state.current?.token || "");
+    preview.append(img);
+    return preview;
+  }
+  // 文件：类型图标卡（PDF 红边 / ZIP 金边 / 其他中性）
+  if (c.type === "file") return makeFileIcon(c);
+  // 链接：金色域名标题 + URL + 「↗ 打开链接」主按钮
+  if (c.type === "link") return makeLinkBody(c);
+  // 文本：2 行摘要
+  return el("div", "pv", c.content || "");
+}
+
+/** JSON 代码窗预览（安全：键/值着色基于解析结果重建，不注入原始文本） */
+function makeJsonPreview(c) {
+  const box = el("div", "code");
+  let parsed = null;
+  try { parsed = JSON.parse(c.content); } catch { /* 保持原样 */ }
+  box.append(el("div", "dots", ""), el("span", "fname", c.title || "config.json"));
+  const pre = el("pre");
+  if (parsed !== null) {
+    const json = JSON.stringify(parsed, null, 2);
+    // 简易着色：键名金色、字符串绿色（基于转义后的文本做行内替换，安全）
+    const esc = json.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    pre.innerHTML = esc.replace(/("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*")(\s*:)/g, '<span class="k">$1</span>$2')
+                      .replace(/("(?:\\u[a-fA-F0-9]{4}|\\[^u]|[^\\"])*")(\s*[,}\]])/g, '<span class="s">$1</span>$2');
+  } else pre.textContent = c.content;
+  box.append(pre);
+  return box;
+}
+
+/** 文件类型图标卡（PDF/ZIP 着色） */
+function makeFileIcon(c) {
+  const body = el("div", "filebody");
+  const name = (c.fileName || "").toLowerCase();
+  const isPdf = name.endsWith(".pdf");
+  const isZip = /\.(zip|rar|7z|tar|gz)$/.test(name);
+  const fic = el("div", "fic " + (isPdf ? "pdf" : isZip ? "zip" : ""));
+  fic.textContent = (isPdf ? "PDF" : isZip ? "ZIP" : "FILE");
+  fic.append(el("span", "fold", ""));
+  const finfo = el("div", "finfo");
+  finfo.append(el("div", "fname", c.fileName || "文件"), el("div", "fsize", fmtSize(c.fileSize) + " · " + (c.fileMime || "").split("/")[0]));
+  body.append(fic, finfo);
+  return body;
+}
+
+/** 链接卡内容：金色域名 + URL + 打开主按钮 */
+function makeLinkBody(c) {
+  const body = el("div", "linkbody");
+  const url = el("div", "url", c.url);
+  url.title = c.url;
+  const openBtn = el("button", "main-btn", "↗ 打开链接");
+  openBtn.onclick = (e) => { e.stopPropagation(); window.open(c.url, "_blank", "noopener"); };
+  body.append(url, openBtn);
+  return body;
 }
 
 // ---------- 图片 hover 预览绑定（v0.4.3：从 clipCard 抽出，CC 独立） ----------
@@ -1276,28 +1420,47 @@ function openPasswordModal() {
   const root = $("#modal-root");
   root.innerHTML = "";
   const m = el("div", "mask");
-  const modal = el("div", "modal");
-  modal.append(el("h3", "", "密码 · " + state.current.name));
+  const modal = el("div", "modal pw-modal"); // 方案22 极简聚焦
+  // 头部：小锁图标 + 标题 + 用户名胶囊
+  const head = el("div", "head");
+  head.append(el("div", "lock", "🔑"), el("h3", "", "修改密码"), el("span", "who", state.current.name));
+  modal.append(head, el("div", "sub", "原密码验证身份 · 新密码至少 4 位"));
 
-  const oldPass = el("input"); oldPass.type = "password"; oldPass.placeholder = "原密码（未设密码可留空）";
-  const newPass = el("input"); newPass.type = "password"; newPass.placeholder = "新密码";
-  modal.append(el("label", "", "修改密码"), oldPass, newPass);
-  const pwBtn = el("button", "btn sm", "保存新密码");
-  pwBtn.style.width = "100%"; pwBtn.style.marginBottom = "16px";
-  pwBtn.onclick = guard(pwBtn, async () => {
+  // 密码输入字段（下划线式 + 浮动标签 + 👁 显隐切换）
+  const mkField = (label) => {
+    const field = el("div", "field");
+    const input = el("input");
+    input.type = "password";
+    input.placeholder = " "; // 触发 :not(:placeholder-shown) 浮动标签
+    const pl = el("span", "pl", label);
+    const eye = el("button", "eye", "👁");
+    eye.type = "button";
+    eye.onclick = () => { input.type = input.type === "password" ? "text" : "password"; eye.textContent = input.type === "password" ? "👁" : "🙈"; };
+    field.append(input, pl, eye);
+    return { field, input };
+  };
+  const oldP = mkField("原密码（未设置可留空）");
+  const newP = mkField("新密码");
+  modal.append(oldP.field, newP.field);
+
+  // 保存
+  const save = el("button", "save", "保存新密码");
+  save.onclick = guard(save, async () => {
     try {
       await api("/api/users/" + state.current.id + "/password", {
-        method: "POST", json: { oldPassword: oldPass.value, newPassword: newPass.value },
+        method: "POST", json: { oldPassword: oldP.input.value, newPassword: newP.input.value },
       });
-      flash("密码已更新"); oldPass.value = ""; newPass.value = "";
+      flash("密码已更新"); oldP.input.value = ""; newP.input.value = "";
     } catch (e) { errToast(e.message); }
   });
-  modal.append(pwBtn);
+  modal.append(save);
 
-  const row = el("div", "form-row");
-  const close = el("button", "btn ghost", "关闭"); close.style.flex = "1";
-  row.append(close); modal.append(row);
+  // 底部：安全提示 + 关闭
+  const foot = el("div", "foot");
+  const close = el("button", "close", "关闭");
   close.onclick = () => m.remove();
+  foot.append(el("span", "hint", "仅存哈希 · 不泄露原文"), close);
+  modal.append(foot);
   m.append(modal); root.append(m);
 }
 
