@@ -85,7 +85,7 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .user-foot{margin-top:22px;text-align:center;font-size:11px;color:var(--dim);letter-spacing:.2em}
 .empty-state{grid-column:1/-1;text-align:center;padding:40px 0;color:var(--dim);font-size:13px}
 /* 主页面 */
-.topbar{display:flex;align-items:center;gap:14px;padding:14px 20px;margin-bottom:18px;flex-wrap:wrap;background:var(--elev);box-shadow:var(--sh-raised);border-radius:var(--r-lg)}
+.topbar{display:flex;align-items:center;gap:14px;padding:12px 20px;margin-bottom:14px;flex-wrap:wrap;background:var(--elev);box-shadow:var(--sh-raised);border-radius:var(--r-lg)}
 .topbar .t-logo{font-size:22px}
 .topbar h1{font-size:18px;font-weight:600;flex:1;min-width:120px}
 .topbar .who{color:var(--muted);font-size:13px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -96,18 +96,33 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .paste-row{display:flex;gap:8px;margin-top:10px;align-items:center}
 .adv-box{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
 .adv-box input,.adv-box select{flex:1;min-width:130px}
-.toolbar{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
-.toolbar input[type=search]{flex:1;min-width:140px;border-radius:var(--r-pill);padding-left:36px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238a90a0' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='M21 21l-4.3-4.3'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:12px center}
-.toolbar select{width:auto;flex-shrink:0;padding:9px 26px 9px 12px;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238a90a0' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;cursor:pointer}
+/* 主页面工具条（v0.6.4 双行：行1 搜索+存入右置 / 行2 类型+标签+操作） */
+.tb{background:var(--elev);border-radius:var(--r-md);box-shadow:var(--sh-raised);padding:12px 14px;margin-bottom:16px}
+.tb .row1{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.tb .row1 .search{flex:1;border:none;outline:none;border-radius:var(--r-pill);background:var(--inset);box-shadow:var(--sh-inset);color:var(--text);padding:10px 20px;font-size:14px;font-family:inherit;transition:box-shadow .18s var(--ease)}
+.tb .row1 .search:focus{box-shadow:var(--sh-inset),0 0 0 1.5px rgba(201,169,110,.45)}
+.store-btn{flex-shrink:0;border:none;cursor:pointer;font-family:inherit;font-size:13px;padding:10px 22px;border-radius:var(--r-pill);background:var(--accent);color:#101014;font-weight:500;box-shadow:var(--sh-raised);display:flex;align-items:center;gap:7px;transition:all .18s var(--ease)}
+.store-btn:hover{background:var(--amber)}
+.store-btn:active{box-shadow:var(--sh-inset);transform:translateY(1px)}
+.store-btn .plus{font-size:15px;line-height:1}
+.tb .row2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tb .row2 .typetab{margin-bottom:0}
+.tagbar-wrap{flex:1;min-width:140px}
+.tb .ops{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);flex-shrink:0;flex-wrap:wrap}
+.tb .ops .opt{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap}
+.tb .ops .opt input[type=checkbox]{width:15px;height:15px;border-radius:4px;appearance:auto;-webkit-appearance:auto;box-shadow:none;margin:0}
+.tb .ops .opt input[type=checkbox]::after{display:none}
+.tb .ops select{width:auto;padding:6px 10px;font-size:12px;flex-shrink:0}
+.tb .ops .btn{padding:6px 13px;font-size:12px;border-radius:var(--r-pill)}
 /* 新拟态开关（纯 CSS 伪装 checkbox，不改 JS）：凸起轨道 + 滑块 */
 .opt input[type=checkbox]{width:38px;height:22px;border-radius:99px;background:var(--inset);box-shadow:var(--sh-inset-sm);appearance:none;-webkit-appearance:none;position:relative;cursor:pointer;transition:.2s;flex-shrink:0;margin:0}
 .opt input[type=checkbox]::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--elev-hi);box-shadow:2px 2px 5px rgba(0,0,0,.5),-1px -1px 3px rgba(44,49,59,.5);transition:.2s}
 .opt input[type=checkbox]:checked{background:var(--accent)}
 .opt input[type=checkbox]:checked::after{left:19px;background:#EDEDED}
-.tagbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.tagbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .tagbar .tag-mgmt-btn{margin-left:auto}
 /* 层2 · 类型分段控件（凹陷轨道 + 凸起选中） */
-.typetab{display:inline-flex;gap:6px;padding:6px;margin-bottom:14px;border-radius:14px;background:var(--inset);box-shadow:var(--sh-inset-sm);flex-wrap:wrap}
+.typetab{display:inline-flex;gap:6px;padding:6px;border-radius:14px;background:var(--inset);box-shadow:var(--sh-inset-sm);flex-wrap:wrap}
 .typetab .tt{font-size:13px;padding:6px 18px;border-radius:10px;color:var(--muted);cursor:pointer;transition:.18s}
 .typetab .tt:hover{color:var(--text)}
 .typetab .tt.on{background:var(--elev);box-shadow:var(--sh-raised-sm);color:var(--accent2);font-weight:600}
@@ -115,9 +130,6 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .typebadge b{color:var(--accent);font-weight:500}
 .cb-hint{display:flex;align-items:center;gap:8px;background:var(--inset);box-shadow:var(--sh-inset-sm);color:var(--accent2);border:none;border-radius:10px;padding:8px 12px;font-size:12px;margin-bottom:10px;cursor:pointer}
 .cb-hint:hover{box-shadow:var(--sh-inset);color:var(--accent2)}
-.paste-trigger{display:flex;align-items:center;justify-content:center;gap:6px;background:var(--elev);box-shadow:var(--sh-raised);border:none;border-radius:var(--r-md);padding:14px;margin-bottom:16px;font-size:13px;color:var(--muted);cursor:pointer;transition:.2s}
-.paste-trigger:hover{background:var(--elev-hi);color:var(--accent2)}
-.paste-trigger:active{box-shadow:var(--sh-press)}
 .paste-modal .paste-box{margin-bottom:0}
 .dav-status{font-size:12px;color:var(--muted);margin:6px 0 14px;word-break:break-all}
 .dav-hint{font-size:12px;color:var(--dim);margin:4px 0 8px;line-height:1.5}
