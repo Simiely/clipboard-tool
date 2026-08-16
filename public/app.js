@@ -106,36 +106,58 @@ function copyText(text) {
   return Promise.resolve(legacyCopy(text));
 }
 
-/**
- * 富文本复制：同时写入 text/html + text/plain 双格式（剪贴板存两份）。
- * 粘贴到 Word/飞书/Notion 取 text/html 保留格式；粘贴到纯文本编辑器取 text/plain。
- * 降级：execCommand + copy 事件注入双格式（老浏览器/非安全上下文）。
- */
-async function copyRich(html, text) {
-  const plain = text || "";
-  if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== "undefined") {
-    try {
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          "text/html": new Blob([html], { type: "text/html" }),
-          "text/plain": new Blob([plain], { type: "text/plain" }),
-        }),
-      ]);
-      return true;
-    } catch { /* 落 execCommand 兜底 */ }
-  }
-  // 降级：隐藏容器 + Range 选中 + copy 事件注入双格式
+// ---------- 富文本复制（v0.6.9 重构定稿：数据流统一——存入 normalize / 复制 buildWordDoc + execCommand） ----------
+/** 统一标准化（存入时）：DOMParser 解析 → <style> 块规则内联到元素 → 移除 style 块 → 干净内联片段。
+ *  浏览器写剪贴板强制剥 style 块只留 inline style（Chromium 122+），存入前内联化，复制时格式才完整。
+ *  纯函数，失败回退原 html。 */
+function normalizeRichHtml(html) {
+  try {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const sheets = [];
+    doc.querySelectorAll("style").forEach(st => { try { if (st.sheet) sheets.push(st.sheet); } catch {} });
+    if (sheets.length) {
+      const rules = [];
+      for (const sheet of sheets) {
+        try {
+          for (const rule of sheet.cssRules) {
+            if (rule.type === CSSRule.STYLE_RULE && rule.selectorText) rules.push([rule.selectorText, rule.style.cssText]);
+          }
+        } catch {}
+      }
+      for (const el of doc.querySelectorAll("*")) {
+        const merged = rules.filter(([sel]) => { try { return el.matches(sel); } catch { return false; } }).map(([, css]) => css).join(";");
+        if (merged) {
+          const prev = el.getAttribute("style");
+          el.setAttribute("style", merged + (prev ? ";" + prev : ""));
+        }
+      }
+    }
+    doc.querySelectorAll("style").forEach(s => s.remove());
+    return doc.body.innerHTML;
+  } catch { return html; }
+}
+/** 复制包装：片段 → 带 Word 命名空间的完整文档（Word 识别"来自 Word"靠 xmlns:o/w/m，见 Microsoft roosterjs
+ *  isWordDesktopDocument.ts / CKEditor paste-from-office；setData 不受 Chromium 122+ sanitize 影响，原样进 CF_HTML） */
+function buildWordDoc(html) {
+  const s = String(html || "").trim();
+  if (!s) return "";
+  if (/xmlns:w\s*=/.test(s) || /<html[\s>]/i.test(s)) return s; // 已是 Word/完整文档
+  return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml"><head><meta charset="utf-8"></head><body><!--StartFragment -->' + s + '<!--EndFragment --></body></html>';
+}
+/** execCommand 复制（holder 纯文本承载选区，setData 注入原始完整文档——不解析 html，避免 DOM 剥 xmlns/style） */
+function execCommandRich(rich, plain) {
   try {
     const holder = document.createElement("div");
-    holder.innerHTML = html;
+    holder.textContent = plain; // 纯文本承载：绝不 innerHTML 解析完整文档
     holder.style.position = "fixed"; holder.style.top = "-9999px"; holder.style.left = "-9999px";
     document.body.appendChild(holder);
+    holder.focus();
     const range = document.createRange();
     range.selectNodeContents(holder);
     const sel = window.getSelection();
     sel.removeAllRanges(); sel.addRange(range);
     const listener = (e) => {
-      e.clipboardData.setData("text/html", html);
+      e.clipboardData.setData("text/html", rich); // 完整 Word 文档（含 xmlns，Word 识别来源的关键）
       e.clipboardData.setData("text/plain", plain);
       e.preventDefault();
     };
@@ -145,7 +167,30 @@ async function copyRich(html, text) {
     sel.removeAllRanges();
     document.body.removeChild(holder);
     return ok;
-  } catch { return legacyCopy(plain); }
+  } catch { return false; }
+}
+/**
+ * 富文本复制（重构定稿，无历史缠绕）：
+ *  主路径 execCommand + setData(buildWordDoc(html)) —— 诊断第7项实测 Word 粘贴格式正确；
+ *  兜底 clipboard.write（Chromium 122+ sanitize 压缩，仅 execCommand 不可用时）。
+ *  iframe 环境（预览面板）execCommand 常失败 → 明确提示独立浏览器。
+ */
+async function copyRich(html, text) {
+  const plain = text || "";
+  const rich = buildWordDoc(html); // 统一：片段 → 带 xmlns:o/w/m 的完整 Word 文档
+  if (execCommandRich(rich, plain)) return true;
+  if (navigator.clipboard && window.isSecureContext && typeof ClipboardItem !== "undefined") {
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([rich], { type: "text/html" }),
+          "text/plain": new Blob([plain], { type: "text/plain" }),
+        }),
+      ]);
+      return true;
+    } catch { return false; }
+  }
+  return false;
 }
 
 /** 纯文本 → 简单富文本 HTML（换行转段落，URL 转可点链接；仅"有富文本来源"时用，手动输入不生成） */
@@ -765,7 +810,7 @@ function makeRichSplit(c) {
   right.title = "单击复制带格式（粘贴到 Word/飞书保留样式）";
   const labR = el("div", "lab"); labR.append(el("b", "", "✦"), el("span", "", "格式"));
   const richPv = el("div", "rich-pv");
-  richPv.append(...safeRichNodes(c.html || ""));
+  richPv.append(...richPreviewNodes(c.html || "")); // v0.6.10：预览保留内联样式白名单——Word 字体/颜色真实显示
   right.append(labR, richPv);
   right.onclick = (e) => {
     e.stopPropagation();
@@ -776,7 +821,7 @@ function makeRichSplit(c) {
       if (ok) {
         flash("富文本已复制（含格式）", e.clientX, e.clientY);
         bumpCopyCount(c, right);
-      } else errToast("富文本复制失败");
+      } else errToast("富文本复制失败——请用独立浏览器标签页打开后重试（预览面板剪贴板权限受限）");
     })();
   };
   split.append(left, right);
@@ -784,11 +829,13 @@ function makeRichSplit(c) {
 }
 
 /**
- * 富文本白名单安全渲染：DOMParser 解析原始 html，只保留格式标签（b/strong/em/i/u/h1-h4/p/br/ul/ol/li/a），
- * 全部属性丢弃（防 XSS），其余标签仅保留文本内容。返回 DOM 节点数组。
+ * 富文本预览渲染（v0.6.10：效果更准确——先 normalizeRichHtml 内联化 style 块，再白名单标签 +
+ * 保留内联样式白名单子集（font-family/size/weight/color/背景/对齐/行高/边距等基础视觉属性，
+ * 禁 url()/expression/javascript 防注入）。Word mso 内容的字体/颜色真实显示，md 内容不受影响。
  */
-function safeRichNodes(html) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
+const PREVIEW_STYLE_ALLOW = ["font-family", "font-size", "font-weight", "font-style", "text-decoration", "color", "background", "background-color", "text-align", "line-height", "letter-spacing", "margin", "padding", "list-style-type"];
+function richPreviewNodes(html) {
+  const doc = new DOMParser().parseFromString(normalizeRichHtml(html), "text/html"); // 先内联化，旧数据 style 块也生效
   const ALLOW = new Set(["B", "STRONG", "EM", "I", "U", "H1", "H2", "H3", "H4", "P", "BR", "UL", "OL", "LI", "A", "SPAN", "DIV"]);
   const build = (node) => {
     if (node.nodeType === 3) return document.createTextNode(node.nodeValue);
@@ -800,6 +847,20 @@ function safeRichNodes(html) {
       return frag;
     }
     const elm = document.createElement(tag.toLowerCase());
+    // 保留内联样式白名单子集（安全：仅基础视觉属性，禁 url()/expression）
+    const st = node.getAttribute("style") || "";
+    if (st) {
+      const safe = st.split(";").map(s => s.trim()).filter(s => {
+        const prop = s.split(":")[0]?.trim().toLowerCase();
+        return prop && PREVIEW_STYLE_ALLOW.includes(prop) && !/url\(|expression|javascript/i.test(s);
+      }).join(";");
+      if (safe) elm.setAttribute("style", safe);
+    }
+    // 链接保留安全协议 href
+    if (tag === "A") {
+      const href = node.getAttribute("href");
+      if (href && /^(https?:|mailto:)/i.test(href)) elm.setAttribute("href", href);
+    }
     for (const ch of node.childNodes) { const r = build(ch); if (r) elm.append(r); }
     return elm;
   };
@@ -1167,62 +1228,89 @@ function openJsonPreview(c) {
 }
 
 // ---------- 存入大弹窗（万能入口：检测到复制内容自动弹出 / 点小入口手动打开） ----------
+// v0.6.8 链路重写：html 捕获统一（paste 事件 = 手动可靠来源 / autoFill read = 自动尽力来源），
+// 类型徽章实时自证「✦ 将存为：格式文本」，消除历史补丁叠加。
 function openPasteModal(auto = false) {
   if ($(".paste-modal")) return; // 已打开不重复弹（连续复制时用户在弹窗内自行粘贴）
   const root = $("#modal-root");
   const m = el("div", "mask");
   const modal = el("div", "modal paste-modal");
-  modal.style.maxWidth = "min(92vw, 660px)";
-  modal.append(el("h3", "", "存入内容"));
-  const pb = el("div", "paste-box");
-  const ta = el("textarea"); ta.placeholder = "粘贴文本、链接，或拖文件到这里，一键存入…";
-  ta.style.minHeight = "130px";
-  const typeBadge = el("div", "typebadge");
+  const pb = el("div", "paste-body");
+  // 头部
+  const head = el("div", "p-head");
+  head.append(el("div", "p-ic", "📥"), el("h3", "", "存入内容"));
+  pb.append(head);
+  // 类型徽章（实时识别：文件/链接/格式文本/文本；pendingHtml 非空时显示「✦ 格式文本」自证捕获成功）
+  const typeBadge = el("div", "paste-badge text", "将存为：文本");
   function updateBadge() {
     const content = ta.value.trim();
-    if (pickedFile) { typeBadge.textContent = "将存为：文件"; return; }
-    if (!content) { typeBadge.textContent = ""; return; }
-    typeBadge.textContent = "将存为：" + (/^https?:\/\/\S+$/i.test(content) ? "链接" : "文本");
+    typeBadge.className = "paste-badge ";
+    if (pickedFile) { typeBadge.textContent = "将存为：文件"; typeBadge.classList.add("file"); return; }
+    if (!content) { typeBadge.textContent = "将存为：文本"; typeBadge.classList.add("text"); return; }
+    if (/^https?:\/\/\S+$/i.test(content)) { typeBadge.textContent = "将存为：链接"; typeBadge.classList.add("link"); return; }
+    if (pendingHtml) { typeBadge.textContent = "✦ 将存为：格式文本"; typeBadge.classList.add("rich"); return; }
+    typeBadge.textContent = "将存为：文本"; typeBadge.classList.add("text");
   }
-  ta.addEventListener("input", updateBadge);
+  // 徽章行：类型徽章 + 右侧一键清空（v0.6.6：自动读取剪贴板后可随时清空重输）
+  const badgeRow = el("div", "paste-badge-row");
+  const clearBtn = el("button", "paste-clear", "🗑 清空");
+  clearBtn.title = "清空输入与已选文件";
+  clearBtn.onclick = () => {
+    ta.value = ""; pickedFile = null; pendingHtml = ""; chipBox.replaceChildren();
+    syncTextareaVisibility(); updateBadge();
+    flash("已清空"); ta.focus();
+  };
+  badgeRow.append(typeBadge, clearBtn);
+  pb.append(badgeRow);
+  // 输入区
+  const ta = el("textarea"); ta.placeholder = "粘贴文本、链接，或拖文件到这里，一键存入…";
+  ta.style.minHeight = "150px";
+  ta.addEventListener("input", () => { updateBadge(); checkDuplicate(); });
   // Ctrl+Enter 快速存入（Enter 仍是换行）
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save.click(); }
   });
-  // 粘贴识别：图片（截图/网页图）/ 文件（资源管理器复制的文件）→ 文件流程；纯文本照常
+  // 粘贴处理（v0.6.8 重写：①捕获 text/html → ②图片/文件优先 → ③纯文本刷新徽章）
   ta.addEventListener("paste", (e) => {
     const cd = e.clipboardData;
     if (!cd) return;
+    // ① 捕获 text/html：Word/网页复制的手动粘贴，clipboardData 在手势内直接提供，无需 read() 权限
+    try {
+      const h = cd.getData("text/html");
+      if (h && h.length < 512 * 1024) pendingHtml = h;
+    } catch {}
+    // ② 图片/文件优先（截图、资源管理器复制文件）
+    let file = null;
     if (cd.items) {
-      for (const item of cd.items) {
-        if (item.type && item.type.startsWith("image/")) {
-          e.preventDefault();
-          const f = item.getAsFile();
-          if (f) { pick(f); flash("已接收图片，点存入即可"); return; }
-        }
+      for (const it of cd.items) {
+        if (it.type && it.type.startsWith("image/")) { file = it.getAsFile(); break; }
       }
     }
-    if (cd.files && cd.files.length) {
+    if (!file && cd.files && cd.files.length) file = cd.files[0];
+    if (file) {
       e.preventDefault();
-      pick(cd.files[0]);
-      flash(cd.files.length > 1 ? "已接收第一个文件，其余请再次粘贴" : "已接收文件，点存入即可");
+      pick(file);
+      flash(file.type.startsWith("image/") ? "已接收图片，点存入即可" : "已接收文件，点存入即可");
+      return;
     }
+    // ③ 纯文本/富文本粘贴：刷新徽章（html 已捕获则显示「✦ 格式文本」）
+    updateBadge();
   });
   const chipBox = el("div");
   let pickedFile = null;
   // v0.4.1：选中图片/文件后隐藏文本输入区（存入图片不需要文字），未选文件时显示
+  // v0.6.6：类型徽章始终显示（updateBadge 会切到「将存为：文件」），只隐藏 textarea
   function syncTextareaVisibility() {
     const isFile = !!pickedFile;
     ta.classList.toggle("hidden", isFile);
-    typeBadge.classList.toggle("hidden", isFile);
   }
   function pick(f) {
     if (f.size > 10 * 1024 * 1024) return errToast("文件超过 10MB 上限");
     pickedFile = f;
     chipBox.replaceChildren();
-    const chip = el("div", "file-chip", "📎 " + f.name + " · " + fmtSize(f.size));
-    // v0.4.1：点 ✕ 取消已选文件，恢复文本输入
-    const rm = el("button", "btn sm ghost", "✕");
+    const chip = el("div", "file-chip");
+    chip.append(el("span", "", "📎"), el("span", "fname", f.name), el("span", "fsize", fmtSize(f.size)));
+    const rm = el("button", "rm", "✕");
     rm.title = "取消选择";
     rm.onclick = (e) => { e.stopPropagation(); pickedFile = null; chipBox.replaceChildren(); syncTextareaVisibility(); updateBadge(); };
     chip.append(rm);
@@ -1230,54 +1318,82 @@ function openPasteModal(auto = false) {
     syncTextareaVisibility();
     updateBadge();
   }
-  const fileBtn = el("button", "btn sm", "选择文件");
+  // ===== 重复检测（v0.6.6：检测到重复→直接切换为该条目的编辑弹窗「已有相同内容」，一次只弹一个窗） =====
+  let dupTimer = null;
+  let dupJumped = false; // 已跳转编辑窗，防后续 input 重复触发
+  pb.append(ta); // v0.6.8：移除存入弹窗富文本实时预览（效果不符，编辑弹窗仍保留）
+  function checkDuplicate() {
+    if (dupJumped) return; // 已切换过一次，不再触发
+    clearTimeout(dupTimer);
+    dupTimer = setTimeout(() => {
+      if (pickedFile) return;
+      const content = ta.value.trim();
+      if (!content) return;
+      const dup = findDuplicateClip(content, state.clips);
+      if (!dup) return;
+      // v0.6.6：命中重复 → 关闭存入窗，直接打开该条目编辑弹窗（「已有相同内容」常驻），一次只一个窗
+      dupJumped = true;
+      m.remove();
+      if (!dup.archived) openEditModal(dup, true);
+      else flash("已有相同内容（归档只读）");
+    }, 300);
+  }
+  // 拖放
+  const fileBtn = el("button", "btn btn-file", "📁 选择文件");
   fileBtn.onclick = () => { const fi = el("input"); fi.type = "file"; fi.onchange = () => { if (fi.files[0]) pick(fi.files[0]); }; fi.click(); };
   pb.ondragover = (e) => { e.preventDefault(); pb.classList.add("drag"); };
   pb.ondragleave = () => pb.classList.remove("drag");
   pb.ondrop = (e) => { e.preventDefault(); pb.classList.remove("drag"); if (e.dataTransfer.files[0]) pick(e.dataTransfer.files[0]); };
-
+  pb.append(chipBox);
   // 高级选项：别名 / 标签选择器 / 过期（v0.4.1：默认全部展开，不再折叠）
-  const advBox = el("div", "adv-box");
-  const advTitle = el("input"); advTitle.placeholder = "别名（可留空）";
-  const advTagsWrap = el("div");
-  const advTagsSel = [];
+  const advBox = el("div", "paste-adv");
+  const advRow = el("div", "adv-row");
+  const advTitle = el("input"); advTitle.type = "text"; advTitle.placeholder = "别名（可留空，默认取首行）";
   const advExp = el("select");
   for (const [v, l] of [["", "永久"], ["1h", "1 小时后过期"], ["1d", "1 天后过期"], ["7d", "7 天后过期"], ["30d", "30 天后过期"]]) {
     const o = el("option", "", l); o.value = v; advExp.append(o);
   }
+  advRow.append(advTitle, advExp);
+  const advTagsWrap = el("div");
+  const advTagsSel = [];
   renderTagPicker(advTagsWrap, advTagsSel, state.tags, (s) => { advTagsSel.length = 0; advTagsSel.push(...s); });
-  advBox.append(advTitle, advTagsWrap, advExp);
+  advBox.append(advRow, advTagsWrap);
+  pb.append(advBox);
 
-  const pr = el("div", "paste-row");
+  // 操作行
+  const actions = el("div", "paste-actions");
   const save = el("button", "btn primary", "存入");
-  const cancel = el("button", "btn ghost", "关闭");
+  const cancel = el("button", "btn btn-close", "关闭");
   // v0.4.3：保存流程抽独立函数 savePasteContent（openPasteModal CC 46→拆）
   save.onclick = guard(save, async () => {
     const content = ta.value.trim();
     if (!content && !pickedFile) return errToast("先粘贴内容或选择文件");
     const adv = { title: advTitle.value, tags: [...advTagsSel], expire: advExp.value }; // v0.4.1：高级选项恒生效
-    const okSave = await savePasteContent({ content, pickedFile, adv, m });
+    const okSave = await savePasteContent({ content, pickedFile, adv, m }); // v0.6.6：重复已在输入时拦截（切编辑窗），此处兜底
     if (okSave) { await loadClips(); renderTagbar(); renderList(); flash("已存入"); }
   });
   cancel.onclick = () => m.remove();
-  pr.append(fileBtn, save, cancel);
-  pb.append(ta, typeBadge, chipBox, advBox, pr);
+  actions.append(fileBtn, save, cancel);
+  pb.append(actions, el("div", "paste-hint", "Ctrl + Enter 快速存入 · 粘贴图片/文件自动识别"));
   modal.append(pb);
   m.append(modal); root.append(m);
   ta.focus();
 
   // 打开时（点击手势内）自动填入剪贴板：文本优先，其次图片；文件读不到则按场景提示
   // v0.4.3：抽独立函数 autoFillPasteModal（openPasteModal CC 46→拆）
-  autoFillPasteModal(ta, typeBadge, pick, auto, () => updateBadge());
+  autoFillPasteModal(ta, typeBadge, pick, auto, () => updateBadge()).then(() => {
+    checkDuplicate(); // v0.6.6:自动填入(直接赋值不触发 input)后立即补一次重复检测
+  });
 }
 
 // ---------- 存入保存流程（v0.4.3：从 openPasteModal 拆出——文件/链接/文本三分支） ----------
 /**
  * 保存条目到后端；返回 true=已存入 / false=已拦截或失败。
  * 重复检测：文本/链接内容已存在 → 关存入窗，打开该条目的编辑页（标注「已有相同内容」）。
+ * v0.6.6：force=true（用户在存入窗点了「仍要存入」）→ 跳过重复拦截，直接存入。
  */
-async function savePasteContent({ content, pickedFile, adv, m }) {
-  if (!pickedFile) {
+async function savePasteContent({ content, pickedFile, adv, m, force = false }) {
+  if (!pickedFile && !force) {
     const dup = findDuplicateClip(content, state.clips); // v0.4.3：统一走纯函数
     if (dup) {
       m.remove(); // 关闭存入弹窗
@@ -1298,7 +1414,9 @@ async function savePasteContent({ content, pickedFile, adv, m }) {
       // 自动标题：未填别名时取首行前 20 字
       const autoTitle = content.split("\n")[0].trim().slice(0, 20);
       // 富文本：仅当剪贴板有 text/html 来源时携带（无来源则为纯文本条目，卡片只显示 1 个复制按钮）
-      const html = pendingHtml || "";
+      // v0.6.9：存入前样式内联化——浏览器写入剪贴板强制剥 <style> 块只留 inline style（Chromium 122+ sanitization），
+      // 提前把 style 块规则内联到元素，复制时格式才完整保留（Word 粘贴字体/颜色正确）
+      const html = pendingHtml ? normalizeRichHtml(pendingHtml) : ""; // v0.6.9：统一标准化（内联化）
       await api("/api/clips", { method: "POST", json: { type: "text", title: adv.title || autoTitle, content, ...(html ? { html } : {}), ...adv } });
     }
     pendingHtml = ""; // 存入成功清空富文本暂存
@@ -1308,101 +1426,198 @@ async function savePasteContent({ content, pickedFile, adv, m }) {
 }
 
 // ---------- 自动填入剪贴板（v0.4.3：从 openPasteModal 拆出——文本优先，其次图片） ----------
-/**
- * 打开存入弹窗时自动填入：剪贴板文本填入 textarea；图片仅在复制触发(auto)时拾取
- * （手动打开时若剪贴板残留图片，不自动 pick——用户可能想输文字，v0.4.2）
- */
+// v0.6.8 重写：read() 只调一次；html → 文本 → 图片 顺序清晰；read 权限失败时提示手动粘贴（走查 R-1/R-2 闭环）
 async function autoFillPasteModal(ta, typeBadge, pick, auto, updateBadge) {
   try {
     pendingHtml = ""; // 每次打开重置，避免残留上次的富文本
-    // 先读富文本：剪贴板带 text/html 时记录（有格式来源才存双版本；普通复制无此类型）
+    // 一次 read() 拿全部剪贴板项（权限允许时；iframe/未授权会 catch 为空数组）
+    let items = [];
+    let readDenied = false;
     if (navigator.clipboard && navigator.clipboard.read) {
-      const items = await navigator.clipboard.read().catch(() => []);
-      for (const item of items) {
-        if (item.types.includes("text/html")) {
-          try {
-            const blob = await item.getType("text/html");
-            const html = await blob.text();
-            if (html && html.length < 512 * 1024) pendingHtml = html;
-          } catch {}
-          break;
-        }
+      items = await navigator.clipboard.read().catch(() => { readDenied = true; return []; });
+    }
+    // ① 捕获 text/html（自动弹出场景；读取结果为浏览器 sanitize 后的 HTML）
+    for (const item of items) {
+      if (item.types.includes("text/html")) {
+        try {
+          const blob = await item.getType("text/html");
+          const html = await blob.text();
+          if (html && html.length < 512 * 1024) pendingHtml = html;
+        } catch {}
+        break;
       }
     }
+    // ② 文本优先填入
     if (navigator.clipboard && navigator.clipboard.readText) {
       const t = await navigator.clipboard.readText().catch(() => "");
       if (t && !ta.value) {
-        ta.value = t; updateBadge(); flash("已填入剪贴板内容"); return;
+        ta.value = t; updateBadge();
+        // 走查 R-1/R-2：read 权限被拒（预览 iframe）→ 格式可能丢失，引导手动粘贴走可靠路径
+        if (readDenied && auto) flash("已填入文本——预览面板无法读取格式，从 Word/网页复制请按 Ctrl+V 粘贴以保留格式");
+        else flash("已填入剪贴板内容");
+        return;
       }
     }
-    if (auto && navigator.clipboard && navigator.clipboard.read) {
-      const items = await navigator.clipboard.read().catch(() => []);
-      for (const item of items) {
-        for (const type of item.types) {
-          if (type.startsWith("image/")) {
+    // ③ 图片拾取（无文本时；与文本一致，手动打开也自动拾取）
+    for (const item of items) {
+      for (const type of item.types) {
+        if (type.startsWith("image/")) {
+          try {
             const blob = await item.getType(type);
             const f = new File([blob], "paste-image." + (type.split("/")[1] || "png"), { type });
             pick(f); flash("已接收图片，点存入即可"); return;
-          }
+          } catch {}
         }
       }
     }
-    if (auto) errToast("剪贴板不是文本/图片（文件请直接 Ctrl+V 粘贴或拖入输入区）");
+    updateBadge(); // 无文本无图：确保徽章反映当前状态（html 已捕获则显示格式文本）
+    if (auto && !ta.value && !pickedFile) errToast("剪贴板不是文本/图片（文件请直接 Ctrl+V 粘贴或拖入输入区）");
   } catch {}
 }
 
 // ---------- 编辑弹窗 ----------
 // v0.4.2：第二参数 dup=true 时标题显示「已有相同内容」常驻标记（由重复检测触发，替代一闪而过的 toast）
+// v0.6.6 方案32 v2：五类型差异化——文本/链接=textarea，富文本=左编辑右实时预览，图片=缩略图卡，文件=只读图标卡
+/** 富文本实时预览：首行=加粗标题，其余=正文（支持 **粗体** 标记实时渲染；存入/编辑共用） */
+function renderRichPreview(ta, pv) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const lines = (ta.value || "").split("\n");
+  pv.replaceChildren();
+  if (lines[0]) pv.append(el("div", "pv-h", lines[0]));
+  if (lines.length > 1) {
+    const body = el("div", "pv-b");
+    body.innerHTML = esc(lines.slice(1).join("\n")).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    pv.append(body);
+  }
+}
+/** 编辑弹窗内删除条目（带确认；图片/文件卡上的 ✕ 用） */
+function confirmDeleteHere(c, modalEl) {
+  askConfirm("删除这条内容？", guard({}, async () => {
+    const r = await api("/api/clips/" + c.id, { method: "DELETE" }).catch(e2 => errToast(e2.message));
+    if (!r) return;
+    modalEl.remove(); flash("已删除"); refreshList();
+  }), "删除");
+}
 function openEditModal(c, dup = false) {
   const root = $("#modal-root");
   root.innerHTML = "";
   const m = el("div", "mask");
-  const modal = el("div", "modal");
-  const h = el("h3", "", "编辑" + (c.title ? " · " + c.title : ""));
+  const modal = el("div", "modal edit-modal");
+  // 头部：类型图标 + 标题 + 类型徽章
+  const isImage = c.type === "file" && (c.fileMime || "").startsWith("image/");
+  const icon = c.type === "link" ? "🔗" : isImage ? "🖼️" : c.type === "file" ? "📄" : (c.html ? "✦" : "📝");
+  const typeCls = c.type === "link" ? "link" : isImage ? "image" : c.type === "file" ? "file" : (c.html ? "rich" : "text");
+  const typeTxt = c.type === "link" ? "链接" : isImage ? "图片" : c.type === "file" ? "文件" : (c.html ? "格式文本" : "文本");
+  const head = el("div", "edit-head");
+  head.append(el("div", "ic", icon), el("h3", "", "编辑" + (c.title ? " · " + c.title : "")), el("span", "edit-type " + typeCls, typeTxt));
+  modal.append(head);
   if (dup) {
-    // v0.4.2：重复提示常驻在标题下（两行），引导改标题/标签便于检索
-    const dupTip = el("div", "dup-tip");
-    dupTip.append(
-      el("div", "dup-tip-main", "⚠️ 已有相同内容"),
-      el("div", "dup-tip-sub", "可修改标题或标签，方便下次检索"),
-    );
-    modal.append(h, dupTip);
-  } else {
-    modal.append(h);
+    // v0.4.2：重复提示常驻（两行），引导改标题/标签便于检索
+    const dupTip = el("div", "edit-dup");
+    dupTip.append(el("div", "t1", "⚠️ 已有相同内容"), el("div", "t2", "可修改标题或标签，方便下次检索"));
+    modal.append(dupTip);
   }
-  const title = el("input"); title.value = c.title || "";
-  modal.append(el("label", "", "别名"), title);
+  const imgUrl = () => BASE + "/api/files/" + c.fileId + "?token=" + encodeURIComponent(state.current?.token || "");
+  // ===== ① 内容区（类型专属） =====
+  const sec1 = el("div", "edit-sec");
+  const t1 = el("div", "edit-sec-t"); t1.append(el("span", "n", "1"), el("span", "", c.type === "link" ? "链接" : isImage ? "图片" : c.type === "file" ? "文件" : "内容"));
   let contentInput = null, urlInput = null;
-  if (c.type === "text") {
-    contentInput = el("textarea"); contentInput.value = c.content; contentInput.style.minHeight = "90px";
-    modal.append(el("label", "", "内容"), contentInput);
+  if (c.type === "text" && c.html) {
+    // 富文本：左编辑 + 右实时预览
+    t1.append(el("span", "hint", "左编辑 · 右实时预览"));
+    sec1.append(t1);
+    const rs = el("div", "rich-edit");
+    const editWrap = el("div", "re-editor");
+    contentInput = el("textarea"); contentInput.value = c.content; contentInput.style.minHeight = "130px";
+    const pv = el("div", "re-pv"); // v0.6.8：改名 re-pv，避免与卡片右栏 .rich-pv 类名冲突
+    renderRichPreview(contentInput, pv);
+    contentInput.addEventListener("input", () => renderRichPreview(contentInput, pv));
+    editWrap.append(contentInput);
+    rs.append(editWrap, pv);
+    sec1.append(rs);
   } else if (c.type === "link") {
-    urlInput = el("input"); urlInput.value = c.url;
-    modal.append(el("label", "", "链接"), urlInput);
+    // 链接：文本式编辑（与文本一致，v0.6.6）
+    t1.append(el("span", "hint", "与文本一致，直接编辑"));
+    sec1.append(t1);
+    urlInput = el("textarea"); urlInput.value = c.url; urlInput.style.minHeight = "90px";
+    sec1.append(urlInput, el("div", "edit-file-note", "保存后按链接类型存储，点击卡片可复制此地址"));
+  } else if (isImage) {
+    // 图片：缩略图卡（hover 放大）
+    t1.append(el("span", "hint", "hover 放大预览"));
+    sec1.append(t1);
+    const card = el("div", "img-card");
+    const thumb = el("div", "thumb");
+    const img = el("img"); img.src = imgUrl(); img.alt = c.fileName || "图片";
+    const zoom = el("div", "zoom", el("i", "", "🔍"));
+    thumb.append(img, zoom);
+    const info = el("div", "img-info");
+    info.append(el("span", "fname", c.fileName || "图片"), el("span", "fmeta", fmtSize(c.fileSize) + " · " + ((c.fileMime || "").split("/")[1] || "").toUpperCase()));
+    const act = el("div", "act");
+    const dl = el("button", "b", "↓"); dl.title = "下载"; dl.onclick = (e) => { e.stopPropagation(); downloadFile(c); };
+    const del = el("button", "b del", "✕"); del.title = "删除";
+    del.onclick = (e) => { e.stopPropagation(); confirmDeleteHere(c, m); };
+    act.append(dl, del);
+    info.append(act);
+    card.append(thumb, info);
+    sec1.append(card);
+  } else if (c.type === "file") {
+    // 文件：只读图标卡 + 下载/删除
+    t1.append(el("span", "hint", "只读"));
+    sec1.append(t1);
+    const body = el("div", "filebody");
+    const name = (c.fileName || "").toLowerCase();
+    const isPdf = name.endsWith(".pdf");
+    const isZip = /\.(zip|rar|7z|tar|gz)$/.test(name);
+    const fic = el("div", "fic " + (isPdf ? "pdf" : isZip ? "zip" : ""));
+    fic.textContent = (isPdf ? "PDF" : isZip ? "ZIP" : "FILE");
+    fic.append(el("span", "fold", ""));
+    const finfo = el("div", "finfo");
+    finfo.append(el("div", "fname", c.fileName || "文件"), el("div", "fsize", fmtSize(c.fileSize) + " · " + (c.fileMime || "")));
+    body.append(fic, finfo);
+    const acts = el("div", "img-info");
+    const act = el("div", "act");
+    const dl = el("button", "b", "↓"); dl.title = "下载"; dl.onclick = (e) => { e.stopPropagation(); downloadFile(c); };
+    const del = el("button", "b del", "✕"); del.title = "删除";
+    del.onclick = (e) => { e.stopPropagation(); confirmDeleteHere(c, m); };
+    act.append(dl, del);
+    acts.append(act);
+    body.append(acts);
+    sec1.append(body, el("div", "edit-file-note", "文件内容不可在线编辑——需要替换请删除后重新存入"));
   } else {
-    modal.append(el("div", "file-chip", "📎 " + c.fileName + " · " + fmtSize(c.fileSize) + "（文件不可在线改，可删除重建）"));
+    // 文本：textarea
+    t1.append(el("span", "hint", "纯文本"));
+    sec1.append(t1);
+    contentInput = el("textarea"); contentInput.value = c.content; contentInput.style.minHeight = "110px";
+    sec1.append(contentInput);
   }
-  const editTagsSel = [...(c.tags || [])];
-  const tagWrap = el("div");
-  renderTagPicker(tagWrap, editTagsSel, state.tags, (s) => { editTagsSel.length = 0; editTagsSel.push(...s); });
-  modal.append(el("label", "", "标签（点选已有，或输入新建）"), tagWrap);
+  modal.append(sec1);
+  // ===== ② 元数据区 =====
+  const sec2 = el("div", "edit-sec");
+  const t2 = el("div", "edit-sec-t"); t2.append(el("span", "n", "2"), el("span", "", "元数据"));
+  sec2.append(t2);
+  const title = el("input"); title.type = "text"; title.value = c.title || ""; title.placeholder = "别名";
   const expSel = el("select");
   for (const [v, l] of [["", "永久"], ["1h", "1 小时后"], ["1d", "1 天后"], ["7d", "7 天后"], ["30d", "30 天后"]]) {
     const o = el("option", "", l); o.value = v; expSel.append(o);
   }
   expSel.value = c.expireAt ? (c.expireAt - Date.now() < 7200000 ? "1h" : c.expireAt - Date.now() < 172800000 ? "1d" : c.expireAt - Date.now() < 604800000 ? "7d" : "30d") : "";
-  modal.append(el("label", "", "过期时间"), expSel);
-  const row = el("div", "form-row");
-  const ok = el("button", "btn primary", "保存"); ok.style.flex = "1";
-  const cancel = el("button", "btn ghost", "取消");
-  row.append(ok, cancel); modal.append(row);
+  const row = el("div", "edit-row");
+  row.append(title, expSel);
+  sec2.append(row);
+  const editTagsSel = [...(c.tags || [])];
+  const tagWrap = el("div");
+  renderTagPicker(tagWrap, editTagsSel, state.tags, (s) => { editTagsSel.length = 0; editTagsSel.push(...s); });
+  sec2.append(tagWrap);
+  modal.append(sec2);
+  // ===== 保存 / 取消 =====
+  const actions = el("div", "paste-actions");
+  const ok = el("button", "btn primary", "保存");
+  const cancel = el("button", "btn btn-close", "取消");
+  actions.append(ok, cancel);
+  modal.append(actions);
   ok.onclick = guard(ok, async () => {
     try {
-      const json = {
-        title: title.value,
-        tags: [...editTagsSel],
-        expire: expSel.value,
-      };
+      const json = { title: title.value, tags: [...editTagsSel], expire: expSel.value };
       if (contentInput) json.content = contentInput.value;
       if (urlInput) json.url = urlInput.value;
       await api("/api/clips/" + c.id, { method: "PUT", json }).catch(e => { errToast(e.message); return null; });
@@ -1464,40 +1679,53 @@ function openPasswordModal() {
   m.append(modal); root.append(m);
 }
 
-// ---------- 数据管理（v0.4.2：从设置拆出独立入口——预览/备份/清空/删号） ----------
+// ---------- 数据管理（v0.4.2：从设置拆出独立入口——预览/备份/清空/删号；v0.6.5 方案25 双栏工作台） ----------
 function openDataModal() {
   const root = $("#modal-root");
   root.innerHTML = "";
   const m = el("div", "mask");
-  const modal = el("div", "modal");
-  modal.append(el("h3", "", "数据管理 · " + state.current.name));
+  const modal = el("div", "modal dm-modal");
+  // 头部
+  const head = el("div", "dm-head");
+  head.append(el("div", "ic", "🗂️"), el("h3", "", "数据管理"), el("span", "who", state.current.name));
+  modal.append(head);
 
-  // ---------- 图片预览设置（v0.4.2：缩放步长可调） ----------
-  modal.append(el("label", "", "图片预览缩放步长（% / 每格滚轮）"));
-  const zoomRow = el("div", "form-row");
+  const body = el("div", "dm-body");
+  // ===== 左栏：设置与同步 =====
+  const left = el("div", "dm-col");
+  const lt = el("div", "dm-col-t"); lt.append(el("span", "n", "1"), el("span", "", "设置与同步"));
+  left.append(lt);
+  // 图片缩放步长
+  const zoomRow = el("div", "", ""); zoomRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:10px";
+  const zoomLbl = el("span", "", "图片缩放步长"); zoomLbl.style.cssText = "font-size:11.5px;color:var(--muted);flex:1";
   const zoomStep = el("input"); zoomStep.type = "number"; zoomStep.min = "1"; zoomStep.max = "50"; zoomStep.step = "1";
-  zoomStep.value = Math.round((LS.get("zoomStep", 0.15) || 0.15) * 100); // v0.4.2：默认 15%
-  const zoomSave = el("button", "btn sm primary", "保存"); zoomSave.style.flex = "0 0 auto";
+  zoomStep.style.cssText = "width:76px;margin:0;flex-shrink:0";
+  zoomStep.value = Math.round((LS.get("zoomStep", 0.15) || 0.15) * 100);
+  const zoomSave = el("button", "dm-btn ghost", "保存"); zoomSave.style.cssText = "flex:0 0 auto;width:auto;padding:8px 14px;margin:0;border-radius:8px";
   zoomSave.onclick = guard(zoomSave, () => {
     let v = Math.max(1, Math.min(50, Math.round(Number(zoomStep.value) || 10)));
     zoomStep.value = v;
     LS.set("zoomStep", v / 100);
     flash("缩放步长已设为 " + v + "%");
   });
-  zoomRow.append(zoomStep, zoomSave);
-  modal.append(zoomRow);
+  zoomRow.append(zoomLbl, zoomStep, zoomSave);
+  left.append(zoomRow);
+  // WebDAV 配置区（渲染进左栏）
+  left.append(el("div", "dm-divider", "WebDAV 跨设备同步"));
+  renderWebdavSection(left);
+  body.append(left);
 
-  renderWebdavSection(modal); // v0.4.3：WebDAV 配置区独立函数（openDataModal 156 行拆分，架构评估 v2 #2）
-
-  // ---------- 标签管理（P1-6）：v0.4.2 移出设置弹窗 → 标签栏「管理」按钮（openTagManageModal） ----------
-
+  // ===== 右栏：备份与风险 =====
+  const right = el("div", "dm-col");
+  const rt = el("div", "dm-col-t"); rt.append(el("span", "n", "2"), el("span", "", "备份与风险"));
+  right.append(rt);
   // 导出 / 导入（本地文件备份，v0.2.0——不依赖 WebDAV 的换机/归档方案）
-  modal.append(el("label", "", "本地备份（导出 / 导入 JSON 文件）"));
-  const bakRow = el("div", "form-row");
-  const expBtn = el("button", "btn sm", "导出全部");
-  const impBtn = el("button", "btn sm", "导入合并");
-  const bakStatus = el("div", "dav-status");
-  bakRow.append(expBtn, impBtn); modal.append(bakRow, bakStatus);
+  const expBtn = el("button", "dm-btn gold", "导出全部");
+  const impBtn = el("button", "dm-btn ghost", "导入合并");
+  const bakStatus = el("div", "dm-status");
+  const bakRow = el("div", "", ""); bakRow.style.cssText = "display:flex;gap:10px";
+  bakRow.append(expBtn, impBtn);
+  right.append(bakRow, bakStatus);
   expBtn.onclick = guard(expBtn, async () => {
     bakStatus.textContent = "导出中…";
     try {
@@ -1531,10 +1759,11 @@ function openDataModal() {
     fi.click();
   };
 
+  // 危险操作区
+  const dangerZone = el("div", "dm-danger-zone");
+  dangerZone.append(el("div", "dz-t", "⚠ 危险操作 · 不可恢复"));
   // 全部清空：清空不记墓碑（= 想从网上同步，下次 WebDAV 同步从远端恢复）
-  modal.append(el("label", "", "全部清空（清空不传播删除——已做 WebDAV 备份的话，下次同步会从远端恢复）"));
-  const clrBtn = el("button", "btn danger", "全部清空");
-  clrBtn.style.width = "100%"; clrBtn.style.marginBottom = "16px";
+  const clrBtn = el("button", "dm-btn danger", "全部清空");
   clrBtn.onclick = () => {
     askConfirm("确定全部清空？该用户所有条目将被清除；若已配置 WebDAV 备份，下次「一键同步」会从远端恢复。", guard(clrBtn, async () => {
       try {
@@ -1544,11 +1773,9 @@ function openDataModal() {
       } catch (e) { errToast(e.message); }
     }), "全部清空");
   };
-  modal.append(clrBtn);
-
-  modal.append(el("label", "", "删除账号（不可恢复，条目与文件一并清除）"));
-  const delBtn = el("button", "btn danger", "删除我的账号");
-  delBtn.style.width = "100%";
+  dangerZone.append(clrBtn, el("div", "dm-note", "清空不传播删除——已做 WebDAV 备份则下次同步从远端恢复"));
+  // 删除账号
+  const delBtn = el("button", "dm-btn danger", "删除我的账号");
   delBtn.onclick = () => {
     askConfirm("确定删除账号？该用户所有数据将被永久清除！", guard(delBtn, async () => {
       try {
@@ -1558,43 +1785,48 @@ function openDataModal() {
       } catch (e) { errToast(e.message); }
     }), "永久删除");
   };
-  modal.append(delBtn);
+  dangerZone.append(delBtn, el("div", "dm-note", "条目与文件一并永久清除"));
+  right.append(dangerZone);
+  body.append(right);
+  modal.append(body);
 
-  const row = el("div", "form-row");
-  const close = el("button", "btn ghost", "关闭"); close.style.flex = "1";
-  row.append(close); modal.append(row);
+  // 底部
+  const foot = el("div", "dm-foot");
+  const close = el("button", "", "关闭"); close.className = "close"; close.style.cssText = "border:none;background:none;color:var(--dim);font-size:12px;cursor:pointer;padding:6px 14px;border-radius:99px";
   close.onclick = () => m.remove();
+  foot.append(el("span", "hint", "数据仅存本地 JSON · 密码只存哈希"), close);
+  modal.append(foot);
   m.append(modal); root.append(m);
 }
 
 // ---------- WebDAV 配置区（v0.4.3：从 openDataModal 拆出独立函数——单一职责，架构评估 v2 #2） ----------
 // 参考 edge-multi-account-cookie 设计：墓碑同步/清空不传播/双向取最新
-function renderWebdavSection(modal) {
-  modal.append(el("label", "", "WebDAV 备份（跨设备同步）"));
+// v0.6.5：适配方案25 双栏工作台（渲染进左栏容器，使用 dm- 类）
+function renderWebdavSection(container) {
   // P1-2：归档不参与同步的显式说明（归档只存本地，同步快照只含活跃区）
-  modal.append(el("div", "dav-hint", "同步范围：活跃区条目（归档只存本地，不参与 WebDAV 同步）"));
+  container.append(el("div", "dm-note", "同步范围：活跃区条目（归档只存本地，不参与 WebDAV 同步）"));
   const davUrl = el("input"); davUrl.placeholder = "服务器目录地址，如 https://dav.example.com/clipboard";
   const davUser = el("input"); davUser.placeholder = "用户名";
   const davPass = el("input"); davPass.type = "password"; davPass.placeholder = "密码（留空复用已保存）";
-  modal.append(davUrl, davUser, davPass);
+  container.append(davUrl, davUser, davPass);
   // 实体同步 + 自动同步选项
-  const davOpts = el("div", "dav-opts");
   const davFiles = el("input"); davFiles.type = "checkbox";
-  const davFilesLbl = el("label", "opt", ""); davFilesLbl.append(davFiles, " 同步文件实体（图片/文件也备份到 WebDAV）");
+  const davFilesLbl = el("label", "dm-opt", ""); davFilesLbl.append(davFiles, " 同步文件实体（图片/文件也备份到 WebDAV）");
   const davAuto = el("input"); davAuto.type = "checkbox";
   const davInt = el("select");
   for (const [h, l] of [[1, "1 小时"], [6, "6 小时"], [12, "12 小时"], [24, "24 小时"]]) {
     const o = el("option", "", l); o.value = h; davInt.append(o);
   }
   davInt.value = 12; // 默认 12 小时
-  const davAutoLbl = el("label", "opt", ""); davAutoLbl.append(davAuto, " 自动同步 每", davInt);
-  davOpts.append(davFilesLbl, davAutoLbl);
-  modal.append(davOpts);
-  const davRow = el("div", "form-row");
-  const davTest = el("button", "btn sm", "测试保存");
-  const davSync = el("button", "btn sm primary", "一键同步");
-  const davStatus = el("div", "dav-status");
-  davRow.append(davTest, davSync); modal.append(davRow, davStatus);
+  const davAutoLbl = el("label", "dm-opt", ""); davAutoLbl.append(davAuto, " 自动同步 每", davInt);
+  container.append(davFilesLbl, davAutoLbl);
+  // 保存配置：紧跟输入区（填完信息→保存落盘），最后才是一键同步
+  const testSave = el("button", "dm-btn gold", "保存配置");
+  container.append(testSave);
+  const davSync = el("button", "dm-btn ghost", "一键同步");
+  davSync.style.marginTop = "10px"; // 与「保存配置」保持合理间隙
+  const davStatus = el("div", "dm-status");
+  container.append(davSync, davStatus);
   (async () => {
     try {
       const r = await api("/api/sync/config");
@@ -1605,27 +1837,31 @@ function renderWebdavSection(modal) {
         davInt.value = Math.max(1, Math.round((r.intervalMin || 720) / 60));
         // P-104：自动同步上次失败不再静默——状态区展示失败原因（成功则正常显示）
         davStatus.textContent = "已配置：" + r.url + (r.autoSync ? " · 每 " + davInt.value + " 小时自动同步" : "");
-        if (r.lastSyncError) davStatus.textContent += " · ⚠ 上次自动同步失败：" + r.lastSyncError;
+        if (r.lastSyncError) { davStatus.textContent += " · ⚠ 上次自动同步失败：" + r.lastSyncError; davStatus.classList.add("err"); }
+        else davStatus.classList.add("ok");
       }
     } catch {}
   })();
-  davTest.onclick = guard(davTest, async () => {
+  // 保存配置（已移至输入区下方，此处仅绑定事件）
+  testSave.onclick = guard(testSave, async () => {
     if (!davUrl.value.trim()) return errToast("先填服务器地址");
     davStatus.textContent = "测试中…";
     try {
       await api("/api/sync/config", { method: "POST", json: { url: davUrl.value, user: davUser.value, pass: davPass.value, syncFiles: davFiles.checked, autoSync: davAuto.checked, intervalMin: parseInt(davInt.value, 10) * 60 } });
       davStatus.textContent = "已保存：" + davUrl.value + (davAuto.checked ? " · 每 " + davInt.value + " 小时自动同步" : "") + (davFiles.checked ? " · 含文件实体" : "");
+      davStatus.classList.remove("err"); davStatus.classList.add("ok");
       flash("WebDAV 配置已保存");
-    } catch (e) { davStatus.textContent = "❌ " + e.message; }
+    } catch (e) { davStatus.textContent = "❌ " + e.message; davStatus.classList.add("err"); }
   });
   davSync.onclick = guard(davSync, async () => {
     davStatus.textContent = "同步中…";
     try {
       const r = await api("/api/sync/run", { method: "POST" });
       davStatus.textContent = "同步完成：远端" + (r.remoteExisted ? "有备份" : "无备份") + (r.uploaded ? " · 已上传" : " · 本地空跳过上传") + "，共 " + r.clips + " 条 / " + r.tombstones + " 墓碑";
+      davStatus.classList.remove("err"); davStatus.classList.add("ok");
       await loadClips(); renderTagbar(); renderList();
       flash("同步完成");
-    } catch (e) { davStatus.textContent = "❌ " + e.message; }
+    } catch (e) { davStatus.textContent = "❌ " + e.message; davStatus.classList.add("err"); }
   });
 }
 
