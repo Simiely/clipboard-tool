@@ -1,6 +1,6 @@
 # AGENTS.md · 项目规则
 
-> 📌 **文档基线**：2026-08-16（v0.6.9：富文本复制链路定稿——存入 `normalizeRichHtml` 内联化 + 复制 `buildWordDoc` 包装 xmlns:o/w/m + `execCommandRich` 主路径，Word 粘贴保留完整格式；v0.6.8 富文本链路重构 + 诊断页 diag.html；v0.6.7 WebDAV 远端子目录 workbuddy/剪贴板/；v0.6.6 弹窗四件套重设计（密码/数据管理/存入/编辑）+ 重复检测单弹窗 + 窄屏适配；v0.6.5 卡片系统全量重构见下）
+> 📌 **文档基线**：2026-08-16（v0.6.11：细节审查修复批——归档去重防膨胀 / verifyPassword 损坏数据不崩溃 / 导入非 UUID id 重生成 / 富文本编辑 html 同步 / 登录限流表真修复（lastFailAt）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持；v0.6.9：富文本复制链路定稿——存入 `normalizeRichHtml` 内联化 + 复制 `buildWordDoc` 包装 xmlns:o/w/m + `execCommandRich` 主路径，Word 粘贴保留完整格式；v0.6.8 富文本链路重构 + 诊断页 diag.html；v0.6.7 WebDAV 远端子目录 workbuddy/剪贴板/；v0.6.6 弹窗四件套重设计（密码/数据管理/存入/编辑）+ 重复检测单弹窗 + 窄屏适配；v0.6.5 卡片系统全量重构见下）
 > **更新文档/代码后，请更新此行**（日期 + 新 commit hash），并在 CHANGELOG 追加版本
 
 ## 技术栈
@@ -23,6 +23,11 @@
 - **删除操作必须检查 API 返回值（P-101，v0.6.1）**：前端所有"删除/清空/置顶"类操作 `.catch(errToast)` 吞错后，必须 `if (r)` 守卫成功提示——曾发生 `makeDeleteBtn` 无条件 `flash("已删除")`，网络/会话失败时误报成功。新写删除类代码照此办理
 - **墓碑仅在配置 WebDAV 后记录（P-102，v0.6.1）**：`deleteClip` 只返回 `{ ok, fileId, tombstone }` 不落盘；路由层 `getSyncConfig(userId)` 存在才调 `recordTombstone`——未配置同步的用户删除不再产生墓碑文件
 - **拼音搜索仅前端生效（P-103）**：`renderList` 的拼音匹配只在搜索框输入路径；后端 `listClips` 的 `q` 是子串匹配（无拼音）——`?q=拼音` 直链/刷新不命中拼音，属预期，勿当 bug 修
+- **归档滚动必须按 id 去重（v0.6.11）**：`rollToArchive` 追加归档前按 id 去重——否则每次 saveClips（含 WebDAV 同步写回）都把同一批最旧条目重复滚入，归档指数膨胀。新增滚动测试用例要同时验证「不重复」与「新条目可滚入」
+- **导入 id 必须校验 UUID（v0.6.11）**：`sanitizeImported` 的 id 走 `ID_RE` 校验，非 UUID 重新生成——否则导入的条目后续 assertId 全拒，编辑/复制/删除全 400。**已存在**的导出数据 id 都是 UUID，此修复针对外部工具备份/手工 JSON
+- **富文本条目编辑后 html 必须同步（v0.6.11）**：前端编辑/JSON 覆盖保存若改 content 且条目有 html，必须同步重建 html（textToHtml）——否则右栏预览与复制拿到的还是旧内容。只改 html 不动 content 不会出现（后端 updateClip 两者独立可改）
+- **verifyPassword 先校验 hash 格式（v0.6.11）**：`timingSafeEqual` 对不等长 Buffer 抛 ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH——passHash 损坏时登录会 500。先 `^[0-9a-f]+$` + 长度一致再比较，损坏数据安全返回 401
+- **登录限流表需 lastFailAt（v0.6.11）**：`pruneLoginGuard` 除清理锁定过期 key 外，还要清理「fails>0 且超过 LOGIN_WINDOW_MS 未再失败」的 key——否则失败 1~7 次后停手的 IP 永久残留（P1-3 曾假修复）
 
 ## 约定
 - UI 标签用中文；注释用中文；文件名/变量用英文
