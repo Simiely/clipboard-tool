@@ -194,8 +194,23 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 - 解决：openPasteModal 保存前 `state.clips.some(c => url===content || content===content)` 命中则 askConfirmP 确认
 - 预防：重复检测只针对文本/链接（文件有 fileId 天然唯一），不打断文件流程
 
+### 问题：富文本复制到 Word 字体变宋体 / 无格式（v0.6.9 定稿 / 2026-08-16 全链路实测）
+
+**TL;DR**：三条铁律叠加——①浏览器写剪贴板**强制剥 `<style>` 块/html/xmlns，只留 inline style**（Chromium 122+ `ClipboardWellFormedHtmlSanitizationWrite`，实测 `clipboard.write` 完整文档读回仅 98B）；②**Word 识别"来自 Word"靠 `xmlns:w="urn:schemas-microsoft-com:office:word"` 标记**（Microsoft roosterjs `isWordDesktopDocument.ts` / CKEditor paste-from-office），片段不包装则 Word 判定"来自网页"→ 默认合并格式（宋体）；③`execCommand + setData` **不受** Chromium 122+ sanitize 影响（W3C clipboard-apis#193），带 xmlns 完整文档原样进 CF_HTML → Word 保留格式。**解法：存入时 `normalizeRichHtml` 把 style 块内联到元素；复制时 `buildWordDoc` 包装 xmlns:o/w/m + StartFragment；`execCommandRich` 主路径（holder 纯文本承载，绝不 innerHTML 解析完整文档——DOM 会剥 html/head/xmlns）**。
+
+- 现象：富文本卡右栏复制 → Word 粘贴 → 字体变宋体/无格式；诊断页（独立标签页 execCommand + 原始 Word html）却正常
+- 根因链：存入 html 样式在 `<style>` 块（浏览器写剪贴板剥块）→ 无样式；且无 xmlns 标记 → Word 判"来自网页" → 合并格式；`clipboard.write` 走 Chromium sanitize 压缩（读回 98B）更糟
+- 排查工具：`public/diag.html`（`/diag.html` 路由）——实测 iframe 内 clipboard/execCommand/paste 可用性 + 端到端模拟（写后读回自证），**排障先跑它，不靠猜**
+- 解决：`normalizeRichHtml`（存入内联化）/ `buildWordDoc`（复制包装 xmlns）/ `execCommandRich`（setData 原始完整文档，holder 纯文本）
+- 环境边界：**预览 iframe 无剪贴板权限时 execCommand/clipboard 可能失败**——富文本复制请在独立浏览器标签页使用；Word 2405+（2024-05）默认"从其他程序粘贴=合并格式"（微软官方行为变更），可改 文件→选项→高级→剪切复制粘贴→从其他程序粘贴→保留源格式
+- 预防：富文本链路改动后跑 diag.html 第 7 项（execCommand 复制原始 Word html → 读回含 xmlns 与 inline style）验证；复制类问题先确认粘贴目标（WorkBuddy 输入框/记事本=纯文本，必无格式）
+
 ## 开发记录
 
+- 2026-08-16（v0.6.9）：富文本复制链路定稿——normalizeRichHtml/buildWordDoc/execCommandRich 三函数统一，删除全部历史缠绕函数；隔离诊断页 diag.html 实测定位
+- 2026-08-16（v0.6.8）：富文本链路重构 + 场景走查报告（docs/walkthrough/）+ 诊断页
+- 2026-08-16（v0.6.7）：WebDAV 远端统一子目录 workbuddy/剪贴板/
+- 2026-08-16（v0.6.6）：弹窗四件套重设计（密码/数据管理/存入/编辑）+ 重复检测单弹窗 + 窄屏适配 + 标签/开关黑金化
 - 2026-08-09（init）：多用户剪贴板工具——万能入口/智能排序/拼音搜索/标签/WebDAV 备份同步；提交 `007293a`
 - 2026-08-09（chore）：添加 API 部署脚本（github.com 被墙时走 Git Data API）；提交 `b21a6eb`
 - 2026-08-12（docs）：按单项目规范补齐四件套（AGENTS / DEVELOPMENT / CHANGELOG），README 校对

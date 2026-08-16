@@ -1,5 +1,49 @@
 # CHANGELOG.md
 
+## v0.6.9 (2026-08-16)
+
+### 富文本复制链路重构定稿（数据流统一，清除历史缠绕）
+
+**排查方法**：隔离诊断页 `public/diag.html`（`/diag.html` 路由）实测 iframe 内各 API 可用性 + 端到端模拟，不靠猜测。
+
+**根因链（全链路）**：
+1. 浏览器写剪贴板**强制剥 `<style>` 块/html/xmlns，只留 inline style**（Chromium 122+ `ClipboardWellFormedHtmlSanitizationWrite`，实测 `clipboard.write` 读回仅 98B）→ 样式必须内联
+2. **Word 识别"来自 Word"靠 `xmlns:w="urn:schemas-microsoft-com:office:word"` 标记**（Microsoft roosterjs `isWordDesktopDocument.ts` / CKEditor paste-from-office）→ 片段不包装则 Word 判定"来自网页"，默认合并格式（宋体）
+3. `execCommand + setData` 不受 Chromium 122+ sanitize 影响（W3C clipboard-apis#193），带 xmlns 的完整文档原样进 CF_HTML → Word 识别来源并保留格式（诊断实测通过）
+
+**重构**（`public/app.js`，4 个干净函数，删除全部历史函数 `wrapWordDoc`/`inlineStyles`/`ensureWellFormedHtml`/`execCommandCopyRich`/`writeRichClipboard`）：
+- **`normalizeRichHtml(html)`**（存入时统一）：DOMParser → `<style>` 块规则内联到元素 → 移除 style 块 → 干净内联片段存库
+- **`buildWordDoc(html)`**（复制时统一）：片段 → 带 xmlns:o/w/m + StartFragment 的完整 Word 文档
+- **`execCommandRich(rich, plain)`**：holder 纯文本承载选区（绝不 innerHTML 解析完整文档），setData 注入原始完整文档
+- **`copyRich(html, text)`**：execCommand 主路径 + clipboard.write 兜底（都走 buildWordDoc）
+
+**相关修复（v0.6.8 起累计）**：存入弹窗 paste 事件捕获 text/html、autoFill read() 单次调用、类型徽章「✦ 将存为：格式文本」自证、CSS 类名冲突 `.rich-pv`→`.re-pv`（消除卡片右栏污染）、编辑弹窗五类型、存入弹窗重写。
+- 零行为回归（冒烟 34/34）
+
+## v0.6.8 (2026-08-16)
+
+### 富文本复制链路重写与实测闭环（场景走查 + 隔离诊断）
+
+**根因终审**：Word 粘贴 html 时默认「合并格式」→ 显示无格式；选「保留源格式」即完整还原——复制/存入链路功能正常（隔离诊断页实测：paste 取 Word mso HTML 43408B、execCommand 复制读回含 inline style）。非代码缺陷。
+
+- **copyRich 重写**（权威依据 MDN/web.dev/W3C#193）：`ensureWellFormedHtml` → Clipboard API 主路径 → execCommand 兜底（contenteditable+focus+setData 双格式），删除历史 wrap/顺序补丁
+- **存入弹窗链路重写**：paste 事件捕获 `text/html`（手动粘贴可靠，无需 read 权限）；autoFill `read()` 只调一次（此前重复调用）；read 权限失败时提示手动粘贴保留格式
+- **徽章自证**：存入弹窗类型徽章新增 `✦ 将存为：格式文本`（蓝色，pendingHtml 捕获成功可见）
+- **CSS 类名冲突修复**：编辑弹窗富文本预览 `.rich-pv` → `.re-pv`（原全局类污染卡片右栏样式：虚线边框/角标/内边距）
+- **隔离诊断页** `public/diag.html`（`/diag.html` 路由）：实测 iframe 内 Clipboard API/execCommand/paste 可用性，排障工具
+- **场景走查报告** `docs/walkthrough/富文本复制链路走查.md`：R-1/R-2 实测降级 ⚪（环境支持全 API）
+- 零行为回归（冒烟 34/34）
+
+## v0.6.7 (2026-08-16)
+
+### WebDAV 远端存储路径统一子目录（workbuddy/剪贴板/）
+
+- **快照文件**：`<配置目录>/workbuddy/剪贴板/clipboard-<uid>.json`（原：配置目录根）
+- **文件实体**：`<配置目录>/workbuddy/剪贴板/files/<uid>/<fileId><ext>`（勾选 syncFiles 时）
+- `ensureDir` 改为**逐级 MKCOL**（根 → workbuddy/ → workbuddy/剪贴板/，WebDAV MKCOL 不支持递归）
+- 连通测试探针文件同步移到子目录内
+- 与 WebDAV 根的其他用途隔离，目录结构清晰；零行为回归（冒烟 34/34）
+
 ## v0.6.5 (2026-08-15)
 
 ### 卡片系统全量重构（方案 18 落地：三区骨架 + 类型专属内容）
@@ -21,6 +65,7 @@
 - **卡片高度策略**：恢复统一等高 `height:190px`（方案 18）；文本内容在等高内 flex 撑满 + **内部滚动**（`overflow-y:auto`，细滚动条 hover 卡片才显现）——长文本可滚动查看全文，不截断也不撑高卡片，混排零参差
 - **富文本左右栏复制修复**：左右栏 onclick 中 `guard(...)` 漏末尾 `()`（guard 返回事件处理器但从未调用，点击只 stopPropagation、复制逻辑不执行）——补 `()` 后左=复制纯文本、右=复制带格式均生效；废弃的 `makeRichBtn` 同步修复
 - **密码弹窗重设计（方案 22 极简聚焦）**：下划线式输入 + 浮动标签（focus/有内容时上移金色）+ 👁 显隐切换；头部「🔑 图标 + 标题 + 用户名胶囊」+ 底部「仅存哈希提示 + 关闭」；金色保存大按钮
+- **数据管理弹窗重设计（方案 25 双栏工作台）**：左栏=设置与同步（缩放步长 + WebDAV 跨设备配置：url/user/pass + 实体同步/自动同步开关 + 保存配置/一键同步 + 状态区 P-104 失败可见）；右栏=备份与风险（导出/导入 + 红色危险区：全部清空/删除账号）；底部「数据仅存本地 JSON」+ 关闭；`renderWebdavSection` 适配 dm- 类双栏容器
 - 新增 `hostOf` / `makeJsonPreview` / `makeFileIcon` / `makeLinkBody`；删除废弃的 `makeCardPreview` / `makeOpenBtn`
 - CSS 全面重构（`.clip-card` 三区、`.status/.st.*`、`.pv/.code/.imgwrap/.filebody/.linkbody/.main-btn`、`.ops .b`），hover 金描边统一
 - 零后端改动；冒烟 34/34 通过
