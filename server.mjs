@@ -64,6 +64,12 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end(STATIC.js.body);
     }
+    // 剪贴板环境诊断页（v0.6.8：隔离测试 iframe 内 API 可用性，不走查不猜）
+    if (url.pathname === "/diag.html") {
+      const html = fs.readFileSync(path.join(__dirname, "public", "diag.html"));
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" });
+      return res.end(html);
+    }
     // API 路由
     const r = matchRoute(url, req.method);
     if (!r) return sendJson(res, 404, { ok: false, error: "not found" });
