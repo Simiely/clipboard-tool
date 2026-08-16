@@ -45,7 +45,7 @@ ok("首次同步上传", s1.data.uploaded === true && s1.data.clips === 2 && s1.
 await req("DELETE", "/api/clips/" + c1.data.clip.id, { token: tk });
 const s2 = await req("POST", "/api/sync/run", { token: tk });
 ok("删除后同步(墓碑传播)", s2.data.tombstones === 1 && s2.data.clips === 1);
-const snap = await davGet("clipboard-" + uid + ".json");
+const snap = await davGet("workbuddy/剪贴板/clipboard-" + uid + ".json");
 ok("远端快照无 A", !snap.clips.some(c => c.id === c1.data.clip.id));
 ok("远端快照墓碑含 A", snap.tombstones.some(t => t.id === c1.data.clip.id));
 
@@ -62,7 +62,7 @@ const list2 = await req("GET", "/api/clips", { token: tk });
 ok("清空后从远端恢复 B", list2.data.clips.length === 1 && list2.data.clips[0].id === c2.data.clip.id);
 
 // 6. 远端快照未被覆盖成空（uploaded=false 保护）
-const snap2 = await davGet("clipboard-" + uid + ".json");
+const snap2 = await davGet("workbuddy/剪贴板/clipboard-" + uid + ".json");
 ok("远端快照未被清空覆盖", snap2.clips.length >= 1);
 
 // 7. 墓碑文件落盘确认
@@ -83,7 +83,7 @@ const up2 = await reqForm("/api/files", fd);
 const fileClip = await req("POST", "/api/clips", { token: tk, json: { type: "file", fileId: up2.file.fileId, fileName: up2.file.fileName, fileSize: up2.file.fileSize, fileMime: up2.file.fileMime, title: "pic.png" } });
 await req("POST", "/api/sync/config", { token: tk, json: { url: DAV, user: "admin", pass: "admin123", syncFiles: true, autoSync: false } });
 const s4 = await req("POST", "/api/sync/run", { token: tk });
-const fRemote = await fetch(DAV + "files/" + uid + "/" + up2.file.fileId + ".png", { headers: AUTH });
+const fRemote = await fetch(DAV + "workbuddy/剪贴板/files/" + uid + "/" + up2.file.fileId + ".png", { headers: AUTH });
 ok("实体同步:远端有文件", fRemote.status === 200 && new Uint8Array(await fRemote.arrayBuffer()).length > 0);
 
 // 9. 删除本地文件实体 → 再同步 → 从远端拉回
@@ -102,10 +102,10 @@ const up3 = await reqForm("/api/files", fd2);
 await req("POST", "/api/clips", { token: tk, json: { type: "file", fileId: up3.file.fileId, fileName: up3.file.fileName, fileSize: up3.file.fileSize, fileMime: up3.file.fileMime, title: "note.txt" } });
 await req("POST", "/api/sync/config", { token: tk, json: { url: DAV, user: "admin", pass: "admin123", syncFiles: false } });
 await req("POST", "/api/sync/run", { token: tk });
-const fNoRemote = await fetch(DAV + "files/" + uid + "/" + up3.file.fileId + ".txt", { headers: AUTH });
+const fNoRemote = await fetch(DAV + "workbuddy/剪贴板/files/" + uid + "/" + up3.file.fileId + ".txt", { headers: AUTH });
 ok("不勾选实体:远端无文件实体", fNoRemote.status === 404);
 // 但快照里仍有 file 条目元数据
-const snap3 = await davGet("clipboard-" + uid + ".json");
+const snap3 = await davGet("workbuddy/剪贴板/clipboard-" + uid + ".json");
 ok("不勾选实体:快照仍含文件条目元数据", snap3.clips.some(c => c.type === "file" && c.fileId === up3.file.fileId));
 
 console.log("WebDAV 集成测试: " + pass + " 通过 / " + fail + " 失败");
