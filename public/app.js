@@ -1131,7 +1131,9 @@ async function downloadFile(c) {
     const a = document.createElement("a");
     a.href = u; a.download = c.fileName || "file";
     document.body.appendChild(a); a.click(); a.remove();
-    URL.revokeObjectURL(u);
+    // v0.6.11：延迟释放——a.click() 是同步触发下载，但部分浏览器需在下个 tick 才能开始读取，
+    // 立即 revokeObjectURL 会导致下载中断/空文件
+    setTimeout(() => URL.revokeObjectURL(u), 2000);
   } catch (ex) { errToast(ex.message); }
 }
 /** 图片转 PNG（ClipboardItem 最可靠格式；canvas 同源 blob 可用） */
@@ -1220,7 +1222,10 @@ function openJsonPreview(c) {
     if (ok) flash("已复制美化 JSON"); else errToast("复制失败");
   });
   save.onclick = guard(save, async () => {
-    const r = await api("/api/clips/" + c.id, { method: "PUT", json: { content: formatted } }).catch(e2 => errToast(e2.message));
+    // v0.6.11：带 html 的条目覆盖保存同步重建 html（防 content/html 不一致，同编辑弹窗修复）
+    const json = { content: formatted };
+    if (c.html && formatted !== (c.content || "")) json.html = textToHtml(formatted);
+    const r = await api("/api/clips/" + c.id, { method: "PUT", json }).catch(e2 => errToast(e2.message));
     if (r) { c.content = formatted; m.remove(); flash("已覆盖保存"); refreshList(); }
   });
   close.onclick = () => m.remove();
@@ -1620,6 +1625,11 @@ function openEditModal(c, dup = false) {
       const json = { title: title.value, tags: [...editTagsSel], expire: expSel.value };
       if (contentInput) json.content = contentInput.value;
       if (urlInput) json.url = urlInput.value;
+      // v0.6.11：富文本条目编辑纯文本后 html 必须同步——此前只改 content，html 还是旧内容，
+      // 卡片右栏预览与「复制带格式」拿到的都是旧文本（左右不一致 bug）。content 变了 → 按新文本重建 html。
+      if (c.type === "text" && c.html && contentInput) {
+        json.html = contentInput.value !== (c.content || "") ? textToHtml(contentInput.value) : c.html;
+      }
       await api("/api/clips/" + c.id, { method: "PUT", json }).catch(e => { errToast(e.message); return null; });
       m.remove(); flash("已保存"); refreshList();
     } catch (e) { errToast(e.message); }
@@ -1814,7 +1824,9 @@ function renderWebdavSection(container) {
   const davFilesLbl = el("label", "dm-opt", ""); davFilesLbl.append(davFiles, " 同步文件实体（图片/文件也备份到 WebDAV）");
   const davAuto = el("input"); davAuto.type = "checkbox";
   const davInt = el("select");
-  for (const [h, l] of [[1, "1 小时"], [6, "6 小时"], [12, "12 小时"], [24, "24 小时"]]) {
+  // v0.6.11：选项含 30 分钟——此前只有 1/6/12/24 小时，后端允许最小 30 分钟，
+  // 用户保存 30 分钟后重开设置被 round 成 1 小时再保存变成 60 分钟（间隔漂移 bug）
+  for (const [h, l] of [[0.5, "30 分钟"], [1, "1 小时"], [6, "6 小时"], [12, "12 小时"], [24, "24 小时"]]) {
     const o = el("option", "", l); o.value = h; davInt.append(o);
   }
   davInt.value = 12; // 默认 12 小时
@@ -1834,7 +1846,8 @@ function renderWebdavSection(container) {
         davUrl.value = r.url; davUser.value = r.user;
         davFiles.checked = !!r.syncFiles;
         davAuto.checked = !!r.autoSync;
-        davInt.value = Math.max(1, Math.round((r.intervalMin || 720) / 60));
+        // v0.6.11：精确读回间隔（分钟→小时，30 分钟=0.5）——旧实现 Math.round 把 30 分钟变 1 小时
+        davInt.value = String((r.intervalMin || 720) / 60);
         // P-104：自动同步上次失败不再静默——状态区展示失败原因（成功则正常显示）
         davStatus.textContent = "已配置：" + r.url + (r.autoSync ? " · 每 " + davInt.value + " 小时自动同步" : "");
         if (r.lastSyncError) { davStatus.textContent += " · ⚠ 上次自动同步失败：" + r.lastSyncError; davStatus.classList.add("err"); }
@@ -1847,7 +1860,7 @@ function renderWebdavSection(container) {
     if (!davUrl.value.trim()) return errToast("先填服务器地址");
     davStatus.textContent = "测试中…";
     try {
-      await api("/api/sync/config", { method: "POST", json: { url: davUrl.value, user: davUser.value, pass: davPass.value, syncFiles: davFiles.checked, autoSync: davAuto.checked, intervalMin: parseInt(davInt.value, 10) * 60 } });
+      await api("/api/sync/config", { method: "POST", json: { url: davUrl.value, user: davUser.value, pass: davPass.value, syncFiles: davFiles.checked, autoSync: davAuto.checked, intervalMin: Math.round(parseFloat(davInt.value) * 60) } });
       davStatus.textContent = "已保存：" + davUrl.value + (davAuto.checked ? " · 每 " + davInt.value + " 小时自动同步" : "") + (davFiles.checked ? " · 含文件实体" : "");
       davStatus.classList.remove("err"); davStatus.classList.add("ok");
       flash("WebDAV 配置已保存");
