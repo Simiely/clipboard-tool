@@ -207,6 +207,7 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 
 ## 开发记录
 
+- 2026-08-16（v0.6.11）：细节审查修复批——归档去重防膨胀（rollToArchive 按 id 去重，实测修复 300→600 翻倍）/ verifyPassword 损坏数据不崩溃（hex+长度校验）/ 导入非 UUID id 重生成 / 富文本编辑 html 同步（textToHtml 重建）/ 登录限流表真修复（lastFailAt 窗口回收，P1-3 假修复）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持
 - 2026-08-16（v0.6.9）：富文本复制链路定稿——normalizeRichHtml/buildWordDoc/execCommandRich 三函数统一，删除全部历史缠绕函数；隔离诊断页 diag.html 实测定位
 - 2026-08-16（v0.6.8）：富文本链路重构 + 场景走查报告（docs/walkthrough/）+ 诊断页
 - 2026-08-16（v0.6.7）：WebDAV 远端统一子目录 workbuddy/剪贴板/

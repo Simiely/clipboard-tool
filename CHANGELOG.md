@@ -1,5 +1,23 @@
 # CHANGELOG.md
 
+## v0.6.11 (2026-08-16)
+
+### 细节审查修复批（代码审查 + 隔离实验验证，冒烟 34/34 · WebDAV 19/19 · 自动同步 3/3 · html 字段 10/10）
+
+**排查方法**：全量代码审查（server.mjs + lib/core + lib/routes + public/app.js）+ 隔离脚本实测复现/验证，不靠猜。
+
+- 🔴 **归档重复膨胀修复**（`rollToArchive`，clips.js）：活跃区超 500 条时，每次 `saveClips` 都把同一批最旧条目重复滚入归档——实测 800 条连续两次保存归档 300→600 翻倍（WebDAV 同步/高频操作触发）。现按 id 去重再追加，归档稳定不膨胀；新条目（updatedAt 新）仍正常留在活跃区
+- 🔴 **`verifyPassword` 崩溃修复**（users.js）：passHash 损坏（手工编辑/半写坏文件，非合法 hex）时 `timingSafeEqual` 对不等长 Buffer 抛 `ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH` → 登录 500。现先校验 hex + 长度一致，损坏数据登录安全返回 401
+- 🟡 **导入非 UUID id 条目不可操作修复**（`sanitizeImported`，clips.js）：导入的条目 id 只截断不校验，非 UUID id 后续 `assertId` 全拒——编辑/复制/删除/置顶全 400（外部工具备份/手工 JSON 场景）。现校验 `ID_RE`，不合法则重新生成 UUID
+- 🟡 **富文本编辑左右不一致修复**（前端 app.js）：富文本条目编辑纯文本后 `html` 字段不同步——卡片右栏预览与「复制带格式」拿到的还是旧内容。保存时 content 变了 → 按新文本重建 html（`textToHtml`）；JSON 预览「覆盖保存」同样处理
+- 🟡 **登录限流表真修复**（`pruneLoginGuard`，users.js）：P1-3 原实现只清理「锁定过期且失败归零」的 key，**持续失败未达阈值（fails 1~7）且停手的 IP 永久残留**（假修复）。补 `lastFailAt` 时间戳，超过 `LOGIN_WINDOW_MS` 未再失败即回收
+- 🟡 **WebDAV 实体同步扩展名兜底修复**（`extFor`，webdav.js）：无扩展名+未知 MIME 文件兜底由空串改 `.bin`（与 `saveFile` 的 bin 兜底一致）——此前远端路径 `<fileId>`、本地存 `<fileId>.bin`，恢复写盘无扩展名 → `getFilePath` 前缀匹配失败 → 下载 404
+- 🟢 **`readBody` 超限流挂起修复**（helpers.js）：413 后 `req.resume()` 排空剩余流，防 keep-alive 复用挂起
+- 🟢 **diag.html 并入静态缓存**（server.mjs）：此前每次请求 readFileSync，与 P1-4 缓存策略不一致
+- 🟢 **WebDAV 自动同步间隔漂移修复**（前端 app.js）：间隔选项补 30 分钟（后端允许最小 30min，此前前端只有 1h 起，保存 30min 读回被 round 成 1h、再存变 60min）；读回/保存均精确到 0.5h
+- 🟢 **下载 Blob URL 延迟释放**（前端 app.js）：`a.click()` 后立即 `revokeObjectURL` 部分浏览器下载中断，延迟 2s 释放
+- 零行为回归（四套测试全绿）
+
 ## v0.6.9 (2026-08-16)
 
 ### 富文本复制链路重构定稿（数据流统一，清除历史缠绕）
