@@ -21,6 +21,8 @@ const APP_JS = path.join(__dirname, "public", "app.js"); // v0.4.0：前端 JS �
 const STATIC = {
   html: { type: "text/html; charset=utf-8", body: fs.readFileSync(INDEX_HTML) },
   js: { type: "text/javascript; charset=utf-8", body: fs.readFileSync(APP_JS) },
+  // v0.6.11：diag.html 并入缓存——此前每次请求 readFileSync，与静态策略不一致
+  diag: { type: "text/html; charset=utf-8", body: fs.readFileSync(path.join(__dirname, "public", "diag.html")) },
 };
 
 // 后台过期清扫：60s 周期，删除过期条目并联动清理文件实体
@@ -64,11 +66,10 @@ const server = http.createServer(async (req, res) => {
       });
       return res.end(STATIC.js.body);
     }
-    // 剪贴板环境诊断页（v0.6.8：隔离测试 iframe 内 API 可用性，不走查不猜）
+    // 剪贴板环境诊断页（v0.6.8：隔离测试 iframe 内 API 可用性，不走查不猜；v0.6.11：静态缓存）
     if (url.pathname === "/diag.html") {
-      const html = fs.readFileSync(path.join(__dirname, "public", "diag.html"));
-      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" });
-      return res.end(html);
+      res.writeHead(200, { "Content-Type": STATIC.diag.type, "X-Content-Type-Options": "nosniff" });
+      return res.end(STATIC.diag.body);
     }
     // API 路由
     const r = matchRoute(url, req.method);
