@@ -35,10 +35,10 @@ const after1 = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
 ok("到期触发自动同步(lastSyncAt 更新)", after1.lastSyncAt >= t0);
 
 // 3. 立即再跑 → 未到期 → 不触发（快照 syncedAt 不变）
-const snapBefore = await (await fetch(DAV + "clipboard-" + uid + ".json", { headers: AUTH })).json();
+const snapBefore = await (await fetch(DAV + "workbuddy/剪贴板/clipboard-" + uid + ".json", { headers: AUTH })).json();
 await new Promise(r => setTimeout(r, 200));
 await webdav.runAutoSync();
-const snapAfter = await (await fetch(DAV + "clipboard-" + uid + ".json", { headers: AUTH })).json();
+const snapAfter = await (await fetch(DAV + "workbuddy/剪贴板/clipboard-" + uid + ".json", { headers: AUTH })).json();
 ok("未到期跳过(快照 syncedAt 不变)", snapBefore.syncedAt === snapAfter.syncedAt);
 
 // 4. 关闭自动同步后不触发（把 lastSyncAt 归零也不会跑）
