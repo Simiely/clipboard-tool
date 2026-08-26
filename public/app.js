@@ -774,6 +774,21 @@ function makeDeleteBtn(c) {
   };
   return btn;
 }
+/** 恢复归档按钮（v0.6.13：归档卡片 ↺，移回活跃区） */
+function makeRestoreBtn(c) {
+  const btn = el("button", "b", "↺");
+  btn.title = "恢复（移回活跃区）";
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    guard(btn, async () => {
+      const r = await api("/api/clips/" + c.id + "/restore", { method: "POST" }).catch(e2 => errToast(e2.message));
+      if (!r) return;
+      flash("已恢复");
+      refreshList();
+    })();
+  };
+  return btn;
+}
 /** JSON 格式化预览按钮（文本可解析为 JSON 时） */
 function makeJsonBtn(c) {
   const btn = el("button", "b", "{}");
@@ -914,8 +929,9 @@ function clipCard(c) {
   if (c.pinned) status.append(el("span", "st pin", "★ 置顶"));
   if (c.expireAt) status.append(el("span", "st exp", "⏳ " + expLabel(c.expireAt)));
   if (c.archived) status.append(el("span", "st arch", "归档"));
-  // 右上角操作组：✕ 删除（v0.6.13：归档也可手动删除——WebDAV 完整备份后清理用不到的归档）
+  // 右上角操作组：✕ 删除（v0.6.13：归档也可手动删除——WebDAV 完整备份后清理用不到的归档；↺ 恢复归档）
   const topOps = el("div", "ops top");
+  if (c.archived) topOps.append(makeRestoreBtn(c));
   topOps.append(makeDeleteBtn(c));
   row1.append(typeBadge, title, status, topOps);
   // 底部 meta 行：信息 + 其余操作（☆ 收藏 / ✎ 编辑 / ↓ 下载 / {} JSON）
@@ -1583,10 +1599,10 @@ function openEditModal(c, dup = false) {
   const actions = el("div", "paste-actions");
   // v0.6.13：普通卡片编辑可「归档」（活跃区移入归档区；归档参与 WebDAV 同步、可「含归档」查看）
   if (!c.archived) {
-    const archBtn = el("button", "btn ghost", "归档");
-    archBtn.title = "移入归档区——「含归档」可查看；归档条目不能直接恢复，用不到可删除";
+    const archBtn = el("button", "btn btn-close", "归档"); // v0.6.13：与「取消」同尺寸同风格(小按钮)
+    archBtn.title = "移入归档区——「含归档」可查看，可恢复或删除";
     archBtn.onclick = guard(archBtn, async () => {
-      if (!await askConfirmP("将该条目移入归档？归档后可「含归档」查看；归档条目不能直接恢复。", "归档")) return;
+      if (!await askConfirmP("将该条目移入归档？归档后可「含归档」查看，可随时恢复。", "归档")) return;
       const r = await api("/api/clips/" + c.id + "/archive", { method: "POST" }).catch((e) => { errToast(e.message); return null; });
       if (r) { m.remove(); flash("已归档"); refreshList(); }
     });
