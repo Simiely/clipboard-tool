@@ -399,7 +399,7 @@ async function enterUser(u) {
   const r = await api("/api/session", { method: "POST", json: { id: u.id, password: "" } }).catch(e => { errToast(e.message); return null; });
   if (!r) return;
   state.current = { ...r.user, token: r.token };
-  LS.set("cur", { id: r.user.id, token: r.token, name: r.user.name, color: r.user.color });
+  LS.set("cur", { id: r.user.id, token: r.token }); // v0.6.13 治本：仅存会话凭据——展示信息（name/color）以后端为唯一权威源，恢复登录时拉取
   resetFilter(); // 第三轮 F-2
   await loadClips(); render();
 }
@@ -419,7 +419,7 @@ function openPassModal(u) {
     const r = await api("/api/session", { method: "POST", json: { id: u.id, password: inp.value } }).catch(e => { errToast(e.message); return null; });
     if (!r) return;
     state.current = { ...r.user, token: r.token };
-    LS.set("cur", { id: r.user.id, token: r.token, name: r.user.name, color: r.user.color });
+    LS.set("cur", { id: r.user.id, token: r.token }); // v0.6.13 治本：仅存会话凭据——展示信息（name/color）以后端为唯一权威源，恢复登录时拉取
     resetFilter(); // 第三轮 F-2
     m.remove(); await loadClips(); render();
   });
@@ -444,7 +444,7 @@ function openUserModal() {
     const r = await api("/api/users", { method: "POST", json: { name: name.value, password: pass.value } }).catch(e => { errToast(e.message); return null; });
     if (!r) return;
     state.current = { ...r.user, token: r.token };
-    LS.set("cur", { id: r.user.id, token: r.token, name: r.user.name, color: r.user.color });
+    LS.set("cur", { id: r.user.id, token: r.token }); // v0.6.13 治本：仅存会话凭据——展示信息（name/color）以后端为唯一权威源，恢复登录时拉取
     resetFilter(); // 第三轮 F-2
     m.remove(); await loadClips(); render();
   });
@@ -1707,8 +1707,7 @@ function openDataModal() {
   nameSave.onclick = guard(nameSave, async () => {
     const r = await api("/api/users/" + state.current.id + "/name", { method: "POST", json: { name: nameInput.value } }).catch((e) => errToast(e.message));
     if (!r) return;
-    state.current.name = r.name; // 同步本地状态（顶栏 who / 头部展示用）
-    LS.set("cur", state.current); // v0.6.13：写回登录缓存——否则强制刷新用旧缓存恢复登录，名字回落
+    state.current.name = r.name; // 同步本地状态（顶栏 who / 头部展示用）——后端已改，刷新时 /api/users/me 亦取最新，无需写缓存
     flash("用户名已更新");
     m.remove(); render();
   });
@@ -1926,23 +1925,21 @@ async function boot() {
     } catch {}
   }
   // 恢复上次登录（token 失效则回选用户页；显式传 token——否则校验请求不带鉴权永远 401）
+  // v0.6.13 治本：LS.cur 仅作「会话凭据缓存」{id, token}；展示信息（name/color）以
+  // 后端为唯一权威源——恢复登录时必然从 /api/users/me 拉最新值填充（改名/多端刷新一致，
+  // 缓存永不"过期"回落）。旧缓存里若残留 name 仅作拉取失败时的兜底展示，不做权威。
   const saved = LS.get("cur", null);
   if (saved && saved.token) {
     try {
       const r = await api("/api/clips", { token: saved.token });
-      state.current = saved;
+      state.current = { id: saved.id, token: saved.token, name: saved.name || "" };
       state.clips = r.clips;
       const t = await api("/api/tags", { token: saved.token });
       state.tags = t.tags;
-      // v0.6.13：token 有效 → 拉最新用户信息覆盖缓存（改名后强制刷新不回落旧值；失败退缓存不阻塞登录）
       try {
         const me = await api("/api/users/me", { token: saved.token });
-        if (me && me.user) {
-          state.current.name = me.user.name;
-          state.current.color = me.user.color;
-          LS.set("cur", state.current);
-        }
-      } catch {}
+        if (me && me.user) { state.current.name = me.user.name; state.current.color = me.user.color; }
+      } catch { /* 权威拉取失败：保留兜底旧名展示，不阻塞登录 */ }
     } catch { LS.del("cur"); }
   }
   if (!state.current) {
