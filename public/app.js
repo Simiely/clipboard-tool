@@ -1053,7 +1053,10 @@ function bindImageHoverPreview(c, card) {
     previewState.box.style.top = top + "px";
   };
   // 打开浮层（260ms 延迟防快速划过误弹）
+  // v0.6.13：触发区收窄到图片区域 imgwrap——此前绑整卡 mouseenter，鼠标到按钮/标题区也会弹预览（用户反馈修正）
+  const imgwrap = card.querySelector(".imgwrap");
   const open = () => {
+    if (previewState.open) return; // 防重：浮层已开不再重建（浮层挂卡内，鼠标移到浮层会再触发 mouseenter）
     clearTimeout(previewState.timer);
     previewState.timer = setTimeout(() => {
       const box = el("div", "img-hover-preview");
@@ -1099,7 +1102,8 @@ function bindImageHoverPreview(c, card) {
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
   });
-  card.addEventListener("mouseenter", open);
+  // 触发：仅图片区域 mouseenter 打开（按钮/标题/状态区不再误触）；离开整卡才关闭（浮层在卡内不中途消失）
+  if (imgwrap) imgwrap.addEventListener("mouseenter", open);
   card.addEventListener("mouseleave", close);
 }
 
