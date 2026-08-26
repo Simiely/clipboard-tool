@@ -1,6 +1,6 @@
 # AGENTS.md · 项目规则
 
-> 📌 **文档基线**：2026-08-16（v0.6.11：细节审查修复批——归档去重防膨胀 / verifyPassword 损坏数据不崩溃 / 导入非 UUID id 重生成 / 富文本编辑 html 同步 / 登录限流表真修复（lastFailAt）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持；v0.6.9：富文本复制链路定稿——存入 `normalizeRichHtml` 内联化 + 复制 `buildWordDoc` 包装 xmlns:o/w/m + `execCommandRich` 主路径，Word 粘贴保留完整格式；v0.6.8 富文本链路重构 + 诊断页 diag.html；v0.6.7 WebDAV 远端子目录 workbuddy/剪贴板/；v0.6.6 弹窗四件套重设计（密码/数据管理/存入/编辑）+ 重复检测单弹窗 + 窄屏适配；v0.6.5 卡片系统全量重构见下）
+> 📌 **文档基线**：2026-08-26（v0.6.12：富文本复制链路修复批——S2 内联化弃用 CSSOM cssText 改字符串级解析（保 Word 私有属性 tab-interval/mso-*，word-wrap 不被改写）/ body 标签属性保留（文档级设置）+ buildWordDoc 兼容 body 片段 / body 样式双保险内联段落元素（CF_HTML Fragment 在 body 之外）/ 卡片富文本回归左右分栏 + 取消渲染预览与编辑实时预览；v0.6.11：细节审查修复批——归档去重防膨胀 / verifyPassword 损坏数据不崩溃 / 导入非 UUID id 重生成 / 富文本编辑 html 同步 / 登录限流表真修复（lastFailAt）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持；v0.6.9：富文本复制链路定稿——存入 `normalizeRichHtml` 内联化 + 复制 `buildWordDoc` 包装 xmlns:o/w/m + `execCommandRich` 主路径，Word 粘贴保留完整格式；v0.6.8 富文本链路重构 + 诊断页 diag.html；v0.6.7 WebDAV 远端子目录 workbuddy/剪贴板/；v0.6.6 弹窗四件套重设计（密码/数据管理/存入/编辑）+ 重复检测单弹窗 + 窄屏适配；v0.6.5 卡片系统全量重构见下）
 > **更新文档/代码后，请更新此行**（日期 + 新 commit hash），并在 CHANGELOG 追加版本
 
 ## 技术栈
@@ -26,6 +26,7 @@
 - **归档滚动必须按 id 去重（v0.6.11）**：`rollToArchive` 追加归档前按 id 去重——否则每次 saveClips（含 WebDAV 同步写回）都把同一批最旧条目重复滚入，归档指数膨胀。新增滚动测试用例要同时验证「不重复」与「新条目可滚入」
 - **导入 id 必须校验 UUID（v0.6.11）**：`sanitizeImported` 的 id 走 `ID_RE` 校验，非 UUID 重新生成——否则导入的条目后续 assertId 全拒，编辑/复制/删除全 400。**已存在**的导出数据 id 都是 UUID，此修复针对外部工具备份/手工 JSON
 - **富文本条目编辑后 html 必须同步（v0.6.11）**：前端编辑/JSON 覆盖保存若改 content 且条目有 html，必须同步重建 html（textToHtml）——否则右栏预览与复制拿到的还是旧内容。只改 html 不动 content 不会出现（后端 updateClip 两者独立可改）
+- **Word 私有 CSS 属性必须字符串级处理（v0.6.12）**：`normalizeRichHtml` 收集 `<style>` 块规则**绝不能过 CSSOM `rule.style.cssText`**——它只序列化浏览器认识的属性，`tab-interval` / `text-justify-trim` / `mso-*` 全被丢弃、`word-wrap` 被规范化为 `overflow-wrap`（Word/WPS 粘贴还原靠这些）。必须用 `st.textContent` 正则（`/([^{}]+)\{([^{}]*)\}/g`，跳过 `@` 规则）字符串级解析原始声明。另外：**body 标签自身属性不在 `doc.body.innerHTML` 里**——Word 文档级设置（tab-interval 等）写在 `<body>` 上，必须遍历 `body.attributes` 保留 `<body attrs>`，并按 CF_HTML 规范（粘贴应用主要解析 Fragment，body 在 Fragment 外）把 body style 内联到段落元素做双保险
 - **verifyPassword 先校验 hash 格式（v0.6.11）**：`timingSafeEqual` 对不等长 Buffer 抛 ERR_CRYPTO_TIMING_SAFE_EQUAL_LENGTH——passHash 损坏时登录会 500。先 `^[0-9a-f]+$` + 长度一致再比较，损坏数据安全返回 401
 - **登录限流表需 lastFailAt（v0.6.11）**：`pruneLoginGuard` 除清理锁定过期 key 外，还要清理「fails>0 且超过 LOGIN_WINDOW_MS 未再失败」的 key——否则失败 1~7 次后停手的 IP 永久残留（P1-3 曾假修复）
 

@@ -296,29 +296,19 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .clip-card .ops .b:hover{color:var(--accent);background:var(--elev-hi)}
 .clip-card .ops .b.del:hover{color:var(--red)}
 .clip-card .ops .b.on{color:var(--amber)}
-/* 富文本左右对比（v0.6.5：左=普通文本 / 右=富文本格式渲染，1:1 双栏，点击各复各的） */
-.clip-card .rich-split{display:flex;min-height:0;flex:1;border:1px dashed rgba(201,169,110,.26);border-radius:10px;overflow:hidden;background:var(--inset);font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+/* 富文本左右分栏（v0.6.12 改版：去掉格式渲染预览，左右都显示文本；顶部提示行 T 普通文本 / ✦ 富文本） */
+.clip-card .rich-split{display:flex;flex-direction:column;min-height:0;flex:1;border:1px dashed rgba(201,169,110,.26);border-radius:10px;overflow:hidden;background:var(--inset);font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+.clip-card .rich-split .rich-tip{display:flex;align-items:center;font-size:9.5px;letter-spacing:.06em;padding:5px 10px;border-bottom:1px dashed rgba(201,169,110,.2);flex-shrink:0}
+.clip-card .rich-split .rich-tip .t{color:var(--dim)}
+.clip-card .rich-split .rich-tip .f{margin-left:auto;color:var(--accent)}
+.clip-card .rich-split .rich-cols{display:flex;flex:1;min-height:0}
 .clip-card .rich-split .half{flex:1;min-width:0;display:flex;flex-direction:column;padding:8px 10px;cursor:pointer;transition:background .16s;position:relative}
 .clip-card .rich-split .half+.half{border-left:1px dashed rgba(201,169,110,.2)}
 .clip-card .rich-split .half:hover{background:rgba(201,169,110,.08)}
 .clip-card .rich-split .half:active{background:rgba(201,169,110,.14)}
 .clip-card .rich-split .half::after{content:"";position:absolute;inset:0;border-radius:9px;box-shadow:inset 0 0 0 0 rgba(201,169,110,0);transition:box-shadow .16s;pointer-events:none}
 .clip-card .rich-split .half:hover::after{box-shadow:inset 0 0 0 1px rgba(201,169,110,.4)}
-/* 栏顶小标签：T 纯文本 / ✦ 格式 */
-.clip-card .rich-split .lab{font-size:9.5px;color:var(--dim);letter-spacing:.06em;margin-bottom:5px;display:flex;align-items:center;gap:4px;flex-shrink:0}
-.clip-card .rich-split .lab b{color:var(--accent);font-weight:500;font-size:10px}
-.clip-card .rich-split .lab::after{content:"";flex:1;height:1px;background:var(--border)}
-/* 左栏：普通文本（无格式，纯文本样式） */
 .clip-card .rich-split .plain-pv{font-size:11.5px;color:var(--muted);line-height:1.6;white-space:pre-wrap;word-break:break-word;flex:1;min-height:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical}
-/* 右栏：富文本（格式渲染：标题加粗/金色强调/列表金点/链接蓝） */
-.clip-card .rich-split .rich-pv{font-size:11.5px;color:var(--muted);line-height:1.6;flex:1;min-height:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;white-space:normal}
-.clip-card .rich-split .rich-pv h1,.clip-card .rich-split .rich-pv h2,.clip-card .rich-split .rich-pv h3,.clip-card .rich-split .rich-pv h4{font-size:12px;font-weight:600;color:var(--text);margin:0 0 2px;line-height:1.4}
-.clip-card .rich-split .rich-pv b,.clip-card .rich-split .rich-pv strong{color:var(--accent);font-weight:600}
-.clip-card .rich-split .rich-pv em,.clip-card .rich-split .rich-pv i{color:var(--text);font-style:italic}
-.clip-card .rich-split .rich-pv ul{list-style:none;margin:2px 0 0;padding:0}
-.clip-card .rich-split .rich-pv li{position:relative;padding-left:12px;margin-top:1px}
-.clip-card .rich-split .rich-pv li::before{content:"";position:absolute;left:0;top:6px;width:5px;height:5px;border-radius:2px;background:var(--accent)}
-.clip-card .rich-split .rich-pv a{color:var(--blue);text-decoration:underline;text-decoration-color:rgba(174,77,77,.4);text-underline-offset:2px;word-break:break-all}
 /* 图片 hover 预览浮层 */
 .img-hover-preview{position:fixed;z-index:98;max-width:calc(100vw - 16px);max-height:calc(100vh - 16px);background:var(--elev);box-shadow:var(--sh-raised-lg);border:none;border-radius:14px;padding:10px}
 .img-hover-wrap{max-width:100%;max-height:calc(100vh - 70px);overflow:auto;border-radius:10px;background:var(--inset);box-shadow:var(--sh-inset-sm);display:flex;justify-content:center;align-items:flex-start;cursor:grab}
@@ -438,15 +428,6 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .edit-row{display:flex;gap:10px}
 .edit-row input{flex:1;min-width:0}
 .edit-row select{flex:0 0 126px}
-/* 富文本双栏：左编辑 / 右实时预览（仅编辑弹窗用；v0.6.8 改名 .re-pv——避免与卡片右栏 .rich-pv 类名冲突造成样式污染） */
-.rich-edit{display:flex;gap:10px;align-items:stretch}
-.rich-edit .re-editor{flex:1;min-width:0}
-.rich-edit .re-editor textarea{height:100%;min-height:130px}
-.re-pv{flex:1;min-width:0;background:var(--elev);box-shadow:var(--sh-inset-sm);border:1px dashed rgba(143,163,184,.3);border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.7;color:var(--muted);overflow:auto;position:relative}
-.re-pv::before{content:"✦ 实时预览";position:absolute;top:8px;right:10px;font-size:9px;color:var(--blue);letter-spacing:.08em}
-.re-pv .pv-h{font-size:14px;font-weight:600;color:var(--text);margin-bottom:6px;padding-right:60px}
-.re-pv .pv-b{white-space:pre-wrap;word-break:break-word}
-.re-pv .pv-b b{color:var(--accent);font-weight:600}
 /* 图片卡 */
 .img-card{background:var(--elev);box-shadow:var(--sh-inset-sm);border-radius:11px;padding:10px;position:relative;overflow:hidden}
 .img-card .thumb{width:100%;height:130px;border-radius:8px;background:var(--inset);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}

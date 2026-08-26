@@ -1,5 +1,17 @@
 # CHANGELOG.md
 
+## v0.6.12 (2026-08-26)
+
+### 富文本复制链路修复批(最小单元链路诊断定位:Word 私有属性/body 属性保真 + 卡片分栏回归)
+
+**排查方法**：新建最小单元链路诊断页（6 步：S1 捕获→S2 normalizeRichHtml→S3 存储→C2 buildWordDoc→C3 剪贴板写读→C4 还原渲染）+ 真实剪贴板写读 / 粘贴回读验证，逐段对比定位，不靠猜。
+
+- 🔴 **S2 内联化丢 Word 私有属性修复**（`normalizeRichHtml`）：旧实现用 CSSOM `rule.style.cssText` 收集 `<style>` 块规则——CSSOM 只序列化浏览器认识的属性，`tab-interval` / `text-justify-trim` / `mso-*` 等 Word 私有属性全被丢弃、`word-wrap` 被规范化为 `overflow-wrap` → Word/WPS 粘贴还原不全（诊断页实测 cssText 只剩 2/6 属性）。改为 `style.textContent` 字符串级正则解析（跳过 `@` 规则），声明原样保留，元素匹配仍用 `el.matches`
+- 🔴 **body 标签属性丢失修复**（`normalizeRichHtml`）：Word 文档级设置（`tab-interval:21.0pt;word-wrap:break-word;text-justify-trim:punctuation`）写在 `<body>` 标签上，旧实现返回 `doc.body.innerHTML`——body 自身属性不在 innerHTML 里，必然丢。现遍历 `body.attributes` 全部保留；`buildWordDoc` 兼容 `<body attrs>…</body>` 片段（属性并入外层 body，避免嵌套）
+- 🟢 **body 文档级属性双保险**（`normalizeRichHtml`）：依据 CF_HTML 规范（MS Learn aa767917，粘贴应用主要解析 StartFragment/EndFragment 之间的 Fragment，body 属性在 Fragment 外的 context 里，部分应用不读），把 body 的 style 同时内联到段落元素（p/div/h1-h6/li），保证 Fragment 内也有文档级属性
+- 🟢 **卡片富文本回归左右分栏 + 取消渲染预览**（app.js/index.html）：卡片内容区恢复左右分栏（左=普通文本 / 右=富文本，点击各复各的），顶部一行提示「T 普通文本 | ✦ 富文本」；删除富文本格式渲染预览（`richPreviewNodes`/`.rich-pv` 样式/分栏渲染分支）——预览渲染与真实 Word 差异大，取消；编辑弹窗富文本取消实时预览（单 textarea，保存后格式仍保留）；富文本复制按钮 🅡 转入备用（分栏即入口）
+- 验证：最小单元诊断页 5 样例全链路无损 + 真实 Word 复制 html（42550 字）全链路——S2 lost[无]、C3a/C3b 无 CSS 属性丢失、真实 Ctrl+V 粘贴回读 4997 字（mso×92 / o:p×5 / xmlns / body 属性全保留）；开关组合实验确认当前输出 = Word 正确还原组合；冒烟 34/34 零回归
+
 ## v0.6.11 (2026-08-16)
 
 ### 细节审查修复批（代码审查 + 隔离实验验证，冒烟 34/34 · WebDAV 19/19 · 自动同步 3/3 · html 字段 10/10）

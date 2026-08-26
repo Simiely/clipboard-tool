@@ -205,8 +205,21 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 - 环境边界：**预览 iframe 无剪贴板权限时 execCommand/clipboard 可能失败**——富文本复制请在独立浏览器标签页使用；Word 2405+（2024-05）默认"从其他程序粘贴=合并格式"（微软官方行为变更），可改 文件→选项→高级→剪切复制粘贴→从其他程序粘贴→保留源格式
 - 预防：富文本链路改动后跑 diag.html 第 7 项（execCommand 复制原始 Word html → 读回含 xmlns 与 inline style）验证；复制类问题先确认粘贴目标（WorkBuddy 输入框/记事本=纯文本，必无格式）
 
+### 问题：富文本复制到 Word 仍"只还原一部分"——CSSOM 剥私有属性 + body 属性丢失（v0.6.12 / 2026-08-26 最小单元链路诊断定位）
+
+**TL;DR**：上一轮（v0.6.9）解决的是「style 块被剥 + 无 xmlns 识别」；这轮暴露两处**静默丢属性**：①`normalizeRichHtml` 用 CSSOM `rule.style.cssText` 收集 style 块规则——**CSSOM 只序列化浏览器认识的属性**，`tab-interval/text-justify-trim/mso-*` 全被丢弃、`word-wrap` 被规范化为 `overflow-wrap`；②Word 文档级设置（`tab-interval:21.0pt;word-wrap:break-word;text-justify-trim:punctuation`）写在 **`<body>` 标签**上，而旧实现返回 `doc.body.innerHTML`——**body 自身属性不在 innerHTML 里**。两处叠加 → 基础格式（标准 CSS 内联成功）在、mso 细节格式缺 = "只还原一部分"。
+
+- 现象：Word 复制 → 工具存入 → 复制 → Word 粘贴，基础格式（字号/颜色/加粗）还原但 tab 制表位/文档级设置缺失；诊断页 C4（浏览器渲染）效果正确
+- 根因链：`rule.style.cssText` 过 CSSOM → 私有属性丢（实测 `tab-interval:36pt;word-wrap:break-word;text-justify-trim:punctuation;mso-fareast-font-family:宋体;color:red` 只回 `overflow-wrap: break-word; color: red`）；`doc.body.innerHTML` 不含 body 属性
+- 排查工具：`.verify/rich-chain-diag.html`（8190 静态服务）——6 步链路每步统计 style 块/内联属性/CSS 属性集合前后对比 + 真实剪贴板写读/粘贴回读；**注意 `clipboard.read()` 返回剥壳片段（无 body 壳），body 属性缺失是 read() 形式所致、非 CF_HTML 缺失**——验证 CF_HTML 用真实 Ctrl+V 粘贴回读（paste 事件 getData）或 copy 事件内 setData 回读
+- 解决：`normalizeRichHtml` ①style 块改 `st.textContent` 正则字符串级解析（声明原样保留，跳过 `@` 规则）②返回 `<body 全部属性>innerHTML</body>`（遍历 `body.attributes`）③双保险——body style 内联到段落元素（p/div/h1-h6/li），因 CF_HTML 规范（MS Learn aa767917）粘贴应用主要解析 StartFragment/EndFragment 之间的 Fragment，body 属性在 Fragment 外的 context 里；`buildWordDoc` 兼容 `<body attrs>…</body>` 片段（属性并入外层 body，避免嵌套）
+- 验证：真实 Word 复制 html（42550 字）全链路——S2 lost[无]、C3a/C3b 无 CSS 属性丢失、真实 Ctrl+V 粘贴回读 4997 字（mso×92/o:p×5/xmlns/body 属性全保留）；开关组合实验（诊断页「还原开关实验台」）确认「不勾 head XML + 其余全开」= 当前输出 = Word 正确还原组合
+- 边界：旧条目（修复前存入）html 字段仍是残缺数据，需**重新存入**才走新逻辑；Word 对 HTML 导入的 CSS 支持有清单边界（MS Learn aa338201：CORE/EXT/FULL 必还原，mso-* 私有仅 Word 来源路径生效）
+- 预防：改 `normalizeRichHtml`/`buildWordDoc` 后跑 `rich-chain-diag.html` 全链路 + 真实粘贴回读；断言检查「mso 属性数」「body 属性存在」
+
 ## 开发记录
 
+- 2026-08-26（v0.6.12）：富文本复制链路修复批——S2 内联化弃用 CSSOM cssText 改字符串级（保 Word 私有属性）/ body 标签属性保留 + buildWordDoc 兼容 body 片段 / body 样式双保险内联段落元素（CF_HTML Fragment）/ 卡片富文本回归左右分栏 + 取消渲染预览与编辑实时预览；最小单元链路诊断页（rich-chain-diag.html）定位
 - 2026-08-16（v0.6.11）：细节审查修复批——归档去重防膨胀（rollToArchive 按 id 去重，实测修复 300→600 翻倍）/ verifyPassword 损坏数据不崩溃（hex+长度校验）/ 导入非 UUID id 重生成 / 富文本编辑 html 同步（textToHtml 重建）/ 登录限流表真修复（lastFailAt 窗口回收，P1-3 假修复）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持
 - 2026-08-16（v0.6.9）：富文本复制链路定稿——normalizeRichHtml/buildWordDoc/execCommandRich 三函数统一，删除全部历史缠绕函数；隔离诊断页 diag.html 实测定位
 - 2026-08-16（v0.6.8）：富文本链路重构 + 场景走查报告（docs/walkthrough/）+ 诊断页
