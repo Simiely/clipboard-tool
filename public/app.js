@@ -1579,8 +1579,19 @@ function openEditModal(c, dup = false) {
   renderTagPicker(tagWrap, editTagsSel, state.tags, (s) => { editTagsSel.length = 0; editTagsSel.push(...s); });
   sec2.append(tagWrap);
   modal.append(sec2);
-  // ===== 保存 / 取消 =====
+  // ===== 保存 / 归档 / 取消 =====
   const actions = el("div", "paste-actions");
+  // v0.6.13：普通卡片编辑可「归档」（活跃区移入归档区；归档参与 WebDAV 同步、可「含归档」查看）
+  if (!c.archived) {
+    const archBtn = el("button", "btn ghost", "归档");
+    archBtn.title = "移入归档区——「含归档」可查看；归档条目不能直接恢复，用不到可删除";
+    archBtn.onclick = guard(archBtn, async () => {
+      if (!await askConfirmP("将该条目移入归档？归档后可「含归档」查看；归档条目不能直接恢复。", "归档")) return;
+      const r = await api("/api/clips/" + c.id + "/archive", { method: "POST" }).catch((e) => { errToast(e.message); return null; });
+      if (r) { m.remove(); flash("已归档"); refreshList(); }
+    });
+    actions.append(archBtn);
+  }
   const ok = el("button", "btn primary", "保存");
   const cancel = el("button", "btn btn-close", "取消");
   actions.append(ok, cancel);
