@@ -219,6 +219,7 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 
 ## 开发记录
 
+- 2026-08-26（v0.6.13 架构微调）：`mergeSnapshots` 纯函数化确认（无副作用已导出）+ 单元测试 `scripts/test-merge-snapshot.mjs`（17 断言：双端取新/墓碑裁决/删后又编辑保留/墓碑取最新/远端 null/归档标记/空快照容错）；新增 `docs/main-flow.md` 主线 SSOT（三视角方法论的主线视角，AGENTS 约定区挂引用）——前端拆 module **有意不做**：经典 script 无法 import module export，全量 module 化/命名空间化成本>收益（已有 playwright 回归覆盖纯函数可单测的边际收益），超 2500 行或出现耦合症状再评估
 - 2026-08-26（v0.6.13）：WebDAV 归档完整备份（快照=活跃∪归档，归档带 archived 标记；拉回分拣写回先 saveArchive 后 saveClips）+ 归档条目可删除（deleteArchivedClip + 墓碑传播）/ 编辑弹窗「归档」按钮（archiveClip）+ 归档可恢复（unarchiveClip，updatedAt 刷新防滚动）/ 文件实体目录修复（syncFileEntities 先 MKCOL files/<uid>，严格服务器 PUT 到不存在目录 409）/ 修改用户名入口（renameUser，同步按 userId 不受影响）/ 一键无饱和度配色（RGB 三元组变量 + html.mono 覆盖全灰）/ WebDAV 地址留空默认局域网 / 同步文案简化 / UI 背景调深（--elev #1F1F1F）+ 编辑弹窗标签区间距 + 图片预览触发区收窄
 - 2026-08-26（v0.6.12）：富文本复制链路修复批——S2 内联化弃用 CSSOM cssText 改字符串级（保 Word 私有属性）/ body 标签属性保留 + buildWordDoc 兼容 body 片段 / body 样式双保险内联段落元素（CF_HTML Fragment）/ 卡片富文本回归左右分栏 + 取消渲染预览与编辑实时预览；最小单元链路诊断页（rich-chain-diag.html）定位
 - 2026-08-16（v0.6.11）：细节审查修复批——归档去重防膨胀（rollToArchive 按 id 去重，实测修复 300→600 翻倍）/ verifyPassword 损坏数据不崩溃（hex+长度校验）/ 导入非 UUID id 重生成 / 富文本编辑 html 同步（textToHtml 重建）/ 登录限流表真修复（lastFailAt 窗口回收，P1-3 假修复）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持
