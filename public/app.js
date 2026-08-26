@@ -512,6 +512,15 @@ function renderMain() {
   tb.append(el("span", "t-logo", "📋"), el("h1", "", "剪贴板"));
   const who = el("div", "who");
   const dot = el("span", "dot"); dot.style.background = state.current.color;
+  // v0.6.13：一键切换无饱和度配色（localStorage 记忆，html.mono class 驱动 CSS 变量灰化）
+  const monoBtn = el("button", "btn sm ghost", "◐");
+  monoBtn.title = document.documentElement.classList.contains("mono") ? "当前：无饱和度配色 · 点击恢复彩色" : "切换为无饱和度（灰度）配色";
+  monoBtn.onclick = () => {
+    const on = document.documentElement.classList.toggle("mono");
+    LS.set("mono", on ? "1" : "");
+    monoBtn.title = on ? "当前：无饱和度配色 · 点击恢复彩色" : "切换为无饱和度（灰度）配色";
+    flash(on ? "已切换为无饱和度配色" : "已恢复彩色配色");
+  };
   const pwBtn = el("button", "btn sm ghost", "密码");
   const dataBtn = el("button", "btn sm ghost", "数据管理");
   const logoutBtn = el("button", "btn sm ghost", "退出");
@@ -524,7 +533,7 @@ function renderMain() {
     LS.del("cur"); state.current = null; userEditMode = false;
     await loadUsers(); render();
   });
-  who.append(dot, el("span", "", state.current.name), pwBtn, dataBtn, logoutBtn);
+  who.append(dot, el("span", "", state.current.name), monoBtn, pwBtn, dataBtn, logoutBtn);
   tb.append(who); v.append(tb);
 
   // 工具条（v0.6.4 双行：行1 搜索+存入 / 行2 类型+标签+操作）
@@ -1884,6 +1893,7 @@ document.addEventListener("keydown", (e) => {
 });
 async function boot() {
   state.cols = LS.get("cols", "auto") || "auto"; // 恢复列数偏好
+  if (LS.get("mono")) document.documentElement.classList.add("mono"); // v0.6.13：恢复无饱和度配色记忆
   // 用户选择页：点击空白处退出编辑模式（v0.3.1；#view 常驻，事件委托只绑一次）
   $("#view").addEventListener("click", (e) => {
     if (!userEditMode) return;                       // 非编辑模式忽略
