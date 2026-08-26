@@ -109,21 +109,24 @@ function copyText(text) {
 // ---------- 富文本复制（v0.6.9 重构定稿：数据流统一——存入 normalize / 复制 buildWordDoc + execCommand） ----------
 /** 统一标准化（存入时）：DOMParser 解析 → <style> 块规则内联到元素 → 移除 style 块 → 干净内联片段。
  *  浏览器写剪贴板强制剥 style 块只留 inline style（Chromium 122+），存入前内联化，复制时格式才完整。
- *  纯函数，失败回退原 html。 */
+ *  纯函数，失败回退原 html。
+ *  v0.6.12 修复：style 块规则改用原始文本 textContent 正则解析——CSSOM 的 rule.style.cssText
+ *  只序列化浏览器认识的属性，会把 Word 私有属性（tab-interval / text-justify-trim / mso-* 等）
+ *  丢弃、把 word-wrap 规范化成 overflow-wrap，导致 Word/WPS 粘贴还原不全（最小单元诊断页定位）。 */
 function normalizeRichHtml(html) {
   try {
     const doc = new DOMParser().parseFromString(html, "text/html");
-    const sheets = [];
-    doc.querySelectorAll("style").forEach(st => { try { if (st.sheet) sheets.push(st.sheet); } catch {} });
-    if (sheets.length) {
-      const rules = [];
-      for (const sheet of sheets) {
-        try {
-          for (const rule of sheet.cssRules) {
-            if (rule.type === CSSRule.STYLE_RULE && rule.selectorText) rules.push([rule.selectorText, rule.style.cssText]);
-          }
-        } catch {}
+    const rules = [];
+    for (const st of doc.querySelectorAll("style")) {
+      const text = st.textContent || "";
+      for (const m of text.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+        const sel = m[1].trim();
+        if (!sel || sel.startsWith("@")) continue; // 跳过 @font-face/@media/@page 等
+        const decl = m[2].trim();
+        if (decl) rules.push([sel, decl]);
       }
+    }
+    if (rules.length) {
       for (const el of doc.querySelectorAll("*")) {
         const merged = rules.filter(([sel]) => { try { return el.matches(sel); } catch { return false; } }).map(([, css]) => css).join(";");
         if (merged) {
@@ -133,7 +136,20 @@ function normalizeRichHtml(html) {
       }
     }
     doc.querySelectorAll("style").forEach(s => s.remove());
-    return doc.body.innerHTML;
+    // v0.6.12:body 自身属性(Word 文档级设置,如 tab-interval/word-wrap/text-justify-trim/lang)
+    // 不在 innerHTML 里,必须保留在 <body> 标签上,否则 Word/WPS 粘贴还原丢文档级格式
+    const attrs = [...doc.body.attributes].map(a => a.name + '="' + String(a.value).replace(/"/g, "&quot;") + '"').join(" ");
+    // 双保险(CF_HTML 规范:粘贴应用主要解析 StartFragment/EndFragment 之间的 Fragment,body 属性在 Fragment 外
+    // 的 context 里,部分应用可能不读)——把 body 的 style 也内联到段落元素上,保证 Fragment 内也有文档级属性
+    const bodyStyle = doc.body.getAttribute("style");
+    if (bodyStyle) {
+      const paraSel = "p,div,h1,h2,h3,h4,h5,h6,li";
+      for (const el of doc.body.querySelectorAll(paraSel)) {
+        const prev = el.getAttribute("style");
+        el.setAttribute("style", bodyStyle + (prev ? ";" + prev : ""));
+      }
+    }
+    return (attrs ? "<body " + attrs + ">" : "<body>") + doc.body.innerHTML + "</body>";
   } catch { return html; }
 }
 /** 复制包装：片段 → 带 Word 命名空间的完整文档（Word 识别"来自 Word"靠 xmlns:o/w/m，见 Microsoft roosterjs
@@ -142,6 +158,11 @@ function buildWordDoc(html) {
   const s = String(html || "").trim();
   if (!s) return "";
   if (/xmlns:w\s*=/.test(s) || /<html[\s>]/i.test(s)) return s; // 已是 Word/完整文档
+  // v0.6.12:body 片段(normalizeRichHtml 保留的文档级属性 tab-interval 等)→ 属性并入外层 body,避免嵌套
+  const m = s.match(/^<body([^>]*)>([\s\S]*)<\/body>$/i);
+  if (m) {
+    return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml"><head><meta charset="utf-8"></head><body' + m[1] + '><!--StartFragment -->' + m[2] + '<!--EndFragment --></body></html>';
+  }
   return '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns:m="http://schemas.microsoft.com/office/2004/12/omml"><head><meta charset="utf-8"></head><body><!--StartFragment -->' + s + '<!--EndFragment --></body></html>';
 }
 /** execCommand 复制（holder 纯文本承载选区，setData 注入原始完整文档——不解析 html，避免 DOM 剥 xmlns/style） */
@@ -761,7 +782,7 @@ function makeJsonBtn(c) {
   return btn;
 }
 
-/** 富文本复制按钮（v0.6.5 起废弃：入口已迁入内容区 makeRichSplit 右栏，保留函数防回滚） */
+/** 富文本复制按钮（v0.6.5 起废弃、v0.6.12 曾临时启用又停用：入口以内容区左右分栏为准，保留函数防回滚） */
 function makeRichBtn(c) {
   const btn = el("button", "btn sm ghost", "🅡");
   btn.title = "复制富文本（粘贴到 Word/飞书保留格式）";
@@ -784,20 +805,23 @@ function makeRichBtn(c) {
   };
   return btn;
 }
-/** 富文本分栏预览（v0.6.5 方案 18 v4.1）：7:3 左右栏，天然可点、无实心按钮 */
+/** 富文本分栏（v0.6.12 改版：取消格式渲染预览——左右都显示文本，顶部一行提示区分；左栏复制纯文本、右栏复制富文本） */
 function makeRichSplit(c) {
   const split = el("div", "rich-split");
-  // 左栏：普通文本（纯文本样式，点击复制纯文本）
+  // 顶部提示行：一边普通文本 / 一边富文本
+  const tip = el("div", "rich-tip");
+  tip.append(el("span", "t", "T 普通文本"), el("span", "f", "✦ 富文本"));
+  split.append(tip);
+  // 左右两栏容器
+  const cols = el("div", "rich-cols");
+  // 左栏：普通文本（点击复制纯文本）
   const left = el("div", "half plain");
   left.title = "单击复制纯文本";
-  const labL = el("div", "lab"); labL.append(el("b", "", "T"), el("span", "", "纯文本"));
-  const plainPv = el("div", "plain-pv", c.content || "");
-  left.append(labL, plainPv);
+  left.append(el("div", "plain-pv", c.content || ""));
   left.onclick = (e) => {
     e.stopPropagation();
-    // 修复：guard 返回事件处理器，必须 () 调用（此前漏括号→复制逻辑从未执行）
     guard(left, async () => {
-      suppressAutoPasteUntil = Date.now() + 800;
+      suppressAutoPasteUntil = Date.now() + 800; // 来源抑制：本次复制不触发自动弹窗
       const ok = await copyText(c.content || "");
       if (ok) {
         flash("纯文本已复制", e.clientX, e.clientY);
@@ -805,18 +829,14 @@ function makeRichSplit(c) {
       } else errToast("复制失败，请手动选择复制");
     })();
   };
-  // 右栏：富文本（白名单安全渲染 c.html 的格式效果，点击复制带格式）
+  // 右栏：富文本（显示文本，点击复制带格式；不再渲染格式预览）
   const right = el("div", "half rich");
   right.title = "单击复制带格式（粘贴到 Word/飞书保留样式）";
-  const labR = el("div", "lab"); labR.append(el("b", "", "✦"), el("span", "", "格式"));
-  const richPv = el("div", "rich-pv");
-  richPv.append(...richPreviewNodes(c.html || "")); // v0.6.10：预览保留内联样式白名单——Word 字体/颜色真实显示
-  right.append(labR, richPv);
+  right.append(el("div", "plain-pv", c.content || ""));
   right.onclick = (e) => {
     e.stopPropagation();
-    // 修复：guard 返回事件处理器，必须 () 调用（此前漏括号→复制逻辑从未执行）
     guard(right, async () => {
-      suppressAutoPasteUntil = Date.now() + 800; // 来源抑制：本次复制不触发自动弹窗
+      suppressAutoPasteUntil = Date.now() + 800;
       const ok = await copyRich(c.html || "", c.content || "");
       if (ok) {
         flash("富文本已复制（含格式）", e.clientX, e.clientY);
@@ -824,49 +844,9 @@ function makeRichSplit(c) {
       } else errToast("富文本复制失败——请用独立浏览器标签页打开后重试（预览面板剪贴板权限受限）");
     })();
   };
-  split.append(left, right);
+  cols.append(left, right);
+  split.append(cols);
   return split;
-}
-
-/**
- * 富文本预览渲染（v0.6.10：效果更准确——先 normalizeRichHtml 内联化 style 块，再白名单标签 +
- * 保留内联样式白名单子集（font-family/size/weight/color/背景/对齐/行高/边距等基础视觉属性，
- * 禁 url()/expression/javascript 防注入）。Word mso 内容的字体/颜色真实显示，md 内容不受影响。
- */
-const PREVIEW_STYLE_ALLOW = ["font-family", "font-size", "font-weight", "font-style", "text-decoration", "color", "background", "background-color", "text-align", "line-height", "letter-spacing", "margin", "padding", "list-style-type"];
-function richPreviewNodes(html) {
-  const doc = new DOMParser().parseFromString(normalizeRichHtml(html), "text/html"); // 先内联化，旧数据 style 块也生效
-  const ALLOW = new Set(["B", "STRONG", "EM", "I", "U", "H1", "H2", "H3", "H4", "P", "BR", "UL", "OL", "LI", "A", "SPAN", "DIV"]);
-  const build = (node) => {
-    if (node.nodeType === 3) return document.createTextNode(node.nodeValue);
-    if (node.nodeType !== 1) return null;
-    const tag = node.tagName.toUpperCase();
-    if (!ALLOW.has(tag)) { // 非白名单标签：丢弃外壳，保留文本子内容
-      const frag = document.createDocumentFragment();
-      for (const ch of node.childNodes) { const r = build(ch); if (r) frag.append(r); }
-      return frag;
-    }
-    const elm = document.createElement(tag.toLowerCase());
-    // 保留内联样式白名单子集（安全：仅基础视觉属性，禁 url()/expression）
-    const st = node.getAttribute("style") || "";
-    if (st) {
-      const safe = st.split(";").map(s => s.trim()).filter(s => {
-        const prop = s.split(":")[0]?.trim().toLowerCase();
-        return prop && PREVIEW_STYLE_ALLOW.includes(prop) && !/url\(|expression|javascript/i.test(s);
-      }).join(";");
-      if (safe) elm.setAttribute("style", safe);
-    }
-    // 链接保留安全协议 href
-    if (tag === "A") {
-      const href = node.getAttribute("href");
-      if (href && /^(https?:|mailto:)/i.test(href)) elm.setAttribute("href", href);
-    }
-    for (const ch of node.childNodes) { const r = build(ch); if (r) elm.append(r); }
-    return elm;
-  };
-  const nodes = [];
-  for (const ch of doc.body.childNodes) { const r = build(ch); if (r) nodes.push(r); }
-  return nodes;
 }
 
 /** 复制成功后本地 +1 计数（与 handleCardClick 的计数逻辑共用） */
@@ -946,7 +926,7 @@ function clipCard(c) {
   if (c.type === "file") footOps.append(makeDownloadBtn(c));
   if (!c.archived) footOps.append(makeEditBtn(c));
   if (c.type === "text" && looksLikeJson(c.content)) footOps.append(makeJsonBtn(c));
-  // v0.6.5：富文本复制入口在内容区左右分栏；链接打开为内容区金色主按钮——ops 不重复添加
+  // v0.6.12：富文本复制入口在内容区左右分栏（左纯文本/右富文本）；链接打开为内容区金色主按钮——ops 不重复添加
   if (footOps.children.length) foot.append(footOps);
   card.append(row1, makeCardBody(c), foot);
 
@@ -968,7 +948,7 @@ function hostOf(url) {
 
 /** 卡片内容区（方案18 各类型专属） */
 function makeCardBody(c) {
-  // 富文本：左右分栏（v0.6.5 已落地）
+  // 富文本：左右分栏（v0.6.12：去格式渲染预览，保留双栏复制入口 + 顶部提示行）
   if (c.type === "text" && c.html) return makeRichSplit(c);
   // JSON：代码窗（金色键名/绿色字符串，等宽缩进）
   if (c.type === "text" && looksLikeJson(c.content)) return makeJsonPreview(c);
@@ -1482,19 +1462,7 @@ async function autoFillPasteModal(ta, typeBadge, pick, auto, updateBadge) {
 
 // ---------- 编辑弹窗 ----------
 // v0.4.2：第二参数 dup=true 时标题显示「已有相同内容」常驻标记（由重复检测触发，替代一闪而过的 toast）
-// v0.6.6 方案32 v2：五类型差异化——文本/链接=textarea，富文本=左编辑右实时预览，图片=缩略图卡，文件=只读图标卡
-/** 富文本实时预览：首行=加粗标题，其余=正文（支持 **粗体** 标记实时渲染；存入/编辑共用） */
-function renderRichPreview(ta, pv) {
-  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const lines = (ta.value || "").split("\n");
-  pv.replaceChildren();
-  if (lines[0]) pv.append(el("div", "pv-h", lines[0]));
-  if (lines.length > 1) {
-    const body = el("div", "pv-b");
-    body.innerHTML = esc(lines.slice(1).join("\n")).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
-    pv.append(body);
-  }
-}
+// v0.6.6 方案32 v2：五类型差异化——文本/链接=textarea，富文本=纯文本编辑（v0.6.12 起取消实时预览），图片=缩略图卡，文件=只读图标卡
 /** 编辑弹窗内删除条目（带确认；图片/文件卡上的 ✕ 用） */
 function confirmDeleteHere(c, modalEl) {
   askConfirm("删除这条内容？", guard({}, async () => {
@@ -1528,18 +1496,11 @@ function openEditModal(c, dup = false) {
   const t1 = el("div", "edit-sec-t"); t1.append(el("span", "n", "1"), el("span", "", c.type === "link" ? "链接" : isImage ? "图片" : c.type === "file" ? "文件" : "内容"));
   let contentInput = null, urlInput = null;
   if (c.type === "text" && c.html) {
-    // 富文本：左编辑 + 右实时预览
-    t1.append(el("span", "hint", "左编辑 · 右实时预览"));
+    // 富文本：纯文本编辑（v0.6.12：取消实时预览——保存后格式仍保留，编辑的是纯文本正文）
+    t1.append(el("span", "hint", "编辑正文，保存后保留原格式"));
     sec1.append(t1);
-    const rs = el("div", "rich-edit");
-    const editWrap = el("div", "re-editor");
     contentInput = el("textarea"); contentInput.value = c.content; contentInput.style.minHeight = "130px";
-    const pv = el("div", "re-pv"); // v0.6.8：改名 re-pv，避免与卡片右栏 .rich-pv 类名冲突
-    renderRichPreview(contentInput, pv);
-    contentInput.addEventListener("input", () => renderRichPreview(contentInput, pv));
-    editWrap.append(contentInput);
-    rs.append(editWrap, pv);
-    sec1.append(rs);
+    sec1.append(contentInput);
   } else if (c.type === "link") {
     // 链接：文本式编辑（与文本一致，v0.6.6）
     t1.append(el("span", "hint", "与文本一致，直接编辑"));
