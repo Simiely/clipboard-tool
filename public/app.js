@@ -1707,11 +1707,23 @@ function openDataModal() {
   });
   zoomRow.append(zoomLbl, zoomStep, zoomSave);
   left.append(zoomRow);
-  // v0.6.13 双名模型：账号名只读（身份键不可改），显示名可改（不影响 WebDAV 寻址/登录）
+  // v0.6.13 双名模型：账号名只读默认（身份键不可随意改，管理员级修改走确认弹窗），显示名可改（不影响 WebDAV 寻址/登录）
   const acctRow = el("div", ""); acctRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:10px";
   const acctLbl = el("span", "", "账号名"); acctLbl.style.cssText = "font-size:11.5px;color:var(--muted);flex:1";
   const acctVal = el("span", "", state.current.accountName || state.current.name); acctVal.style.cssText = "font-size:12.5px;flex:1;text-align:right;color:var(--dim)";
-  acctRow.append(acctLbl, acctVal);
+  const acctBtn = el("button", "dm-btn ghost", "修改"); acctBtn.style.cssText = "flex:0 0 auto;width:auto;padding:8px 14px;margin:0;border-radius:8px";
+  acctBtn.title = "管理员级操作：账号名是身份键（WebDAV 快照/跨设备迁移识别用），改动后下次同步自动迁移远端数据；日常改名请用「显示名」";
+  acctBtn.onclick = guard(acctBtn, async () => {
+    const cur = state.current.accountName || state.current.name;
+    const newName = prompt("修改账号名（身份键，不可随意改）\n\n改动后下次同步会自动把远端数据迁移到新账号名下。\n日常改名请用「显示名」。\n当前账号名: " + cur, cur);
+    if (!newName || newName.trim() === cur) return;
+    const r = await api("/api/users/" + state.current.id + "/account-name", { method: "POST", json: { name: newName } }).catch((e) => errToast(e.message));
+    if (!r) return;
+    state.current.accountName = r.name;
+    flash("账号名已更新，下次同步自动迁移远端快照");
+    m.remove(); render();
+  });
+  acctRow.append(acctLbl, acctVal, acctBtn);
   left.append(acctRow);
   const nameRow = el("div", ""); nameRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:10px";
   const nameLbl = el("span", "", "显示名"); nameLbl.style.cssText = "font-size:11.5px;color:var(--muted);flex:1";
