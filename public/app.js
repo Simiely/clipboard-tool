@@ -806,29 +806,6 @@ function makeJsonBtn(c) {
   return btn;
 }
 
-/** 富文本复制按钮（v0.6.5 起废弃、v0.6.12 曾临时启用又停用：入口以内容区左右分栏为准，保留函数防回滚） */
-function makeRichBtn(c) {
-  const btn = el("button", "btn sm ghost", "🅡");
-  btn.title = "复制富文本（粘贴到 Word/飞书保留格式）";
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    guard(btn, async () => {
-      suppressAutoPasteUntil = Date.now() + 800; // 来源抑制：本次复制不触发自动弹窗
-      const ok = await copyRich(c.html || "", c.content || "");
-      if (ok) {
-        flash("富文本已复制（含格式）", e.clientX, e.clientY);
-        if (c.type !== "file") {
-          api("/api/clips/" + c.id + "/copy", { method: "POST" }).then(() => {
-            c.copyCount = (c.copyCount || 0) + 1;
-            const span = $(".copycnt", e.target.closest(".clip-card"));
-            if (span) span.textContent = "复制 " + c.copyCount + " 次";
-          }).catch(() => {});
-        }
-      } else errToast("富文本复制失败");
-    })();
-  };
-  return btn;
-}
 /** 富文本分栏（v0.6.12 改版：取消格式渲染预览——左右都显示文本，顶部一行提示区分；左栏复制纯文本、右栏复制富文本） */
 function makeRichSplit(c) {
   const split = el("div", "rich-split");

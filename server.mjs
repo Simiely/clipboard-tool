@@ -83,3 +83,14 @@ const server = http.createServer(async (req, res) => {
 server.listen(CONFIG.PORT, "127.0.0.1", () => {
   console.log(`clipboard running on ${CONFIG.PORT} (data: ${path.dirname(CONFIG.usersFile)})`);
 });
+
+// 进程级异常兜底（v0.6.13）：任何未捕获异常/拒绝 → 记录但不退出进程。
+// 路由层已有 try/catch，这里是兜最后一层（异步回调/定时器/未预期错误）。
+// 本工具数据全部落盘 JSON（原子写、无事务态），进程存活比崩溃重启对用户更友好；
+// 若反复崩溃（如磁盘故障），由平台健康检查/重启策略兜底。
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err && err.stack ? err.stack : String(err));
+});
+process.on("unhandledRejection", (err) => {
+  console.error("[unhandledRejection]", err && err.stack ? err.stack : String(err));
+});

@@ -22,7 +22,7 @@
 
 | C-ID | 能力 | 位置 |
 |---|---|---|
-| D-01 | 条目 CRUD(建/读/改/删/清空) | lib/core/clips.js `createClip` L326 / `updateClip` L368 / `deleteClip` L396 / `clearAllClips` L409 / `getClip` L443 |
+| D-01 | 条目 CRUD(建/改/删/清空/归档闭环) | lib/core/clips.js `createClip` L334 / `updateClip` / `deleteClip` L406 / `clearAllClips` / `archiveClip` L440 / `unarchiveClip` L453(注:v0.6.13 已删未使用的 `getClip`/`readFileBuffer`,行号以 main-flow.md 为准) |
 | D-02 | 复制计数 + 星标 | clips.js `bumpCopy` L419 / `togglePin` L431 |
 | D-03 | 列表/搜索/标签过滤(后端 q/tag/archived) | clips.js `listClips` L239 / `listTags` L262 |
 | D-04 | 排序管道(sort→标签归拢→相似归拢) | clips.js `sortClips` L115 / `groupByTags` L211 / `groupSimilar` L131 |
