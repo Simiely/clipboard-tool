@@ -219,6 +219,7 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 
 ## 开发记录
 
+- 2026-08-26（v0.6.13）：WebDAV 归档完整备份（快照=活跃∪归档，归档带 archived 标记；拉回分拣写回先 saveArchive 后 saveClips）+ 归档条目可删除（deleteArchivedClip + 墓碑传播）+ UI 背景调深（--elev #1F1F1F）+ 编辑弹窗标签区间距修复
 - 2026-08-26（v0.6.12）：富文本复制链路修复批——S2 内联化弃用 CSSOM cssText 改字符串级（保 Word 私有属性）/ body 标签属性保留 + buildWordDoc 兼容 body 片段 / body 样式双保险内联段落元素（CF_HTML Fragment）/ 卡片富文本回归左右分栏 + 取消渲染预览与编辑实时预览；最小单元链路诊断页（rich-chain-diag.html）定位
 - 2026-08-16（v0.6.11）：细节审查修复批——归档去重防膨胀（rollToArchive 按 id 去重，实测修复 300→600 翻倍）/ verifyPassword 损坏数据不崩溃（hex+长度校验）/ 导入非 UUID id 重生成 / 富文本编辑 html 同步（textToHtml 重建）/ 登录限流表真修复（lastFailAt 窗口回收，P1-3 假修复）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持
 - 2026-08-16（v0.6.9）：富文本复制链路定稿——normalizeRichHtml/buildWordDoc/execCommandRich 三函数统一，删除全部历史缠绕函数；隔离诊断页 diag.html 实测定位

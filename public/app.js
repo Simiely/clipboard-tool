@@ -914,9 +914,9 @@ function clipCard(c) {
   if (c.pinned) status.append(el("span", "st pin", "★ 置顶"));
   if (c.expireAt) status.append(el("span", "st exp", "⏳ " + expLabel(c.expireAt)));
   if (c.archived) status.append(el("span", "st arch", "归档"));
-  // 右上角操作组：只放 ✕ 删除（☆ 收藏/置顶回到底部）
+  // 右上角操作组：✕ 删除（v0.6.13：归档也可手动删除——WebDAV 完整备份后清理用不到的归档）
   const topOps = el("div", "ops top");
-  if (!c.archived) topOps.append(makeDeleteBtn(c));
+  topOps.append(makeDeleteBtn(c));
   row1.append(typeBadge, title, status, topOps);
   // 底部 meta 行：信息 + 其余操作（☆ 收藏 / ✎ 编辑 / ↓ 下载 / {} JSON）
   const foot = el("div", "foot");
