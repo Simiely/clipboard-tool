@@ -1708,6 +1708,7 @@ function openDataModal() {
     const r = await api("/api/users/" + state.current.id + "/name", { method: "POST", json: { name: nameInput.value } }).catch((e) => errToast(e.message));
     if (!r) return;
     state.current.name = r.name; // 同步本地状态（顶栏 who / 头部展示用）
+    LS.set("cur", state.current); // v0.6.13：写回登录缓存——否则强制刷新用旧缓存恢复登录，名字回落
     flash("用户名已更新");
     m.remove(); render();
   });
@@ -1933,6 +1934,15 @@ async function boot() {
       state.clips = r.clips;
       const t = await api("/api/tags", { token: saved.token });
       state.tags = t.tags;
+      // v0.6.13：token 有效 → 拉最新用户信息覆盖缓存（改名后强制刷新不回落旧值；失败退缓存不阻塞登录）
+      try {
+        const me = await api("/api/users/me", { token: saved.token });
+        if (me && me.user) {
+          state.current.name = me.user.name;
+          state.current.color = me.user.color;
+          LS.set("cur", state.current);
+        }
+      } catch {}
     } catch { LS.del("cur"); }
   }
   if (!state.current) {
