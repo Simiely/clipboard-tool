@@ -441,7 +441,7 @@ function openUserModal() {
   const modal = el("div", "modal");
   modal.append(el("h3", "", "新建用户"));
   // v0.6.13 双名模型：账号名=身份键（创建后不可改，登录/WebDAV 迁移识别用）；显示名=展示名（可随时改）
-  const acct = el("input"); acct.placeholder = "账号名（创建后不可修改，跨设备迁移用）";
+  const acct = el("input"); acct.placeholder = "账号名（仅英文数字，创建后不可修改，跨设备迁移用）";
   const disp = el("input"); disp.placeholder = "显示名（可留空=账号名，可随时修改）";
   const pass = el("input"); pass.type = "password"; pass.placeholder = "密码（可留空）";
   modal.append(el("label", "", "账号名"), acct, el("label", "", "显示名"), disp, el("label", "", "密码（可选）"), pass);
@@ -1715,7 +1715,7 @@ function openDataModal() {
   acctBtn.title = "管理员级操作：账号名是身份键（WebDAV 快照/跨设备迁移识别用），改动后下次同步自动迁移远端数据；日常改名请用「显示名」";
   acctBtn.onclick = guard(acctBtn, async () => {
     const cur = state.current.accountName || state.current.name;
-    const newName = prompt("修改账号名（身份键，不可随意改）\n\n改动后下次同步会自动把远端数据迁移到新账号名下。\n日常改名请用「显示名」。\n当前账号名: " + cur, cur);
+    const newName = prompt("修改账号名（身份键，仅限英文和数字，不可随意改）\n\n改动后下次同步会自动把远端数据迁移到新账号名下。\n日常改名请用「显示名」。\n当前账号名: " + cur, cur);
     if (!newName || newName.trim() === cur) return;
     const r = await api("/api/users/" + state.current.id + "/account-name", { method: "POST", json: { name: newName } }).catch((e) => errToast(e.message));
     if (!r) return;

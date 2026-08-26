@@ -30,7 +30,7 @@ ok("无 token 访问返回 401", noAuth.status === 401);
 // 3. 新建用户（无密码）
 // 幂等性：用户名带随机后缀，重复运行不重名（否则固定名 409 → 后续 data.user 为 undefined 崩）
 const RN = Math.floor(Math.random() * 1e6);
-const NM1 = "小明" + RN, NM2 = "小红" + RN;
+const NM1 = "u" + RN + "a", NM2 = "u" + RN + "b";
 const u1 = await req("POST", "/api/users", { json: { name: NM1 } });
 ok("新建用户(无密码)", u1.status === 201 && u1.data.user.name === NM1 && u1.data.token);
 const t1 = u1.data.token;
@@ -131,7 +131,7 @@ ok("用户已从列表移除", !afterDel.data.users.some(u => u.id === uid1));
 ok("删除后旧 token 立即失效", (await req("GET", "/api/clips", { token: t1 })).status === 401);
 
 // 21. 回归：删除用户后旧 token 必须失效（走查 P-10：曾可重建幽灵数据）
-const u3 = await req("POST", "/api/users", { json: { name: "走查用户" } });
+const u3 = await req("POST", "/api/users", { json: { name: "walkthru" } });
 const t3 = u3.data.token, uid3 = u3.data.user.id;
 await req("POST", "/api/clips", { token: t3, json: { type: "text", content: "删前数据" } });
 await req("DELETE", `/api/users/${uid3}`, { token: t3 });
@@ -141,7 +141,7 @@ const ghostRead = await req("GET", "/api/clips", { token: t3 });
 ok("删用户后旧 token 读列表被拒", ghostRead.status === 401);
 
 // 22. 改密后其他会话失效、当前会话保留（第二轮 R-4）
-const u4 = await req("POST", "/api/users", { json: { name: "改密用户", password: "oldpass" } });
+const u4 = await req("POST", "/api/users", { json: { name: "chgpass", password: "oldpass" } });
 const tA = u4.data.token, uid4 = u4.data.user.id;
 const loginB = await req("POST", "/api/session", { json: { id: uid4, password: "oldpass" } });
 const tB = loginB.data.token;
