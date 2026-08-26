@@ -568,7 +568,7 @@ function renderMain() {
   // 右侧操作
   const ops = el("div", "ops");
   // 含归档开关：归档条目是只读历史（滚动归档 v0.2.0），勾选才从后端拉取合并
-  const archLbl = el("label", "opt"); archLbl.title = "归档只存本地，不参与 WebDAV 同步";
+  const archLbl = el("label", "opt"); archLbl.title = "含归档：查看历史归档条目（归档参与 WebDAV 同步）";
   const archChk = el("input"); archChk.type = "checkbox"; archChk.checked = !!state.filter.archived;
   // v0.4.5：补 guard 防连点（逻辑核验 P2-1——快速切换勾选避免并发加载竞态）
   archChk.onchange = guard(archChk, async () => {
@@ -1778,8 +1778,8 @@ function openDataModal() {
 // 参考 edge-multi-account-cookie 设计：墓碑同步/清空不传播/双向取最新
 // v0.6.5：适配方案25 双栏工作台（渲染进左栏容器，使用 dm- 类）
 function renderWebdavSection(container) {
-  // P1-2：归档不参与同步的显式说明（归档只存本地，同步快照只含活跃区）
-  container.append(el("div", "dm-note", "同步范围：活跃区条目（归档只存本地，不参与 WebDAV 同步）"));
+  // v0.6.13：同步全部数据（含归档），完整备份——不再需要复杂的范围说明
+  container.append(el("div", "dm-note", "同步全部数据（含归档），WebDAV 完整备份"));
   const davUrl = el("input"); davUrl.placeholder = "服务器目录地址，如 https://dav.example.com/clipboard";
   const davUser = el("input"); davUser.placeholder = "用户名";
   const davPass = el("input"); davPass.type = "password"; davPass.placeholder = "密码（留空复用已保存）";
