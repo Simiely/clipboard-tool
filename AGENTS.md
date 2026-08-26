@@ -37,6 +37,7 @@
 - 所有资源 id（userId/clipId/fileId）一律 UUID 白名单校验（`assertId` + `ID_RE`），防路径穿越
 - 文件上传黑名单只拒可执行/脚本类（config.js BLOCKED_MIME/BLOCKED_EXT），下载**强制 attachment** + nosniff（防执行）——不要改成 inline
 - WebDAV 同步语义（与 edge-multi-account-cookie 对齐）：单独删除 → 记墓碑传播删除；全部清空 → 不记墓碑（= 想从网上同步）；双向按 updatedAt 取最新
+- **双名模型（v0.6.13）**：`accountName` 账号名不可变（身份键：WebDAV 快照/实体寻址、跨设备识别）与 `displayName` 显示名可变（仅展示）分离——**改显示名绝不影响任何路径/寻址**；设备迁移 = 新部署建相同账号名 → 同步拉回；新建用户必填账号名、显示名可留空（默认=账号名）；旧数据兼容（`u.accountName || u.name` / `u.displayName || u.name`，勿改读取归一逻辑）
 - **滚动归档**（v0.2.0）：`saveClips` 内部自动滚动超限条目进 `<uid>.archive.json`（零丢失）；**v0.6.13 起同步快照 = 活跃区 ∪ 归档区**（归档条目带 `archived` 标记，WebDAV 完整备份）；拉回分拣写回**顺序关键：先 `saveArchive`（归档组替换）再 `saveClips`（活跃组，内部滚动会追加进归档）**——反了会覆盖刚滚出的条目；归档条目前端只读（archived 标记）+ ✕ 可删除（deleteArchivedClip，墓碑传播远端）；清空/删用户/过期清扫都要覆盖归档文件
 - **Windows 沙箱删除**（v0.3.1）：`rmForce` 的 unlinkSync/rmdirSync 在 safe-delete 拦截下"抛错但实际已删"——已容错吞掉；判定删除结果用"文件是否存在"，别用"是否抛错"
 

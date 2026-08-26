@@ -348,9 +348,16 @@ async function renderUserSelect() {
   if (!state.users.length) grid.append(el("div", "empty-state", "还没有用户，点下方新建一个"));
   for (const u of state.users) {
     const card = el("div", "user-card");
-    const av = el("div", "avatar", u.name.slice(0, 1).toUpperCase());
+    const av = el("div", "avatar", (u.name || "?").slice(0, 1).toUpperCase());
     av.style.background = u.color;
-    card.append(av, el("div", "name", u.name), el("div", "cnt", ""));
+    card.append(av, el("div", "name", u.name));
+    // v0.6.13 双名模型：小字显示账号名（身份键——跨设备迁移/同步时填它）
+    if (u.accountName && u.accountName !== u.name) {
+      const acct = el("div", "acct", u.accountName);
+      acct.style.cssText = "font-size:11px;color:var(--muted);margin-top:2px";
+      card.append(acct);
+    }
+    card.append(el("div", "cnt", ""));
     // v0.4.5：补 guard 防连点（逻辑核验 P2-1——连点避免并发创建会话）
     card.onclick = guard(card, () => enterUser(u));
     grid.append(card);
@@ -433,15 +440,17 @@ function openUserModal() {
   const m = el("div", "mask");
   const modal = el("div", "modal");
   modal.append(el("h3", "", "新建用户"));
-  const name = el("input"); name.placeholder = "昵称";
+  // v0.6.13 双名模型：账号名=身份键（创建后不可改，登录/WebDAV 迁移识别用）；显示名=展示名（可随时改）
+  const acct = el("input"); acct.placeholder = "账号名（创建后不可修改，跨设备迁移用）";
+  const disp = el("input"); disp.placeholder = "显示名（可留空=账号名，可随时修改）";
   const pass = el("input"); pass.type = "password"; pass.placeholder = "密码（可留空）";
-  modal.append(el("label", "", "昵称"), name, el("label", "", "密码（可选）"), pass);
+  modal.append(el("label", "", "账号名"), acct, el("label", "", "显示名"), disp, el("label", "", "密码（可选）"), pass);
   const row = el("div", "form-row");
   const ok = el("button", "btn primary", "创建并进入"); ok.style.flex = "1";
   const cancel = el("button", "btn ghost", "取消");
   row.append(ok, cancel); modal.append(row);
   ok.onclick = guard(ok, async () => {
-    const r = await api("/api/users", { method: "POST", json: { name: name.value, password: pass.value } }).catch(e => { errToast(e.message); return null; });
+    const r = await api("/api/users", { method: "POST", json: { name: acct.value, displayName: disp.value, password: pass.value } }).catch(e => { errToast(e.message); return null; });
     if (!r) return;
     state.current = { ...r.user, token: r.token };
     LS.set("cur", { id: r.user.id, token: r.token }); // v0.6.13 治本：仅存会话凭据——展示信息（name/color）以后端为唯一权威源，恢复登录时拉取
@@ -449,8 +458,8 @@ function openUserModal() {
     m.remove(); await loadClips(); render();
   });
   cancel.onclick = () => m.remove();
-  name.onkeydown = e => { if (e.key === "Enter") ok.click(); };
-  m.append(modal); root.append(m); name.focus();
+  acct.onkeydown = e => { if (e.key === "Enter") ok.click(); };
+  m.append(modal); root.append(m); acct.focus();
 }
 
 // ---------- 数据加载 ----------
@@ -1698,9 +1707,14 @@ function openDataModal() {
   });
   zoomRow.append(zoomLbl, zoomStep, zoomSave);
   left.append(zoomRow);
-  // v0.6.13：修改用户名（同名校验后端 409；改名后重建界面）
+  // v0.6.13 双名模型：账号名只读（身份键不可改），显示名可改（不影响 WebDAV 寻址/登录）
+  const acctRow = el("div", ""); acctRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:10px";
+  const acctLbl = el("span", "", "账号名"); acctLbl.style.cssText = "font-size:11.5px;color:var(--muted);flex:1";
+  const acctVal = el("span", "", state.current.accountName || state.current.name); acctVal.style.cssText = "font-size:12.5px;flex:1;text-align:right;color:var(--dim)";
+  acctRow.append(acctLbl, acctVal);
+  left.append(acctRow);
   const nameRow = el("div", ""); nameRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:10px";
-  const nameLbl = el("span", "", "用户名"); nameLbl.style.cssText = "font-size:11.5px;color:var(--muted);flex:1";
+  const nameLbl = el("span", "", "显示名"); nameLbl.style.cssText = "font-size:11.5px;color:var(--muted);flex:1";
   const nameInput = el("input"); nameInput.value = state.current.name; nameInput.maxLength = 20;
   nameInput.style.cssText = "width:130px;margin:0;flex-shrink:0";
   const nameSave = el("button", "dm-btn ghost", "保存"); nameSave.style.cssText = "flex:0 0 auto;width:auto;padding:8px 14px;margin:0;border-radius:8px";
@@ -1708,7 +1722,7 @@ function openDataModal() {
     const r = await api("/api/users/" + state.current.id + "/name", { method: "POST", json: { name: nameInput.value } }).catch((e) => errToast(e.message));
     if (!r) return;
     state.current.name = r.name; // 同步本地状态（顶栏 who / 头部展示用）——后端已改，刷新时 /api/users/me 亦取最新，无需写缓存
-    flash("用户名已更新");
+    flash("显示名已更新");
     m.remove(); render();
   });
   nameRow.append(nameLbl, nameInput, nameSave);
@@ -1938,7 +1952,7 @@ async function boot() {
       state.tags = t.tags;
       try {
         const me = await api("/api/users/me", { token: saved.token });
-        if (me && me.user) { state.current.name = me.user.name; state.current.color = me.user.color; }
+        if (me && me.user) { state.current.name = me.user.name; state.current.accountName = me.user.accountName; state.current.color = me.user.color; }
       } catch { /* 权威拉取失败：保留兜底旧名展示，不阻塞登录 */ }
     } catch { LS.del("cur"); }
   }
