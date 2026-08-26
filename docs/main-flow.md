@@ -51,6 +51,17 @@
 | ④ 操作 | 复制 / 编辑 / 归档 / 恢复 / 删除 | 用户点击 | `copyText` L102 · `copyRich` L199 · `openEditModal` L1503<br>`archiveClip`/`unarchiveClip`/`deleteClip` · clips.js L440/L453/L406 |
 | ⑤ 同步 | 双向合并 + 完整备份 | 一键同步 / 定时 / 配置保存 | `runSync` · webdav.js L269 |
 
+## 用户模型与寻址（双名模型 v0.6.13）
+
+```
+user = { accountName(不可变身份键), displayName(可变展示名), ... }
+```
+
+- **身份键 = accountName**（创建后不可变，仅限英文数字）：WebDAV 远端快照/实体目录寻址、跨设备识别——设备迁移 = 新部署创建相同 accountName → 配置 WebDAV → 同步即拉回全部数据
+- **展示 = displayName**（可随时改，仅影响界面/导出文件名）：改显示名**零路径影响**（不触发任何迁移）
+- 本地文件（clips/archive/tombstones/webdav.json/files）仍按 `userId`(UUID) 存——**只有远端快照按 accountName 寻址**
+- 账号名修改属管理员级一次性操作（`POST /api/users/:id/account-name`）：记 `pendingNameMigrations` 数组，下次同步逐个迁移旧名快照/实体（删除成功才移除，连续改名不丢）
+
 ## 关键数据（后端存储布局）
 
 | 数据 | 位置 | 说明 |
@@ -61,6 +72,8 @@
 | 文件实体 | `store/<uid>/files/<fileId>.<ext>` | 图片/文件类型条目 |
 | 同步配置 | `store/<uid>/webdav.json` | 远端地址 + 凭据（pass 加密） |
 | 用户 | `store/users.json` | 含密码哈希/限流表 |
+| **远端快照** | `<WebDAV>/workbuddy/剪贴板/clipboard-<accountName>.json` | 按账号名寻址；旧格式 `clipboard-<userId>.json` 首次同步自动并入迁移 |
+| **远端实体** | `<WebDAV>/workbuddy/剪贴板/files/<accountName>/` | 按账号名寻址；改名后自动迁移到新名目录 |
 
 ## 支线索引（机制细节不在此重复，见指定文档）
 
