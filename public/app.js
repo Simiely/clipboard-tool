@@ -1721,6 +1721,21 @@ function openDataModal() {
   });
   zoomRow.append(zoomLbl, zoomStep, zoomSave);
   left.append(zoomRow);
+  // v0.6.13：修改用户名（同名校验后端 409；改名后重建界面）
+  const nameRow = el("div", ""); nameRow.style.cssText = "display:flex;gap:8px;align-items:center;margin-bottom:10px";
+  const nameLbl = el("span", "", "用户名"); nameLbl.style.cssText = "font-size:11.5px;color:var(--muted);flex:1";
+  const nameInput = el("input"); nameInput.value = state.current.name; nameInput.maxLength = 20;
+  nameInput.style.cssText = "width:130px;margin:0;flex-shrink:0";
+  const nameSave = el("button", "dm-btn ghost", "保存"); nameSave.style.cssText = "flex:0 0 auto;width:auto;padding:8px 14px;margin:0;border-radius:8px";
+  nameSave.onclick = guard(nameSave, async () => {
+    const r = await api("/api/users/" + state.current.id + "/name", { method: "POST", json: { name: nameInput.value } }).catch((e) => errToast(e.message));
+    if (!r) return;
+    state.current.name = r.name; // 同步本地状态（顶栏 who / 头部展示用）
+    flash("用户名已更新");
+    m.remove(); render();
+  });
+  nameRow.append(nameLbl, nameInput, nameSave);
+  left.append(nameRow);
   // WebDAV 配置区（渲染进左栏）
   left.append(el("div", "dm-divider", "WebDAV 跨设备同步"));
   renderWebdavSection(left);
