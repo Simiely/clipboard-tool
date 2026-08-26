@@ -1805,8 +1805,9 @@ function openDataModal() {
 // 参考 edge-multi-account-cookie 设计：墓碑同步/清空不传播/双向取最新
 // v0.6.5：适配方案25 双栏工作台（渲染进左栏容器，使用 dm- 类）
 function renderWebdavSection(container) {
-  // v0.6.13：同步全部数据（含归档），无需额外说明文字（用户要求 UI 简洁）
-  const davUrl = el("input"); davUrl.placeholder = "服务器目录地址，如 https://dav.example.com/clipboard";
+  // v0.6.13：同步全部数据（含归档），无需额外说明文字（用户要求 UI 简洁）；地址留空默认局域网服务器
+  const DAV_DEFAULT_URL = "http://192.168.2.1:6086";
+  const davUrl = el("input"); davUrl.placeholder = "服务器地址（留空默认 " + DAV_DEFAULT_URL + "）";
   const davUser = el("input"); davUser.placeholder = "用户名";
   const davPass = el("input"); davPass.type = "password"; davPass.placeholder = "密码（留空复用已保存）";
   container.append(davUrl, davUser, davPass);
@@ -1848,7 +1849,8 @@ function renderWebdavSection(container) {
   })();
   // 保存配置（已移至输入区下方，此处仅绑定事件）
   testSave.onclick = guard(testSave, async () => {
-    if (!davUrl.value.trim()) return errToast("先填服务器地址");
+    // v0.6.13：地址留空默认填入局域网服务器地址
+    if (!davUrl.value.trim()) davUrl.value = DAV_DEFAULT_URL;
     davStatus.textContent = "测试中…";
     try {
       await api("/api/sync/config", { method: "POST", json: { url: davUrl.value, user: davUser.value, pass: davPass.value, syncFiles: davFiles.checked, autoSync: davAuto.checked, intervalMin: Math.round(parseFloat(davInt.value) * 60) } });
