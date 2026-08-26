@@ -31,6 +31,7 @@
 - **登录限流表需 lastFailAt（v0.6.11）**：`pruneLoginGuard` 除清理锁定过期 key 外，还要清理「fails>0 且超过 LOGIN_WINDOW_MS 未再失败」的 key——否则失败 1~7 次后停手的 IP 永久残留（P1-3 曾假修复）
 
 ## 约定
+- **主线总览（SSOT）见 `docs/main-flow.md`**——"一条剪贴板的生命周期"一图流 + 各步入口函数；改主线流程/入口后必须同步该文档（行号会漂移，以函数名为准）
 - UI 标签用中文；注释用中文；文件名/变量用英文
 - API 返回统一 `{ ok, ... }` 或 `{ ok:false, error }`；错误带 HTTP 状态码（`store.js httpError`）
 - 所有资源 id（userId/clipId/fileId）一律 UUID 白名单校验（`assertId` + `ID_RE`），防路径穿越
