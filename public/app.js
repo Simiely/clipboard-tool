@@ -1522,9 +1522,29 @@ function openEditModal(c, dup = false) {
   const sec1 = el("div", "edit-sec");
   const t1 = el("div", "edit-sec-t"); t1.append(el("span", "n", "1"), el("span", "", c.type === "link" ? "链接" : isImage ? "图片" : c.type === "file" ? "文件" : "内容"));
   let contentInput = null, urlInput = null;
+  let clearFormat = false; // v0.6.13：富文本清除格式标记（保存时 html 置空转纯文本）
   if (c.type === "text" && c.html) {
     // 富文本：纯文本编辑（v0.6.12：取消实时预览——保存后格式仍保留，编辑的是纯文本正文）
     t1.append(el("span", "hint", "编辑正文，保存后保留原格式"));
+    // v0.6.13：清除格式——不需要富文本时一键转纯文本（保存后 html 置空，卡片变普通文本、复制不再带格式）
+    const clearBtn = el("button", "btn sm ghost", "清除格式");
+    clearBtn.style.cssText = "font-size:11px;padding:2px 9px;flex-shrink:0"; // hint 已有 margin-left:auto，按钮跟随靠右
+    clearBtn.title = "不需要保留格式时，点击后保存即转为纯文本";
+    clearBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (!clearFormat) {
+        askConfirm("清除格式后该条目将变为纯文本，复制时不再保留格式（字体/颜色/对齐等）。继续？", () => {
+          clearFormat = true;
+          clearBtn.classList.add("warn");
+          clearBtn.textContent = "已标记清除 · 保存生效（点此取消）";
+        }, "清除格式");
+      } else {
+        clearFormat = false;
+        clearBtn.classList.remove("warn");
+        clearBtn.textContent = "清除格式";
+      }
+    };
+    t1.append(clearBtn);
     sec1.append(t1);
     contentInput = el("textarea"); contentInput.value = c.content; contentInput.style.minHeight = "130px";
     sec1.append(contentInput);
@@ -1626,8 +1646,9 @@ function openEditModal(c, dup = false) {
       if (urlInput) json.url = urlInput.value;
       // v0.6.11：富文本条目编辑纯文本后 html 必须同步——此前只改 content，html 还是旧内容，
       // 卡片右栏预览与「复制带格式」拿到的都是旧文本（左右不一致 bug）。content 变了 → 按新文本重建 html。
+      // v0.6.13：清除格式 → html 置空转纯文本（后端 sanitizeHtml 空串即清空）
       if (c.type === "text" && c.html && contentInput) {
-        json.html = contentInput.value !== (c.content || "") ? textToHtml(contentInput.value) : c.html;
+        json.html = clearFormat ? "" : (contentInput.value !== (c.content || "") ? textToHtml(contentInput.value) : c.html);
       }
       await api("/api/clips/" + c.id, { method: "PUT", json }).catch(e => { errToast(e.message); return null; });
       m.remove(); flash("已保存"); refreshList();
