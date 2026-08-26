@@ -175,7 +175,7 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .store-btn .plus{font-size:15px;line-height:1}
 .tb .row2{display:flex;align-items:center;gap:10px;flex-wrap:nowrap} /* v0.6.6:单行不换行,避免错位堆叠 */
 .tb .row2 .typetab{margin-bottom:0;flex-shrink:0}
-.tagbar-wrap{flex:1;min-width:0;overflow:hidden} /* 弹性压缩,标签过多时截断(单行) */
+.tagbar-wrap{flex:1;min-width:0;overflow:visible} /* v0.6.13:标签多时换行,全部可见(不再截断隐藏) */
 .tb .ops{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);flex-shrink:0;flex-wrap:nowrap} /* 单行 */
 .tb .ops .opt{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px;color:var(--muted);white-space:nowrap}
 /* ===== 新拟态开关（v0.6.6 重做：凸起轨道+凸起滑块；选中=金晕轨道+金色滑块滑右——位置+颜色双信号，0.2s 过渡，focus 可见性，label 热区） ===== */
@@ -196,7 +196,7 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .dm-opt input[type=checkbox]:checked::after{left:17px;background:var(--accent);box-shadow:0 0 5px rgba(var(--gold),.5),1px 1px 3px rgba(0,0,0,.4)}
 /* 键盘可达性：focus-visible 金描边 */
 .opt input[type=checkbox]:focus-visible,.tb .ops .opt input[type=checkbox]:focus-visible,.dm-opt input[type=checkbox]:focus-visible{outline:2px solid rgba(var(--gold),.6);outline-offset:2px}
-.tagbar{display:flex;gap:8px;flex-wrap:nowrap;align-items:center;overflow:hidden} /* v0.6.6:单行,标签多截断 */
+.tagbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center} /* v0.6.13:标签多自动换行,全部可见可点 */
 .tagbar .tag-mgmt-btn{margin-left:auto;flex-shrink:0}
 /* 层2 · 类型分段控件（凹陷轨道 + 凸起选中） */
 .typetab{display:inline-flex;gap:6px;padding:6px;border-radius:14px;background:var(--inset);box-shadow:var(--sh-inset-sm);flex-wrap:wrap}
