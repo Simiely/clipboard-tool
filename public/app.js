@@ -473,6 +473,18 @@ async function loadClips() {
     api("/api/tags"),
   ]);
   state.clips = a.clips; state.tags = b.tags;
+  // v0.6.13: 标签筛选下已无可见卡片（该标签最后一张被编辑取消/删除）→ 自动清除筛选并重新拉全量，
+  // 避免"内容全部消失"的假象；有搜索词时不干预（空是搜索无结果，不是标签问题）
+  if (state.filter.tag && !state.filter.q && !a.clips.length) {
+    const gone = state.filter.tag;
+    state.filter.tag = "";
+    const p2 = [];
+    if (state.filter.q) p2.push("q=" + encodeURIComponent(state.filter.q));
+    if (state.filter.archived) p2.push("archived=1"); // 含归档查询
+    const r2 = await api("/api/clips" + (p2.length ? "?" + p2.join("&") : ""));
+    state.clips = r2.clips;
+    flash("「" + gone + "」下已无内容，已回到全部");
+  }
 }
 async function loadUsers() {
   const r = await api("/api/users");
