@@ -12,7 +12,7 @@
 :root{
   /* 层0 · 设计令牌（酒红金 · 校准版，对齐 dark-design-style-guide 主页示意 mock：
      中性黑灰底 #1A1A1A/#2F2F2F + 金 #C9A96E 主强调 + 砖红 #AE4D4D 点缀 + 中性文字 #DADADA） */
-  --bg:#1A1A1A; --elev:#2F2F2F; --elev-hi:#3A3A3A; --inset:#141414; --border:#3D3D3D;
+  --bg:#1A1A1A; --elev:#1F1F1F; --elev-hi:#2A2A2A; --inset:#141414; --border:#3D3D3D;
   --text:#DADADA; --muted:#848484; --dim:#6E6E6E;
   --accent:#C9A96E;          /* 金 · 主强调(按钮/选中/选区/标签 active)，深字配 */
   --accent2:#AE4D4D;         /* 砖红 · 点缀(链接徽章/危险 hover/链接文字 hover)，暖白字配 */
@@ -428,6 +428,10 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .edit-row{display:flex;gap:10px}
 .edit-row input{flex:1;min-width:0}
 .edit-row select{flex:0 0 126px}
+/* 编辑弹窗标签区:v0.6.12 补 margin-top(此前与上方别名/过期行零间距紧贴,视觉重叠)+ 输入框透明下划线式(与存入弹窗一致,去内阴影) */
+.edit-modal .tag-pick{margin-top:10px}
+.edit-modal .tag-pick input{width:110px;min-width:110px;flex:0 0 auto;background:transparent;box-shadow:none;border:none;border-bottom:1px dashed var(--border);border-radius:0;padding:4px 2px;font-size:11.5px;color:var(--text);outline:none}
+.edit-modal .tag-pick input::placeholder{color:var(--dim)}
 /* 图片卡 */
 .img-card{background:var(--elev);box-shadow:var(--sh-inset-sm);border-radius:11px;padding:10px;position:relative;overflow:hidden}
 .img-card .thumb{width:100%;height:130px;border-radius:8px;background:var(--inset);display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}

@@ -1,6 +1,6 @@
 # AGENTS.md · 项目规则
 
-> 📌 **文档基线**：2026-08-26（v0.6.12：富文本复制链路修复批——S2 内联化弃用 CSSOM cssText 改字符串级解析（保 Word 私有属性 tab-interval/mso-*，word-wrap 不被改写）/ body 标签属性保留（文档级设置）+ buildWordDoc 兼容 body 片段 / body 样式双保险内联段落元素（CF_HTML Fragment 在 body 之外）/ 卡片富文本回归左右分栏 + 取消渲染预览与编辑实时预览；v0.6.11：细节审查修复批——归档去重防膨胀 / verifyPassword 损坏数据不崩溃 / 导入非 UUID id 重生成 / 富文本编辑 html 同步 / 登录限流表真修复（lastFailAt）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持；v0.6.9：富文本复制链路定稿——存入 `normalizeRichHtml` 内联化 + 复制 `buildWordDoc` 包装 xmlns:o/w/m + `execCommandRich` 主路径，Word 粘贴保留完整格式；v0.6.8 富文本链路重构 + 诊断页 diag.html；v0.6.7 WebDAV 远端子目录 workbuddy/剪贴板/；v0.6.6 弹窗四件套重设计（密码/数据管理/存入/编辑）+ 重复检测单弹窗 + 窄屏适配；v0.6.5 卡片系统全量重构见下）
+> 📌 **文档基线**：2026-08-26（v0.6.13：WebDAV 快照纳入归档（完整备份，归档条目带 archived 标记，拉回分拣写回先 saveArchive 后 saveClips）+ 归档条目可删除（deleteArchivedClip + 墓碑传播）+ UI 背景调深（--elev #1F1F1F）+ 编辑弹窗标签区间距修复；v0.6.12：富文本复制链路修复批——S2 内联化弃用 CSSOM cssText 改字符串级解析（保 Word 私有属性 tab-interval/mso-*，word-wrap 不被改写）/ body 标签属性保留（文档级设置）+ buildWordDoc 兼容 body 片段 / body 样式双保险内联段落元素（CF_HTML Fragment 在 body 之外）/ 卡片富文本回归左右分栏 + 取消渲染预览与编辑实时预览；v0.6.11：细节审查修复批——归档去重防膨胀 / verifyPassword 损坏数据不崩溃 / 导入非 UUID id 重生成 / 富文本编辑 html 同步 / 登录限流表真修复（lastFailAt）/ WebDAV 实体扩展名兜底 .bin / readBody 超限排空 / diag.html 缓存 / 同步间隔 30min 支持；v0.6.9：富文本复制链路定稿——存入 `normalizeRichHtml` 内联化 + 复制 `buildWordDoc` 包装 xmlns:o/w/m + `execCommandRich` 主路径，Word 粘贴保留完整格式；v0.6.8 富文本链路重构 + 诊断页 diag.html；v0.6.7 WebDAV 远端子目录 workbuddy/剪贴板/；v0.6.6 弹窗四件套重设计（密码/数据管理/存入/编辑）+ 重复检测单弹窗 + 窄屏适配；v0.6.5 卡片系统全量重构见下）
 > **更新文档/代码后，请更新此行**（日期 + 新 commit hash），并在 CHANGELOG 追加版本
 
 ## 技术栈
@@ -36,7 +36,7 @@
 - 所有资源 id（userId/clipId/fileId）一律 UUID 白名单校验（`assertId` + `ID_RE`），防路径穿越
 - 文件上传黑名单只拒可执行/脚本类（config.js BLOCKED_MIME/BLOCKED_EXT），下载**强制 attachment** + nosniff（防执行）——不要改成 inline
 - WebDAV 同步语义（与 edge-multi-account-cookie 对齐）：单独删除 → 记墓碑传播删除；全部清空 → 不记墓碑（= 想从网上同步）；双向按 updatedAt 取最新
-- **滚动归档**（v0.2.0）：`saveClips` 内部自动滚动超限条目进 `<uid>.archive.json`（零丢失），**同步快照只含活跃区**（归档是本地扩展）；归档条目前端只读（archived 标记）；清空/删用户/过期清扫都要覆盖归档文件
+- **滚动归档**（v0.2.0）：`saveClips` 内部自动滚动超限条目进 `<uid>.archive.json`（零丢失）；**v0.6.13 起同步快照 = 活跃区 ∪ 归档区**（归档条目带 `archived` 标记，WebDAV 完整备份）；拉回分拣写回**顺序关键：先 `saveArchive`（归档组替换）再 `saveClips`（活跃组，内部滚动会追加进归档）**——反了会覆盖刚滚出的条目；归档条目前端只读（archived 标记）+ ✕ 可删除（deleteArchivedClip，墓碑传播远端）；清空/删用户/过期清扫都要覆盖归档文件
 - **Windows 沙箱删除**（v0.3.1）：`rmForce` 的 unlinkSync/rmdirSync 在 safe-delete 拦截下"抛错但实际已删"——已容错吞掉；判定删除结果用"文件是否存在"，别用"是否抛错"
 
 ## 常用命令
