@@ -1527,8 +1527,9 @@ function openEditModal(c, dup = false) {
     // 富文本：纯文本编辑（v0.6.12：取消实时预览——保存后格式仍保留，编辑的是纯文本正文）
     t1.append(el("span", "hint", "编辑正文，保存后保留原格式"));
     // v0.6.13：清除格式——不需要富文本时一键转纯文本（保存后 html 置空，卡片变普通文本、复制不再带格式）
-    const clearBtn = el("button", "btn sm ghost", "清除格式");
-    clearBtn.style.cssText = "font-size:11px;padding:2px 9px;flex-shrink:0"; // hint 已有 margin-left:auto，按钮跟随靠右
+    // 样式用基础 .btn（有背景+凸起阴影，明显可寻；ghost 透明太隐形用户反馈找不到）
+    const clearBtn = el("button", "btn sm", "清除格式");
+    clearBtn.style.flexShrink = "0";
     clearBtn.title = "不需要保留格式时，点击后保存即转为纯文本";
     clearBtn.onclick = (e) => {
       e.stopPropagation();
