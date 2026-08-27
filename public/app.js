@@ -464,25 +464,22 @@ function openUserModal() {
 
 // ---------- 数据加载 ----------
 async function loadClips() {
+  // v0.6.14 单轨化：过滤统一走前端 renderList（搜索/标签/类型/拼音全本地筛，零网络请求），
+  // 这里恒拉全量（仅 archived 影响数据源范围）。此前 q/tag 也走后端过滤并覆盖 state.clips，
+  // 与 renderList 前端过滤双轨并存——搜索词非空时发生增删改 → state.clips 被替换成过滤集，
+  // 清空搜索词后全量从界面"消失"（须刷新页面恢复）。修复：loadClips 只负责拉数据，不过滤。
   const params = [];
-  if (state.filter.q) params.push("q=" + encodeURIComponent(state.filter.q));
-  if (state.filter.tag) params.push("tag=" + encodeURIComponent(state.filter.tag));
   if (state.filter.archived) params.push("archived=1"); // 含归档查询（滚动归档 v0.2.0）
   const [a, b] = await Promise.all([
     api("/api/clips" + (params.length ? "?" + params.join("&") : "")),
     api("/api/tags"),
   ]);
   state.clips = a.clips; state.tags = b.tags;
-  // v0.6.13: 标签筛选下已无可见卡片（该标签最后一张被编辑取消/删除）→ 自动清除筛选并重新拉全量，
+  // v0.6.13: 标签筛选下全量已无该标签（该标签最后一张被编辑取消/删除）→ 自动清除筛选回到全部，
   // 避免"内容全部消失"的假象；有搜索词时不干预（空是搜索无结果，不是标签问题）
-  if (state.filter.tag && !state.filter.q && !a.clips.length) {
+  if (state.filter.tag && !state.filter.q && !state.clips.some((c) => (c.tags || []).includes(state.filter.tag))) {
     const gone = state.filter.tag;
     state.filter.tag = "";
-    const p2 = [];
-    if (state.filter.q) p2.push("q=" + encodeURIComponent(state.filter.q));
-    if (state.filter.archived) p2.push("archived=1"); // 含归档查询
-    const r2 = await api("/api/clips" + (p2.length ? "?" + p2.join("&") : ""));
-    state.clips = r2.clips;
     flash("「" + gone + "」下已无内容，已回到全部");
   }
 }
