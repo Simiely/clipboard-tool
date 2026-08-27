@@ -71,5 +71,6 @@ delivery/           # 交付形态（本地服务版 start.cmd / EXE 版 / 服�
 - [开发文档 DEVELOPMENT.md](DEVELOPMENT.md) — 架构说明与关键问题记录
 - [变更日志 CHANGELOG.md](CHANGELOG.md) — 版本记录
 - [AI 项目规则 AGENTS.md](AGENTS.md) — 技术栈 / 关键坑 / 约定
-- [交付形态 delivery/README.md](delivery/README.md) — 本地服务版 / EXE 版 / 服务器版三形态
+- [交付形态 delivery/README.md](delivery/README.md) — 本地服务版 / 平台版 / EXE 版 / 服务器版四形态
+- [发布规范 docs/发布规范.md](docs/发布规范.md) — 版本号 / 产物命名 / 打包 / 发布 / 部署全流程
 

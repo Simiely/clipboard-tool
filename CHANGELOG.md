@@ -18,6 +18,8 @@
 - 🟢 **冒烟测试默认端口加固**（smoke-test.mjs）：默认端口 **8130 → 8131**，防止测试直连主服务污染真实数据（本次事件教训）；注释补血泪教训说明
 - 🟢 **交付形态目录 delivery/**（2026-08-27）：三形态总览 README + 子目录——`local-service/`（本地服务版 README + `start.cmd` 一键启动）、`exe/`（引用 docs/exe-plan.md，规划中）、`server/`（平台托管/独立服务器两种路径，规划中）；三形态数据格式一致可互导
 - 🟢 **版本指纹**（server.mjs + package.json）：启动日志打印 `clipboard v0.6.14 (git commit)`——实例身份可追溯（多实例混跑事故的直接对策）；`package.json version` 0.5.1 → 0.6.14（此前与 CHANGELOG 脱节）
+- 🟢 **平台版接入 tools-center**（delivery/platform/）：`tool.json`（id=clipboard / capabilities storage / dataFiles 声明）+ 部署说明——平台版 zip 解压到服务器 `tools/` 挂载目录即托管；数据落平台注入的 CAP_STORAGE_DIR（随平台 data/ 挂载持久化）
+- 🟢 **发布规范 docs/发布规范.md**：专门发版规则——版本号（vX.Y.Z 语义化 + package.json 同步）/ 四形态产物命名 / 平台版 zip 结构约定 / 发版 Checklist（测试→打包→tag→gh release→服务器部署→验证）/ 回滚策略 / 历史记录
 
 ## v0.6.13 (2026-08-26)
 
