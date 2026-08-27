@@ -1,9 +1,12 @@
 // scripts/smoke-test.mjs - 剪贴板 API 冒烟测试（本地验证用，非平台测试套件）
 // 重要：测试必须指向【独立数据目录的实例】，禁止对平台托管实例(data/tools/clipboard)跑测试，
 // 避免测试用户污染/误删真实数据。用法：
-//   CAP_STORAGE_DIR=/tmp/clip-test PORT=8131 node server.mjs   # 独立实例
-//   TEST_PORT=8131 node scripts/smoke-test.mjs                  # 指向独立实例
-const BASE = "http://127.0.0.1:" + (process.env.TEST_PORT || "8130");
+//   CAP_STORAGE_DIR=C:/Temp/clip-test node server.mjs 8131   # 独立实例（PowerShell 起，避免 Git Bash 路径转换）
+//   node scripts/smoke-test.mjs                               # 默认指向 8131（v0.6.14 起：默认端口 8130→8131，防误连主服务）
+//   TEST_PORT=8131 node scripts/smoke-test.mjs                # 显式指定
+// ⚠️ v0.6.14 血泪教训：默认端口曾是 8130（用户主服务），测试用户(u815113b 等)污染了真实 .data/users.json。
+// 现在默认 8131；如需对自定义端口测试必须显式 TEST_PORT。运行前先确认该端口是独立数据目录实例。
+const BASE = "http://127.0.0.1:" + (process.env.TEST_PORT || "8131");
 let pass = 0, fail = 0;
 const ok = (name, cond) => { cond ? pass++ : fail++; console.log((cond ? "✅" : "❌") + " " + name); };
 
