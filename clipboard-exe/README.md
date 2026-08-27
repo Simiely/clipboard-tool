@@ -2,14 +2,14 @@
 
 > 状态：🚧 **M2 骨架**（2026-08-27 启动）。规划与决策详见 [`../docs/exe-plan.md`](../docs/exe-plan.md)。
 
-Windows 轻量桌面剪贴板工具（C# WinForms, net8.0-windows）。托盘常驻、原生剪贴板监听（不依赖焦点）、黑金深色 UI。
+Windows 轻量桌面剪贴板工具（C# WinForms, net9.0-windows）。托盘常驻、原生剪贴板监听（不依赖焦点）、黑金深色 UI（含菜单/滚动条/对话框——官方 `Application.SetColorMode(SystemColorMode.Dark)`，非自绘）。
 
 ## 目录
 
 ```
 clipboard-exe/
-  ClipboardExe.csproj   工程（net8.0-windows, 单文件框架依赖发布）
-  Program.cs            入口：单实例互斥 + 托盘 + 启动主窗体（版本指纹）
+  ClipboardExe.csproj   工程（net9.0-windows, 单文件框架依赖发布）
+  Program.cs            入口：单实例互斥 + 托盘 + 官方深色模式 + 启动主窗体（版本指纹）
   MainForm.cs           深色主窗体 + 剪贴板监听宿主 + 数据目录 + 托盘交互
   ClipboardWatcher.cs   Win32 AddClipboardFormatListener 封装
   NativeMethods.cs      P/Invoke 集合（剪贴板/深色标题栏/单实例唤醒）
@@ -23,10 +23,15 @@ clipboard-exe/
 :: 开发构建（Debug）
 dotnet build clipboard-exe
 
-:: 单文件发布（约 1~3 MB，需用户装 .NET 8 Desktop Runtime）
+:: 单文件发布（约 170 KB，需用户装 .NET 9 Desktop Runtime）
 dotnet publish clipboard-exe -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
-:: 产出: clipboard-exe/bin/Release/net8.0-windows/win-x64/publish/Clipboard.exe
+:: 产出: clipboard-exe/bin/Release/net9.0-windows/win-x64/publish/Clipboard.exe
 ```
+
+## 运行要求
+
+- **.NET 9 Desktop Runtime x64**（https://dotnet.microsoft.com/download/dotnet/9.0）
+- Windows 10/11
 
 ## 运行
 
@@ -37,8 +42,8 @@ dotnet publish clipboard-exe -c Release -r win-x64 --self-contained false -p:Pub
 
 ## 里程碑
 
-- [x] M1 环境（.NET 8 SDK + Desktop Runtime，2026-08-27 实测就绪）
-- [x] M2 骨架（本目录）——空壳 exe 可跑
+- [x] M1 环境（.NET 9 SDK + Desktop Runtime，2026-08-27 实测就绪）
+- [x] M2 骨架（本目录）——空壳 exe 可跑 + 深色菜单（SetColorMode 实测 253→47）
 - [ ] M3 数据层：JSON 存储对齐 Web 版字段 + Web 导出 JSON 导入
 - [ ] M4 MVP：剪贴板捕获（文本/链接/图片）+ 卡片墙 + 点击复制 + 搜索
 - [ ] M5 迭代：标签 / 归档 / 富文本 / 置顶排序（V2）
