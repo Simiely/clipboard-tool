@@ -11,7 +11,6 @@ import { deleteFile } from "./lib/core/files.js";
 import { runAutoSync } from "./lib/core/webdav.js";
 import { pruneExpiredSessions } from "./lib/core/users.js";
 import { sendJson } from "./lib/routes/helpers.js";
-import { recoverOrphanTmp } from "./lib/core/store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = path.join(__dirname, "public", "index.html");
@@ -80,11 +79,6 @@ const server = http.createServer(async (req, res) => {
     sendJson(res, e.status || 500, { ok: false, error: e.message || "internal error" });
   }
 });
-
-// 启动自愈（v0.6.13 根因级修复）：扫描 .data 下孤儿 tmp（writeJson 被瞬时占用失败残留）——
-// 目标缺失 → 用 tmp 恢复数据；目标完好 → 清理旧残留。幂等，每次启动执行。
-recoverOrphanTmp(path.dirname(CONFIG.usersFile));
-recoverOrphanTmp(CONFIG.usersDir || path.join(path.dirname(CONFIG.usersFile), "users"));
 
 server.listen(CONFIG.PORT, "127.0.0.1", () => {
   console.log(`clipboard running on ${CONFIG.PORT} (data: ${path.dirname(CONFIG.usersFile)})`);
