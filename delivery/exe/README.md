@@ -1,6 +1,6 @@
 # EXE 桌面版（Desktop EXE）
 
-> 状态：🚧 **规划中**（2026-08-26 立项）。详细技术方案见 [`../docs/exe-plan.md`](../docs/exe-plan.md)。
+> 状态：🚧 **M2 骨架进行中**（2026-08-27 启动）。决策已定：工程在**主仓库子目录 `clipboard-exe/`**、数据存 **exe 同目录 `data/`**、MVP 含 **Web 版 JSON 导入**。详细技术方案见 [`../docs/exe-plan.md`](../docs/exe-plan.md)。
 
 ## 一句话定位
 
@@ -14,13 +14,13 @@ Windows 轻量桌面程序，替代"浏览器访问本地服务"——托盘常�
 | 发布 | 框架依赖单文件，约 1~3 MB（用户自装 .NET 8 Desktop Runtime） |
 | 剪贴板监听 | Win32 `AddClipboardFormatListener`（比浏览器 clipboardchange 强） |
 | 存储 | MVP 用 JSON（与 Web 版格式兼容可互导） |
-| 进度 | 待用户安装 .NET 8 后启动 M2 骨架 |
+| 进度 | M2 骨架进行中（环境 M1 ✅ 已就绪） |
 
 ## 里程碑
 
-- [ ] M1 环境：安装 .NET 8 SDK / Desktop Runtime（用户操作）
-- [ ] M2 骨架：WinForms 主窗口 + 深色主题 + 托盘
-- [ ] M3 数据层：JSON 存储，与 Web 版格式对齐
+- [x] M1 环境：安装 .NET 8 SDK / Desktop Runtime（✅ 2026-08-27 实测就绪）
+- [ ] M2 骨架：WinForms 主窗口 + 深色主题 + 托盘 + 剪贴板监听骨架
+- [ ] M3 数据层：JSON 存储，与 Web 版格式对齐 + 导入入口
 - [ ] M4 剪贴板监听 + 存入/列表/复制
 - [ ] M5 WebDAV 同步（复用墓碑语义）
 
