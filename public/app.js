@@ -548,9 +548,11 @@ function renderMain() {
   // v0.4.2：设置拆为「密码」+「数据管理」两个入口
   pwBtn.onclick = () => openPasswordModal();
   dataBtn.onclick = () => openDataModal();
-  // v0.4.5：补 guard 防连点（逻辑核验 P2-1）
+  // v0.4.5：补 guard 防连点（逻辑核验 P2-1）；v0.6.13 走查 P-A：不再吞错——服务端会话销毁失败要提示，
+  // 避免"假退出"（本地清了但服务端会话还在，重启后 token 复活）
   logoutBtn.onclick = guard(logoutBtn, async () => {
-    await api("/api/session", { method: "DELETE" }).catch(()=>{}); // 销毁服务端会话
+    const r = await api("/api/session", { method: "DELETE" }).catch(e => { errToast("退出失败：" + e.message); return null; });
+    if (r === null) return; // 服务端销毁失败：保留本地登录态，让用户重试
     LS.del("cur"); state.current = null; userEditMode = false;
     await loadUsers(); render();
   });
