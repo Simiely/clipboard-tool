@@ -13,11 +13,17 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
   ├── lib/core/        纯业务逻辑（不碰 HTTP；.js 扩展名，由 package.json type:module 声明 ESM）
   │   ├── config.js    全局配置单一来源（端口/输入边界/上传黑名单/UUID 白名单）
   │   ├── store.js     JSON 原子读写 + assertId + httpError + rmForce
-  │   ├── clips.js     条目域：CRUD + 复制计数 + 排序/搜索/标签 + 墓碑 + 过期清扫
-  │   ├── users.js     用户域：scrypt 密码 + 会话 token（内存缓存+文件落盘）+ 登录限流
+  │   ├── clips.js     条目域聚合入口（v0.6.14 拆分子域后 re-export，对外路径不变）
+  │   │   ├── clips-store.js     底层存取 + 滚动归档 + 共享内部函数（唯一数据底座）
+  │   │   ├── clips-mutate.js    CRUD + 归档/恢复 + 复制计数/置顶 + 过期清扫
+  │   │   ├── clips-query.js     列表/搜索/标签统计/标签管理
+  │   │   ├── clips-transfer.js  导出/导入
+  │   │   └── tombstones.js      墓碑（WebDAV 同步配套，90 天 TTL）
+  │   ├── users.js     用户域：scrypt 密码 + 会话 token（v0.6.13 起文件即真相，零内存缓存）+ 登录限流
   │   ├── files.js     文件域：上传边界 + 归属校验 + 物理存取
   │   └── webdav.js    WebDAV 备份同步：双向合并 + 墓碑裁决 + 实体同步 + 定时自动同步
-  ├── lib/routes/      路由薄层（分段匹配零正则 + 会话中间件）
+  │                   （v0.6.14：runSync 拆阶段函数；recordTombstoneIfConfigured 墓碑规则下沉）
+  ├── lib/routes/      路由薄层（分段匹配零正则 + 会话中间件；只编排不决策）
   │   ├── index.js     路由注册表 + matchRoute/withParams
   │   ├── helpers.js   sendJson / jsonBody / multipart 解析 / requireAuth
   │   └── clips.js · users.js · files.js · sync.js
@@ -38,6 +44,14 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 **排序（服务端单一实现）**：① pinned 置顶 → ② copyCount 降序 → ③ 标签相近归拢（Map 倒排）→ ④ 内容相似归拢（10 字符 ngram 倒排索引，O(n×L) 非 O(n²)）。读取时计算，任何修改即时反映。
 
 ## 关键问题与方案
+
+### 问题：搜索/标签过滤双轨——搜索词非空时增删改，清空搜索词后全量从界面"消失"（v0.6.14 修复）
+
+**TL;DR**：`loadClips()` 曾把 `state.filter.q/tag` 拼进 `/api/clips` 走后端过滤并**覆盖 `state.clips` 为过滤集**，而 `renderList()` 又对 `state.clips` 前端过滤（搜索输入/标签点击只调 `renderList` 不调 `loadClips`）——一份数据被两处过滤。搜索词非空时发生任何增删改 → `refreshList→loadClips(q=词)` 把 `state.clips` 替换成过滤集 → 清空搜索框后 `renderList` 只能从过滤集里筛，**全量数据在界面上消失，须刷新页面恢复**。
+
+- 根因：`loadClips` 后端过滤是早期设计遗留，v0.6.6+ 改前端即时过滤（注释明说"零网络请求"）时未删干净，双轨并存
+- 修复：**前端单轨化**——`loadClips()` 恒拉全量（仅 `archived` 影响数据源范围），搜索/标签/类型/拼音全部由 `renderList` 本地过滤；标签筛选自愈（筛选标签全量已无 → 自动回全部）改为前端判断。后端 `listClips` 的 `q/tag` 参数保留（API 兼容，闲置）
+- 教训：**同一份 state 只允许一个过滤器**；改"即时过滤"类交互时先查数据源是否还被旧参数污染
 
 ### 问题：AI 沙箱里 `fs.rmSync` 报 `[safe-delete] 操作失败`（v0.3.1 容错 / 2026-08-14 澄清根源）
 
