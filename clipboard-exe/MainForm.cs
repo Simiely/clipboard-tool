@@ -16,6 +16,7 @@ public class MainForm : Form
     private bool _exiting; // 托盘"退出"才真正退出，点 X 只是最小化到托盘
 
     /// <summary>托盘图标（由 Program 注入，最小化时使用）。</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
     public NotifyIcon? TrayIcon { get; set; }
 
     public MainForm()

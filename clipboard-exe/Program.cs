@@ -34,6 +34,8 @@ internal static class Program
             }
 
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
+            // 官方深色模式：菜单/滚动条/对话框等系统绘制部分整体深色（.NET 9 API，成熟方案非自绘）
+            Application.SetColorMode(SystemColorMode.Dark);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 

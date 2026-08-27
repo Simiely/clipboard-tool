@@ -10,13 +10,14 @@
 | 工程位置 | **主仓库子目录 `clipboard-exe/`**——版本/发布/文档与主项目统一管理,release 资产加第三个 zip |
 | 数据位置 | **exe 同目录 `data/`**——便携式,整个文件夹拷走即迁移(升级时注意保留 data/) |
 | MVP 数据导入 | **包含**——Web 版导出 JSON 可直接导入 EXE(格式已对齐,成本低) |
-| 环境 | .NET 8 SDK 8.0.424 + WindowsDesktop Runtime 8.0.x 已装(实测),M1 完成 |
+| 环境 | .NET 9 SDK 9.0.300 + Desktop Runtime 9.0.5 已装(实测),M1 完成 |
+| 框架版本 | **net9.0-windows**(STS)——官方深色 API SetColorMode 需要;net8 实测菜单无法系统级深色(见技术选型表) |
 
 ## 一、技术选型(基于 WindowTinter 实证)
 
 | 项 | 选择 | 依据 |
 |---|---|---|
-| 语言/框架 | **C# WinForms,net8.0-windows**(LTS) | 与 WindowTinter(net6.0-windows)同路线,用户已有经验;net8 为当前 LTS(6 已 EOL) |
+| 语言/框架 | **C# WinForms,net9.0-windows**（STS） | **net9 提供官方深色 API `Application.SetColorMode(SystemColorMode.Dark)`**——菜单/滚动条/对话框等系统绘制部分整体深色（成熟方案非自绘，2026-08-27 实测菜单背景 253→47）；net8 无此 API（实测默认菜单在系统深色下仍浅色 253,253,253，SetPreferredAppMode 也无效）。net9 为 STS（2026-05 EOL），个人工具可接受，未来平滑升 .NET 10 LTS；用户机器已装 9.0.5 Desktop Runtime，零额外安装 |
 | UI | 原生 WinForms 自绘深色 | 参考 WindowTinter 深色方案(沉浸式深色标题栏 + 自绘控件),对齐 Web 版黑金风格 |
 | 剪贴板监听 | **Win32 `AddClipboardFormatListener`** | 原生 API,不依赖页面焦点——比浏览器 `clipboardchange` 强 |
 | 托盘/开机自启 | WinForms NotifyIcon + 注册表/启动项 | WindowTinter 已验证的成熟做法 |
@@ -39,8 +40,8 @@ dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile
 
 | 项 | 链接 | 说明 |
 |---|---|---|
-| .NET 8 Desktop Runtime x64(运行必需) | https://dotnet.microsoft.com/download/dotnet/8.0 | 下载 "Desktop Runtime 8.x x64" 安装 |
-| .NET 8 SDK(仅开发需要) | 同上页面 "SDK 8.x" | 开发机装;只运行 exe 可不装 |
+| .NET 9 Desktop Runtime x64(运行必需) | https://dotnet.microsoft.com/download/dotnet/9.0 | 下载 "Desktop Runtime 9.x x64" 安装（2026-08-27 实测本机已装 9.0.5） |
+| .NET 9 SDK(仅开发需要) | 同上页面 "SDK 9.x" | 开发机装；只运行 exe 可不装 |
 
 ## 四、深色 UI 设计(对齐 Web 版黑金)
 

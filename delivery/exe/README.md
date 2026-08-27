@@ -10,11 +10,12 @@ Windows 轻量桌面程序，替代"浏览器访问本地服务"——托盘常�
 
 | 项 | 选择 |
 |---|---|
-| 语言/框架 | C# WinForms, net8.0-windows（LTS） |
-| 发布 | 框架依赖单文件，约 1~3 MB（用户自装 .NET 8 Desktop Runtime） |
+| 语言/框架 | C# WinForms, net9.0-windows（官方深色 API SetColorMode；.NET 8 无此 API，菜单无法系统级深色） |
+| 发布 | 框架依赖单文件，约 170 KB（用户自装 .NET 9 Desktop Runtime） |
+| 深色菜单/滚动条/对话框 | `Application.SetColorMode(SystemColorMode.Dark)`（官方 API，非自绘） |
 | 剪贴板监听 | Win32 `AddClipboardFormatListener`（比浏览器 clipboardchange 强） |
 | 存储 | MVP 用 JSON（与 Web 版格式兼容可互导） |
-| 进度 | M2 骨架进行中（环境 M1 ✅ 已就绪） |
+| 进度 | M2 骨架完成（深色菜单已修） |
 
 ## 里程碑
 
