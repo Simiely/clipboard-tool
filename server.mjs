@@ -3,6 +3,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { CONFIG } from "./lib/core/config.js";
 import { matchRoute, withParams } from "./lib/routes/index.js";
@@ -13,6 +14,12 @@ import { pruneExpiredSessions } from "./lib/core/users.js";
 import { sendJson } from "./lib/routes/helpers.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// v0.6.14 版本指纹：启动日志打印 v版本 (git commit)——实例身份可追溯，
+// 排查多实例混跑（2026-08-27 数据清空事故）时先看日志确认代码版本。
+let VERSION = "dev";
+try { VERSION = JSON.parse(fs.readFileSync(path.join(__dirname, "package.json"), "utf8")).version || "dev"; } catch {}
+let GIT_SHORT = "";
+try { GIT_SHORT = execSync("git rev-parse --short HEAD", { cwd: __dirname, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim().slice(0, 7); } catch {}
 const INDEX_HTML = path.join(__dirname, "public", "index.html");
 const APP_JS = path.join(__dirname, "public", "app.js"); // v0.4.0：前端 JS 拆独立文件
 
@@ -81,7 +88,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(CONFIG.PORT, "127.0.0.1", () => {
-  console.log(`clipboard running on ${CONFIG.PORT} (data: ${path.dirname(CONFIG.usersFile)})`);
+  console.log(`clipboard v${VERSION} (${GIT_SHORT || "no-git"}) running on ${CONFIG.PORT} (data: ${path.dirname(CONFIG.usersFile)})`);
 });
 
 // 进程级异常兜底（v0.6.13）：任何未捕获异常/拒绝 → 记录但不退出进程。

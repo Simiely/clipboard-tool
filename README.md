@@ -56,13 +56,14 @@ node scripts/test-html-field.mjs
 ## 目录结构
 
 ```
-server.mjs          # 入口：HTTP 装配 + 路由 + 静态服务 + 过期清扫 + 自动同步定时器
+server.mjs          # 入口：HTTP 装配 + 路由 + 静态服务 + 过期清扫 + 自动同步定时器（启动打印 v版本 (commit)）
 manifest.json       # tools-center 平台声明
 package.json        # 工程元数据：type:module + Node>=22.7 + npm scripts（start/smoke/test:webdav/test:auto-sync/test）
-lib/core/           # 纯业务逻辑（store/clips/users/files/webdav）
+lib/core/           # 纯业务逻辑（store/clips/users/files/webdav + clips 子域拆分）
 lib/routes/         # 路由薄层 + 会话中间件
 public/index.html   # 单文件前端（暗黑新拟态，设计令牌在 :root）
 scripts/            # 测试与工具脚本（mock WebDAV、冒烟、集成、html 字段单测、复杂度测量）
+delivery/           # 交付形态（本地服务版 start.cmd / EXE 版 / 服务器版，三形态总览见 delivery/README.md）
 ```
 
 ## 文档
@@ -70,3 +71,5 @@ scripts/            # 测试与工具脚本（mock WebDAV、冒烟、集成、ht
 - [开发文档 DEVELOPMENT.md](DEVELOPMENT.md) — 架构说明与关键问题记录
 - [变更日志 CHANGELOG.md](CHANGELOG.md) — 版本记录
 - [AI 项目规则 AGENTS.md](AGENTS.md) — 技术栈 / 关键坑 / 约定
+- [交付形态 delivery/README.md](delivery/README.md) — 本地服务版 / EXE 版 / 服务器版三形态
+
