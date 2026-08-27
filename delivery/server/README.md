@@ -1,6 +1,23 @@
 # 服务器版（Server Deployment）
 
-> 状态：🚧 **规划中**。目标形态：公网/团队使用，跨设备 WebDAV 同步。
+> 状态：🚧 **规划中**（独立服务器已有启动脚本 `start-server.cmd`）。目标形态：公网/团队使用，跨设备 WebDAV 同步。
+
+## 快速启动（Windows 服务器/本机）
+
+双击 `delivery/server/start-server.cmd`，或命令行：
+
+```cmd
+start-server.cmd            # 默认 8130 + ./.data
+start-server.cmd 8080       # 自定义端口
+start-server.cmd 8080 D:/clipboard-data   # 端口 + 数据目录
+```
+
+脚本行为：
+- 检查 Node.js ≥ 22.7（未装则提示）
+- 数据目录默认 `./.data`（可用 `CAP_STORAGE_DIR` 环境变量或第二参数覆盖：`start-server.cmd 8080 D:/clipboard-data`）
+- **端口占用守卫**：检测到端口被占用立即报错退出（2026-08-27 多实例混跑事故教训，防误起第二个实例）
+- **数据目录共用警告**：非默认端口 + 默认数据目录时提示确认（防止第二个实例误用同一 `.data` 导致数据损坏）
+- 前台运行，日志实时可见（含版本指纹 `clipboard v0.6.14 (commit)`）
 
 ## 两种部署路径
 
