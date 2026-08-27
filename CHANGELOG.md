@@ -1,5 +1,16 @@
 # CHANGELOG.md
 
+## v0.6.14 (2026-08-27)
+
+### 架构整理：前端过滤单轨化（bug 修复）+ 墓碑规则下沉 + 模块化拆分
+
+- 🔴 **前端过滤单轨化修复**（app.js `loadClips`）：搜索/标签过滤统一走前端 `renderList`——`loadClips` 去掉 `q/tag` 参数恒拉全量（仅保留 `archived`）。修复真 bug：搜索词非空时发生增删改 → `refreshList` 把 `state.clips` 覆盖成过滤集 → 清空搜索词后全量从界面"消失"（须刷新页面恢复）。根因：后端过滤（历史遗留）与前端过滤（设计意图）双轨并存，一份 state 被两处过滤。后端 `listClips` 的 q/tag 参数保留（API 兼容）
+- 🟢 **墓碑规则下沉到 core**（webdav.js `recordTombstoneIfConfigured` + routes/clips.js）："已配置 WebDAV 才记墓碑"原是业务规则写在路由层（`if (r.tombstone && getSyncConfig)`），下沉为 webdav 域内部判断，路由层只做无条件编排调用——消除唯一一处业务规则泄漏到 HTTP 层
+- 🟢 **clips.js 585 行拆 5 文件**（clips-store/mutate/query/transfer/tombstones）：按"底层存取 / 写操作 / 查询 / 导入导出 / 墓碑"拆分，依赖方向单向（上层 → clips-store → store/config）零循环；`clips.js` 变纯聚合 re-export，**对外 import 路径与行为全不变**（webdav.js/测试脚本零改动）。renameTag/deleteTag/clearAll/sweep 原直写 `writeJson` 改为 `saveClips/saveArchive`（语义一致，超限滚动更正确）
+- 🟢 **webdav.js runSync 拆阶段函数**：拉源/合并/写回/实体/上传/迁移清理六阶段拆独立小函数（`collectRemoteSources`/`mergeRemoteAll`/`writeBackLocal`/`cleanupMigrations`），`mergeSnapshots` 导出路径不变（17 单测不受影响）
+- ✅ 验证：冒烟 34/34 · WebDAV 集成 19/19 · merge 17/17 · html 10/10 · P0 UI 场景 playwright 走查（搜索→编辑→清空搜索词全量恢复）全过
+- 📌 说明：webdav.js 的 P1（墓碑下沉）与 P3（拆阶段）为同文件改动，合并为一个 commit（`f59645a`），便于整体回滚 webdav 域
+
 ## v0.6.13 (2026-08-26)
 
 ### WebDAV 归档完整备份 + 归档可手动删除 + UI 微调
