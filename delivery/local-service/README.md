@@ -22,7 +22,7 @@ $env:CAP_STORAGE_DIR = "C:/Temp/clip-test"; node server.mjs 8131
 服务启动时打印版本与 commit，实例身份可追溯（2026-08-27 事故后新增）：
 
 ```
-clipboard v0.6.14 (4a4e281) running on 8130 (data: D:\...\clipboard-tool\.data)
+clipboard v0.6.14 (256af5c) running on 8130 (data: D:\...\clipboard-tool\.data)
 ```
 
 排查多实例问题时，先看每个实例日志的 `v版本 (commit)`，确认是不是同一代码版本、同一数据目录。

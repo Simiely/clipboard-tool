@@ -21,7 +21,7 @@
 - 🟢 **clips.js 585 行拆 5 文件**（clips-store/mutate/query/transfer/tombstones）：按"底层存取 / 写操作 / 查询 / 导入导出 / 墓碑"拆分，依赖方向单向（上层 → clips-store → store/config）零循环；`clips.js` 变纯聚合 re-export，**对外 import 路径与行为全不变**（webdav.js/测试脚本零改动）。renameTag/deleteTag/clearAll/sweep 原直写 `writeJson` 改为 `saveClips/saveArchive`（语义一致，超限滚动更正确）
 - 🟢 **webdav.js runSync 拆阶段函数**：拉源/合并/写回/实体/上传/迁移清理六阶段拆独立小函数（`collectRemoteSources`/`mergeRemoteAll`/`writeBackLocal`/`cleanupMigrations`），`mergeSnapshots` 导出路径不变（17 单测不受影响）
 - ✅ 验证：冒烟 34/34 · WebDAV 集成 19/19 · merge 17/17 · html 10/10 · P0 UI 场景 playwright 走查（搜索→编辑→清空搜索词全量恢复）全过
-- 📌 说明：webdav.js 的 P1（墓碑下沉）与 P3（拆阶段）为同文件改动，合并为一个 commit（`f59645a`），便于整体回滚 webdav 域
+- 📌 说明：webdav.js 的 P1（墓碑下沉）与 P3（拆阶段）为同文件改动，合并为一个 commit（`be7c358`），便于整体回滚 webdav 域
 
 ### 环境清理 + 测试加固（2026-08-27 同日）
 
@@ -405,13 +405,13 @@
 
 ## v0.1.1 (2026-08-09)
 
-### 部署工具（chore `b21a6eb`）
+### 部署工具（chore `36cd53b`）
 
 - 新增 `scripts/deploy-via-api.mjs`：github.com 被墙时通过 GitHub Git Data API（api.github.com 可直连）推送本地仓库——blobs → tree → commit → ref（main 不存在则创建，已存在强推）
 
 ## v0.1.0 (2026-08-09)
 
-### 初始化：多用户剪贴板工具（init `007293a`）
+### 初始化：多用户剪贴板工具（init `a3b7042`）
 
 **功能**：
 - **单一万能入口**：粘贴自动识别（URL→链接 / 其他→文本 / 拖放/选择文件→文件条目 / Ctrl+V 粘贴图片文件）；检测到复制内容自动弹出大窗口（`clipboardchange` 监听）
