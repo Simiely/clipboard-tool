@@ -39,12 +39,27 @@ public partial class MainForm
         _searchBox.KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) { _searchBox.Clear(); e.Handled = true; } };
 
         var btns = new FlowLayoutPanel { Dock = DockStyle.Right, AutoSize = true, WrapContents = false };
+        _archiveToggleBtn = MakeButton("含归档", ToggleArchiveView);
+        _archiveToggleBtn.Width = 70;
+        btns.Controls.Add(_archiveToggleBtn);
         btns.Controls.Add(MakeButton("存入", CaptureNow));
         btns.Controls.Add(MakeButton("导出", ExportAll));
         btns.Controls.Add(MakeButton("导入", ImportFromWeb));
         top.Controls.Add(_searchBox);
         top.Controls.Add(btns);
         _searchBox.Padding = new Padding(0, 0, 8, 0);
+
+        // 标签栏：全部 + 各标签 chips（点击过滤）
+        _tagBar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 36,
+            BackColor = UiBg,
+            Padding = new Padding(12, 4, 12, 4),
+            AutoScroll = true,
+            WrapContents = false,
+            FlowDirection = FlowDirection.LeftToRight,
+        };
 
         // 状态栏
         var statusBar = new Panel { Dock = DockStyle.Bottom, Height = 26, BackColor = UiPanel };
@@ -85,6 +100,7 @@ public partial class MainForm
         Controls.Add(_emptyHint);
         Controls.Add(_wall);
         Controls.Add(statusBar);
+        Controls.Add(_tagBar);
         Controls.Add(top);
     }
 

@@ -139,6 +139,85 @@ public sealed class Storage
                    .ToList();
     }
 
+    // ---------------- 标签体系（对齐 Web 版：跨活跃+归档同步生效） ----------------
+
+    /// <summary>全部标签去重排序（活跃 ∪ 归档）。</summary>
+    public List<string> GetAllTags()
+    {
+        return Load().SelectMany(c => c.Tags ?? new List<string>())
+                     .Where(t => !string.IsNullOrWhiteSpace(t))
+                     .Distinct(StringComparer.Ordinal)
+                     .OrderBy(t => t, StringComparer.Ordinal)
+                     .ToList();
+    }
+
+    /// <summary>重命名标签：跨全部条目（含归档）替换，新旧同名合并去重。</summary>
+    public int RenameTag(string oldName, string newName)
+    {
+        oldName = oldName.Trim();
+        newName = newName.Trim();
+        if (oldName.Length == 0 || newName.Length == 0 || oldName == newName) return 0;
+        var list = Load();
+        var touched = 0;
+        foreach (var c in list)
+        {
+            if (c.Tags == null) continue;
+            if (c.Tags.Contains(oldName))
+            {
+                c.Tags.Remove(oldName);
+                if (!c.Tags.Contains(newName)) c.Tags.Add(newName);
+                c.UpdatedAt = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                touched++;
+            }
+        }
+        if (touched > 0) Save(list);
+        return touched;
+    }
+
+    /// <summary>删除标签：跨全部条目（含归档）移除。</summary>
+    public int DeleteTag(string tag)
+    {
+        tag = tag.Trim();
+        if (tag.Length == 0) return 0;
+        var list = Load();
+        var touched = 0;
+        foreach (var c in list)
+        {
+            if (c.Tags != null && c.Tags.Remove(tag))
+            {
+                c.UpdatedAt = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                touched++;
+            }
+        }
+        if (touched > 0) Save(list);
+        return touched;
+    }
+
+    // ---------------- 归档（对齐 Web 版：手动归档/恢复/删除，updatedAt 刷新） ----------------
+
+    /// <summary>移入归档（Archived=true，updatedAt 刷新）。返回是否存在。</summary>
+    public bool ArchiveClip(string id)
+    {
+        return SetArchived(id, true);
+    }
+
+    /// <summary>从归档恢复（Archived=false，updatedAt 刷新）。返回是否存在。</summary>
+    public bool UnarchiveClip(string id)
+    {
+        return SetArchived(id, false);
+    }
+
+    private bool SetArchived(string id, bool archived)
+    {
+        var list = Load();
+        var clip = list.FirstOrDefault(c => c.Id == id);
+        if (clip == null) return false;
+        clip.Archived = archived;
+        clip.UpdatedAt = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        Save(list);
+        return true;
+    }
+
     // ---------------- Web 互导 ----------------
 
     /// <summary>导出为 Web 版格式（{app, version, exportedAt, clips[]}）。</summary>

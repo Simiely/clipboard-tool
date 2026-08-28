@@ -1,20 +1,24 @@
 # Clipboard EXE 桌面版
 
-> 状态：✅ **MVP 可用**（M3 数据层 + M4 捕获/卡片墙，2026-08-28 完成）。规划与决策详见 [`../docs/exe-plan.md`](../docs/exe-plan.md)。
+> 状态：✅ **MVP + M5 迭代完成**（2026-08-28：数据层 / 捕获 / 卡片墙 / 搜索 / 标签 / 归档 / 编辑 / 富文本 / URL 清理）。规划与决策详见 [`../docs/exe-plan.md`](../docs/exe-plan.md)。
 
-Windows 轻量桌面剪贴板工具（C# WinForms, net9.0-windows）。托盘常驻、原生剪贴板监听（不依赖焦点）、黑金深色 UI（含菜单/滚动条/对话框——官方 `Application.SetColorMode(SystemColorMode.Dark)`，非自绘）。
+Windows 轻量桌面剪贴板工具（C# WinForms, net9.0-windows）。托盘常驻、原生剪贴板监听、黑金深色 UI（含菜单/滚动条/对话框——官方 `Application.SetColorMode(SystemColorMode.Dark)`，非自绘）。
 
-## 功能（MVP）
+## 功能
 
 - **自动捕获（仅前台激活时）**：复制文本 / 链接（URL 识别）/ 图片 → 自动存入卡片墙；**窗口处于前台激活状态时才捕获**，最小化到托盘 / 失活时停止读取剪贴板（隐私优先，用户确认 2026-08-28）
+- **URL 自动清理**：链接捕获/编辑时自动剔除 UTM/fbclid/gclid/igshid/from/spm 等 24 个追踪参数（对齐 Web 版 cleanUrl）
+- **富文本**：复制带格式内容（网页/Word）→ 自动捕获纯文本 + 保留 HTML 片段；右键「复制富文本」原文回写保留格式
 - **去重**：与最近一条相同的内容重复复制 → 不产生重复条目，仅刷新时间置顶
-- **卡片墙**：黑金深色卡片（类型徽标 T/L/I + 标题 + 内容摘要 + 相对时间 + 置顶★/复制次数），悬停金边高亮
+- **卡片墙**：黑金深色卡片（类型徽标 T/L/I + 标题 + 内容摘要 + 相对时间 + 置顶★/复制次数），悬停金边高亮；**双击编辑**
 - **点击复制**：文本/链接复制回剪贴板；图片还原为 PNG 复制；复制次数 +1 参与排序
 - **搜索**：顶部搜索框实时过滤（标题/内容/链接包含，忽略大小写；Esc 清空）
-- **右键菜单**：复制 / 置顶 / 删除（含图片实体清理）
+- **标签体系**：顶栏标签 chips（「全部」+ 各标签，点击过滤）；编辑弹窗内标签 chips（点选已有 + 输入即时新增）；重命名/删除标签跨活跃+归档全部条目同步生效
+- **归档**：编辑弹窗/右键菜单「移入归档 / 从归档恢复」；工具栏「含归档」开关查看归档条目
+- **右键菜单**：复制 / 复制富文本（有 html 时）/ 编辑 / 置顶 / 归档（或恢复）/ 删除（含图片实体清理）
 - **导入导出**：导出 = Web 版格式 JSON（`{app,version,exportedAt,clips[]}`），导入 = Web 版导出文件直接合并（同 id 取 updatedAt 新者，非 UUID id 自动重生成）
-- **托盘常驻**：点 X / 最小化 → 托盘；双击恢复；托盘菜单「退出」才真正退出；单实例（重复启动唤醒已有实例）
-- **手动存入**：工具栏「存入」立即保存当前剪贴板
+- **托盘常驻**：点 X / 最小化 → 托盘；双击恢复；托盘菜单「退出」才真正退出；单实例
+- **手动存入**：工具栏「存入」立即保存当前剪贴板（不受前台捕获开关限制）
 
 ## 数据与兼容
 
@@ -30,12 +34,14 @@ Windows 轻量桌面剪贴板工具（C# WinForms, net9.0-windows）。托盘常
 clipboard-exe/
   ClipboardExe.csproj   工程（net9.0-windows, 单文件框架依赖发布）
   Program.cs            入口：单实例互斥 + 托盘 + 官方深色模式 + 版本指纹
-  MainForm.cs           主窗体逻辑：卡片墙渲染 / 复制 / 右键菜单 / 导入导出
-  MainForm.UI.cs        布局部分（工具栏 / 状态栏 / 卡片墙容器 / 空态提示）
-  ClipboardWatcher.cs   Win32 AddClipboardFormatListener 封装 + 捕获/去重/类型识别
-  Storage.cs            JSON 数据层：原子写 / 排序 / Web 导入导出合并
+  MainForm.cs           主窗体逻辑：卡片墙渲染 / 过滤 / 复制 / 编辑 / 右键菜单 / 导入导出
+  MainForm.UI.cs        布局部分（工具栏 / 标签栏 / 状态栏 / 卡片墙容器 / 空态提示）
+  ClipboardWatcher.cs   Win32 剪贴板监听封装 + 捕获/去重/类型识别/富文本
+  CleanUrl.cs           URL 追踪参数清理（UTM 等 24 个，移植 Web 版）
+  Storage.cs            JSON 数据层：原子写 / 排序 / 标签 / 归档 / Web 导入导出合并
   ClipItem.cs           条目模型（与 Web 版 publicClip 字段对齐）
   CardControl.cs        自绘卡片控件（黑金风格，悬停金边）
+  EditDialog.cs         编辑弹窗（标题/内容/链接/标签 chips/归档-恢复）
   NativeMethods.cs      P/Invoke 集合
   IconFactory.cs        程序化图标（黑底金剪贴板）
   app.manifest          沉浸式深色标题栏 + PerMonitorV2 DPI
@@ -59,9 +65,9 @@ dotnet publish clipboard-exe -c Release -r win-x64 --self-contained false -p:Pub
 
 ## 测试记录（2026-08-28）
 
-- Storage 单测 13/13（原子写 / 排序置顶→次数→时间 / Web 导出格式 / 导入合并去重 / 删除+文件清理 / 损坏容错）
-- 端到端（Debug 实例）：自动捕获文本 ✅、URL→link ✅、重复复制去重（不新增仅刷新 updatedAt）✅、数据落盘格式 ✅
-- 图片捕获：代码路径就绪（`Clipboard.ContainsImage → GetImage → PNG 实体`），沙箱环境无法模拟剪贴板图片，需真机实测
+- Storage 单测 19/19（原子写 / 排序 / Web 导出格式 / 导入合并去重 / 删除+文件清理 / 损坏容错 / CleanUrl 8 项 / 标签重命名删除跨条目 / 归档恢复）
+- 端到端（Debug 实例）：自动捕获文本 ✅、URL→link ✅、重复复制去重 ✅、数据落盘格式 ✅
+- 图片捕获 / 标签 / 归档 / 编辑 / 富文本 GUI 交互：代码与单测就绪，需真机实测（沙箱无法模拟剪贴板图片与真实焦点切换）
 
 ## 里程碑
 
@@ -69,7 +75,7 @@ dotnet publish clipboard-exe -c Release -r win-x64 --self-contained false -p:Pub
 - [x] M2 骨架（空壳 exe 可跑 + 深色菜单 SetColorMode 实测 253→47）
 - [x] M3 数据层：JSON 存储对齐 Web 版字段 + Web 导出 JSON 导入（2026-08-28）
 - [x] M4 MVP：剪贴板捕获（文本/链接/图片）+ 卡片墙 + 点击复制 + 搜索（2026-08-28）
-- [ ] M5 迭代：标签 / 归档 / 富文本 / 置顶排序增强（V2）
+- [x] M5 迭代：标签体系 / 归档 / 编辑弹窗 / 富文本 / URL 清理（2026-08-28）
 - [ ] M6 WebDAV 双向同步（移植 mergeSnapshots + 墓碑语义，V3）
 
 ## 与 Web 版的关系

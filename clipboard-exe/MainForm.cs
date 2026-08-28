@@ -17,8 +17,13 @@ public partial class MainForm : Form
 
     private TextBox _searchBox = null!;
     private FlowLayoutPanel _wall = null!;
+    private FlowLayoutPanel _tagBar = null!;
     private Label _statusLabel = null!;
     private Label _emptyHint = null!;
+    private Button _archiveToggleBtn = null!;
+
+    private string? _selectedTag;  // null = 全部标签
+    private bool _showArchived;    // 归档视图开关
 
     private bool _exiting; // 托盘"退出"才真正退出，点 X 只是最小化到托盘
 
@@ -96,14 +101,18 @@ public partial class MainForm : Form
 
     // ---------------- 卡片墙渲染 ----------------
 
-    /// <summary>全量重载 + 按搜索词过滤 + 排序 + 渲染卡片（Web 版排序同款：星标→次数→更新）。</summary>
+    /// <summary>全量重载 + 按搜索词/标签/归档视图过滤 + 排序 + 渲染卡片（Web 版排序同款：星标→次数→更新）。</summary>
     private void RefreshCards()
     {
         _all.Clear();
         _all.AddRange(_storage.Load());
 
+        IEnumerable<ClipItem> view = _showArchived ? _all : _all.Where(c => !c.Archived);
+        if (_selectedTag != null)
+        {
+            view = view.Where(c => c.Tags != null && c.Tags.Contains(_selectedTag, StringComparer.Ordinal));
+        }
         var keyword = _searchBox.Text.Trim();
-        IEnumerable<ClipItem> view = _all.Where(c => !c.Archived);
         if (keyword.Length > 0)
         {
             view = view.Where(c =>
@@ -123,18 +132,71 @@ public partial class MainForm : Form
 
         _wall.Visible = sorted.Count > 0; // 空态隐藏卡片墙，露出空态提示
         _emptyHint.Visible = sorted.Count == 0;
-        _statusLabel.Text = $"{_all.Count(c => !c.Archived)} 条{(keyword.Length > 0 ? $" · 筛选出 {sorted.Count} 条" : "")}";
+        var archText = _showArchived ? "（含归档）" : "";
+        _statusLabel.Text = $"{_all.Count(c => !c.Archived)} 条{archText}{(keyword.Length > 0 ? $" · 筛选出 {sorted.Count} 条" : "")}";
+        RenderTagBar(); // 数据变化后同步标签栏（捕获/编辑/删除/导入都会走到这里）
     }
 
     private Control BuildCard(ClipItem item)
     {
         var card = new CardControl(item);
         card.Click += (_, _) => CopyItem(item);
+        card.DoubleClick += (_, _) => OpenEdit(item);
         card.MouseUp += (s, e) =>
         {
             if (e.Button == MouseButtons.Right) ShowCardMenu(card, item);
         };
         return card;
+    }
+
+    // ---------------- 标签栏 / 归档视图 ----------------
+
+    /// <summary>重建标签栏 chips（全部 + 各标签），随数据变化刷新。</summary>
+    private void RenderTagBar()
+    {
+        _tagBar.SuspendLayout();
+        _tagBar.Controls.Clear();
+        _tagBar.Controls.Add(MakeTagChip("全部", _selectedTag == null));
+        foreach (var tag in _storage.GetAllTags())
+        {
+            _tagBar.Controls.Add(MakeTagChip(tag, tag == _selectedTag));
+        }
+        _tagBar.ResumeLayout();
+    }
+
+    private Control MakeTagChip(string tag, bool selected)
+    {
+        var chip = new Button
+        {
+            Text = tag,
+            AutoSize = true,
+            MinimumSize = new Size(40, 24),
+            Margin = new Padding(0, 2, 6, 2),
+            Padding = new Padding(10, 0, 10, 0),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = selected ? Color.FromArgb(0x2E, 0x28, 0x18) : Color.FromArgb(0x26, 0x26, 0x26),
+            ForeColor = selected ? Color.FromArgb(0xC9, 0xA9, 0x6E) : Color.FromArgb(0xDA, 0xDA, 0xDA),
+            Font = new Font("Microsoft YaHei UI", 8.5f),
+            Cursor = Cursors.Hand,
+        };
+        chip.FlatAppearance.BorderColor = selected ? Color.FromArgb(0xC9, 0xA9, 0x6E) : Color.FromArgb(0x2A, 0x2A, 0x2A);
+        chip.FlatAppearance.MouseOverBackColor = Color.FromArgb(0x33, 0x33, 0x33);
+        chip.Click += (_, _) =>
+        {
+            _selectedTag = tag == "全部" ? null : tag;
+            RenderTagBar();
+            RefreshCards();
+        };
+        return chip;
+    }
+
+    private void ToggleArchiveView()
+    {
+        _showArchived = !_showArchived;
+        _archiveToggleBtn.BackColor = _showArchived ? Color.FromArgb(0x2E, 0x28, 0x18) : Color.FromArgb(0x2A, 0x2A, 0x2A);
+        _archiveToggleBtn.ForeColor = _showArchived ? Color.FromArgb(0xC9, 0xA9, 0x6E) : Color.FromArgb(0xDA, 0xDA, 0xDA);
+        _archiveToggleBtn.FlatAppearance.BorderColor = _showArchived ? Color.FromArgb(0xC9, 0xA9, 0x6E) : Color.FromArgb(0x2A, 0x2A, 0x2A);
+        RefreshCards();
     }
 
     // ---------------- 卡片操作 ----------------
@@ -178,10 +240,21 @@ public partial class MainForm : Form
     {
         var menu = new ContextMenuStrip();
         menu.Items.Add("复制", null, (_, _) => CopyItem(item));
+        if (!string.IsNullOrEmpty(item.Html))
+        {
+            menu.Items.Add("复制富文本", null, (_, _) => CopyRichText(item));
+        }
+        menu.Items.Add("编辑…", null, (_, _) => OpenEdit(item));
         menu.Items.Add("置顶 / 取消置顶", null, (_, _) =>
         {
             item.Pinned = !item.Pinned;
             _storage.Save(_storage.Load().Select(c => c.Id == item.Id ? item : c).ToList());
+            RefreshCards();
+        });
+        menu.Items.Add(item.Archived ? "从归档恢复" : "移入归档", null, (_, _) =>
+        {
+            if (item.Archived) _storage.UnarchiveClip(item.Id);
+            else _storage.ArchiveClip(item.Id);
             RefreshCards();
         });
         menu.Items.Add(new ToolStripSeparator());
@@ -195,6 +268,56 @@ public partial class MainForm : Form
             }
         });
         menu.Show(card, Cursor.Position - (Size)card.Location);
+    }
+
+    /// <summary>复制富文本（CF_HTML 原文回写剪贴板，保留格式）。</summary>
+    private void CopyRichText(ClipItem item)
+    {
+        try
+        {
+            _watcher.SuppressNext();
+            Clipboard.SetText(item.Html, TextDataFormat.Html);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Info("rich copy failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>双击编辑：打开编辑弹窗（标题/内容或链接/标签/归档）。</summary>
+    private void OpenEdit(ClipItem item)
+    {
+        using var dlg = new EditDialog(item, _storage.GetAllTags());
+        if (dlg.ShowDialog(this) != DialogResult.OK) return;
+
+        if (dlg.ArchiveRequested || dlg.UnarchiveRequested)
+        {
+            if (dlg.ArchiveRequested) _storage.ArchiveClip(item.Id);
+            else _storage.UnarchiveClip(item.Id);
+            RefreshCards();
+            return;
+        }
+        if (!dlg.SaveRequested) return;
+
+        // 按类型写入编辑值
+        item.Title = dlg.EditedTitle;
+        item.Tags = dlg.EditedTags;
+        if (item.Type == "text")
+        {
+            if (dlg.EditedContent.Length == 0) return; // 内容不能为空
+            item.Content = dlg.EditedContent;
+        }
+        else if (item.Type == "link")
+        {
+            var url = CleanUrl.Clean(dlg.EditedUrl);
+            if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) return; // 需 http(s) 开头
+            item.Url = url;
+            if (string.IsNullOrEmpty(item.Title)) item.Title = url.Length > 60 ? url[..60] : url;
+        }
+        item.UpdatedAt = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+        _storage.Save(_storage.Load().Select(c => c.Id == item.Id ? item : c).ToList());
+        RefreshCards();
     }
 
     // ---------------- 工具栏动作 ----------------

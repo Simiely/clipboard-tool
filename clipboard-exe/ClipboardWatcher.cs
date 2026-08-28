@@ -80,19 +80,44 @@ public sealed class ClipboardWatcher
 
     // ---------------- 捕获实现 ----------------
 
+    /// <summary>HTML 片段大小上限（对齐 Web 版 CONFIG.MAX_HTML = 512KB）。</summary>
+    private const int MaxHtml = 512 * 1024;
+
     private void CaptureText(string text)
     {
         var now = DateTimeOffset.Now.ToUnixTimeMilliseconds();
         var type = UrlRe.IsMatch(text) ? "link" : "text";
+        // link 对齐 Web 版语义：content 留空、url 存清理后的链接（去追踪参数）、title 取 url 前 60
+        var url = type == "link" ? CleanUrl.Clean(text) : "";
+        var content = type == "link" ? "" : text;
+        var title = type == "link" ? (url.Length > 60 ? url[..60] : url) : "";
+
+        // 富文本 html：仅 text 类型有意义（link 对齐 Web 版不存 html）；从剪贴板读 CF_HTML 片段
+        var html = "";
+        if (type == "text")
+        {
+            try
+            {
+                if (Clipboard.ContainsText(TextDataFormat.Html))
+                {
+                    html = Clipboard.GetText(TextDataFormat.Html);
+                    if (html.Length > MaxHtml) html = html[..MaxHtml];
+                }
+            }
+            catch { /* CF_HTML 读取失败不影响纯文本捕获 */ }
+        }
 
         var list = _storage.Load();
-        // 去重：与最新一条同 type+content 相同 → 跳过（刷新 updatedAt 到顶即可，不产生重复）
+        // 去重：与最新一条同 type + 同内容（text 比 content / link 比 url）相同 → 跳过（刷新 updatedAt 置顶）
         var latest = list.Where(c => !c.Archived)
                          .OrderByDescending(c => c.UpdatedAt)
                          .FirstOrDefault();
-        if (latest != null && latest.Type == type && latest.Content == text)
+        var sameContent = type == "link"
+            ? latest != null && latest.Type == "link" && latest.Url == url
+            : latest != null && latest.Type == "text" && latest.Content == text;
+        if (sameContent)
         {
-            latest.UpdatedAt = now;
+            latest!.UpdatedAt = now;
             _storage.Save(list);
             return;
         }
@@ -101,14 +126,15 @@ public sealed class ClipboardWatcher
         {
             Id = Guid.NewGuid().ToString(),
             Type = type,
-            Content = text,
-            Title = type == "link" ? (text.Length > 60 ? text[..60] : text) : "",
-            Url = type == "link" ? text : "",
+            Content = content,
+            Html = html,
+            Title = title,
+            Url = url,
             CreatedAt = now,
             UpdatedAt = now,
         };
         _storage.Add(clip);
-        AppLog.Info($"captured {type}: {text[..Math.Min(40, text.Length)]}...");
+        AppLog.Info($"captured {type}: {(type == "link" ? url : text[..Math.Min(40, text.Length)])}...");
         _onCaptured();
     }
 
