@@ -1,6 +1,6 @@
 {
   "name": "clipboard-tool",
-  "version": "0.6.14",
+  "version": "0.6.15",
   "private": true,
   "description": "多用户剪贴板管理工具：万能入口粘贴即存、智能排序、拼音搜索、标签体系、WebDAV 备份同步（墓碑机制/定时自动同步）、Node 零依赖",
   "type": "module",

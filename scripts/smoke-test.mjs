@@ -122,6 +122,31 @@ ok("删除条目后文件已清理", dl3.status === 404);
 const exp = await req("POST", "/api/clips", { token: t1, json: { type: "text", content: "临时内容", expire: "1h" } });
 ok("过期条目带 expireAt", exp.data.clip.expireAt > Date.now());
 
+// 18b. 批量加标签（v0.6.15：对 c1/c2 两条加「批量」标签）
+const bAdd = await req("POST", "/api/clips/batch", { token: t1, json: { action: "addTags", ids: [cid1, c2.data.clip.id], tags: ["批量"] } });
+ok("批量加标签", bAdd.status === 200 && bAdd.data.affected === 2);
+const chkAdd = await req("GET", "/api/clips", { token: t1 });
+ok("批量加标签已生效", chkAdd.data.clips.find(c => c.id === cid1).tags.includes("批量") && chkAdd.data.clips.find(c => c.id === c2.data.clip.id).tags.includes("批量"));
+
+// 18c. 批量减标签（v0.6.15：移除「批量」）
+const bRm = await req("POST", "/api/clips/batch", { token: t1, json: { action: "removeTags", ids: [cid1, c2.data.clip.id], tags: ["批量"] } });
+ok("批量减标签", bRm.status === 200 && bRm.data.affected === 2);
+const chkRm = await req("GET", "/api/clips", { token: t1 });
+ok("批量减标签已生效", !chkRm.data.clips.find(c => c.id === cid1).tags.includes("批量"));
+
+// 18d. 批量删除（v0.6.15：删 c1/c2 两条）
+const bDel = await req("POST", "/api/clips/batch", { token: t1, json: { action: "delete", ids: [cid1, c2.data.clip.id] } });
+ok("批量删除", bDel.status === 200 && bDel.data.deleted === 2);
+const chkDel = await req("GET", "/api/clips", { token: t1 });
+ok("批量删除已生效", !chkDel.data.clips.some(c => c.id === cid1 || c.id === c2.data.clip.id));
+
+// 18e. 批量空选择 → 400（v0.6.15 防御）
+const bEmpty = await req("POST", "/api/clips/batch", { token: t1, json: { action: "delete", ids: [] } });
+ok("批量空选择返回 400", bEmpty.status === 400);
+// 未知 action → 400
+const bBad = await req("POST", "/api/clips/batch", { token: t1, json: { action: "nope", ids: [cid1] } });
+ok("批量未知操作返回 400", bBad.status === 400);
+
 // 19. 删除他人用户 → 403（须在删自己前：删除会销毁本人全部 token）
 const delOther = await req("DELETE", `/api/users/${uid2}`, { token: t1 });
 ok("删除他人账号被拒", delOther.status === 403);

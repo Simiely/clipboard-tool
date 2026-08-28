@@ -15,6 +15,9 @@ let suppressAutoPasteUntil = 0;
 let userEditMode = false;
 // 待存入的富文本 html（从剪贴板 text/html 读取，存入弹窗关闭时清空；无富文本来源则为空）
 let pendingHtml = "";
+// 批量编辑模式（v0.6.15）：编辑按钮进入多选——全选当前页 / 批量删除 / 批量加标签 / 批量减标签
+let batchMode = false;
+const batchSel = new Set(); // 已选条目 id 集合（按 id 存，跨过滤/重排保持）
 
 // ---------- API（统一带 token，10s 超时防永久挂起——第三轮 F-1） ----------
 const REQ_TIMEOUT = 10000;
@@ -284,6 +287,7 @@ function findDuplicateClip(content, clips) {
 
 // ---------- 视图切换 ----------
 function render() {
+  resetBatchMode(); // v0.6.15：整页重建（进入用户/登出/会话失效）必然退出批量编辑
   $("#view").replaceChildren();
   if (state.current) { userEditMode = false; renderMain(); } // 进主页面必然退出编辑模式
   else renderUserSelect();
@@ -596,6 +600,10 @@ function renderMain() {
   row2.append(tagbarWrap);
   // 右侧操作
   const ops = el("div", "ops");
+  // 批量编辑入口（v0.6.15）：进入/退出多选模式——全选当前页 / 批量删除 / 批量加标签 / 批量减标签
+  const editBtn = el("button", "btn sm ghost batch-edit-btn", "编辑");
+  editBtn.title = "批量编辑：多选条目，批量删除 / 加标签 / 减标签";
+  editBtn.onclick = () => setBatchMode(!batchMode);
   // 含归档开关：归档条目是只读历史（滚动归档 v0.2.0），勾选才从后端拉取合并
   const archLbl = el("label", "opt"); archLbl.title = "含归档：查看历史归档条目（归档参与 WebDAV 同步）";
   const archChk = el("input"); archChk.type = "checkbox"; archChk.checked = !!state.filter.archived;
@@ -627,7 +635,7 @@ function renderMain() {
       flash("同步完成：远端" + (r.remoteExisted ? "有备份" : "无备份") + (r.uploaded ? " · 已上传" : " · 本地空跳过上传"));
     } catch (e) { errToast(e.message); }
   });
-  ops.append(archLbl, colsSel, syncBtn);
+  ops.append(editBtn, archLbl, colsSel, syncBtn);
   row2.append(ops);
   tool.append(row2);
   v.append(tool);
@@ -718,11 +726,9 @@ for (const [letter, chars] of Object.entries(PY_GROUPS)) for (const ch of chars)
 function pyInitial(ch) { return PY_MAP.get(String(ch)) || ""; }
 function strToPy(s) { let r = ""; for (const ch of String(s || "")) r += pyInitial(ch); return r; }
 
-/** 前端即时过滤（搜索/标签/类型全本地筛——数据量小、零网络请求；删除/编辑后仍走 loadClips 保证与后端一致） */
-function renderList(v = $("#view")) {
-  const old = $(".list", v); if (old) old.remove();
-  const list = el("div", "list");
-  list.dataset.cols = state.cols; // 列数选择（1~4 或 auto）
+/** 前端过滤（搜索/标签/类型全本地筛——数据量小、零网络请求；删除/编辑后仍走 loadClips 保证与后端一致）。
+ *  抽独立纯函数：renderList 与批量「全选当前页」共用同一份可见集定义。 */
+function getVisibleClips() {
   const kw = state.filter.q.trim().toLowerCase();
   const tg = state.filter.tag;
   const ty = state.filter.type;
@@ -742,6 +748,18 @@ function renderList(v = $("#view")) {
       return py.includes(kw);
     });
   }
+  return filtered;
+}
+
+/** 前端即时过滤（搜索/标签/类型全本地筛——数据量小、零网络请求；删除/编辑后仍走 loadClips 保证与后端一致） */
+function renderList(v = $("#view")) {
+  const old = $(".list", v); if (old) old.remove();
+  const list = el("div", "list");
+  list.dataset.cols = state.cols; // 列数选择（1~4 或 auto）
+  const kw = state.filter.q.trim().toLowerCase();
+  const tg = state.filter.tag;
+  const ty = state.filter.type;
+  const filtered = getVisibleClips();
   if (!filtered.length) {
     // UI 走查 U-2：区分"没有条目"与"搜索/过滤无结果"，避免误导
     const msg = (kw || tg || ty !== "all")
@@ -751,6 +769,134 @@ function renderList(v = $("#view")) {
   }
   for (const c of filtered) list.append(clipCard(c));
   v.append(list);
+  renderBatchBar(); // v0.6.15：批量操作条（悬浮底部，仅批量模式渲染）
+}
+
+// ---------- 批量编辑（v0.6.15：编辑按钮进入多选——全选当前页 / 批量删除 / 批量加标签 / 批量减标签） ----------
+/** 进入/退出批量编辑模式。进入：清空选择 + 重建列表（卡片带勾选层）；退出：清选择 + 收条。 */
+function setBatchMode(on) {
+  batchMode = !!on;
+  if (!batchMode) batchSel.clear();
+  const btn = $(".batch-edit-btn");
+  if (btn) { btn.textContent = on ? "完成" : "编辑"; btn.classList.toggle("on", on); }
+  renderList();
+}
+/** 整页重建（进入用户/登出/会话失效）时强制退出批量模式，并移除悬浮条 */
+function resetBatchMode() {
+  batchMode = false; batchSel.clear();
+  const bar = $("#batch-bar"); if (bar) bar.remove();
+}
+/** 切换单条选择（按 id；不重建列表，仅刷卡片选中态与计数，避免滚动位置丢失） */
+function toggleSelect(id) {
+  if (batchSel.has(id)) batchSel.delete(id); else batchSel.add(id);
+  syncBatchUI();
+}
+/** 当前可见集是否全部选中 */
+function allVisibleSelected() {
+  const visible = getVisibleClips();
+  return visible.length > 0 && visible.every((c) => batchSel.has(c.id));
+}
+/** 全选当前页：全选（或已全选则取消全选）当前过滤出的可见条目 */
+function selectAllVisible() {
+  const visible = getVisibleClips();
+  if (allVisibleSelected()) { for (const c of visible) batchSel.delete(c.id); }
+  else { for (const c of visible) batchSel.add(c.id); }
+  syncBatchUI();
+}
+/** 同步已渲染卡片的选中态 + 批量条计数/全选标签/按钮可用态 */
+function syncBatchUI() {
+  document.querySelectorAll(".clip-card").forEach((card) => {
+    const id = card.dataset.clipId;
+    if (id === undefined) return;
+    card.classList.toggle("selected", batchSel.has(id));
+    const chk = card.querySelector(".sel-chk");
+    if (chk) chk.classList.toggle("on", batchSel.has(id));
+  });
+  const bar = $("#batch-bar");
+  if (!bar) return;
+  const cnt = bar.querySelector(".batch-count");
+  if (cnt) cnt.textContent = "已选 " + batchSel.size + " 项";
+  const sa = bar.querySelector(".batch-select-all");
+  if (sa) sa.textContent = allVisibleSelected() ? "取消全选" : "全选当前页";
+  const empty = batchSel.size === 0;
+  bar.querySelectorAll("[data-need-sel]").forEach((b) => { b.disabled = empty; });
+}
+/** 渲染悬浮批量操作条（仅批量模式；每次 renderList 末尾调用，重建以刷新状态） */
+function renderBatchBar() {
+  const old = $("#batch-bar"); if (old) old.remove();
+  if (!batchMode) return;
+  const bar = el("div", "batch-bar");
+  bar.id = "batch-bar"; // id 供 $() 定位（el() 只设 class）
+  const cnt = el("span", "batch-count", "已选 " + batchSel.size + " 项");
+  const sa = el("button", "btn sm ghost batch-select-all", allVisibleSelected() ? "取消全选" : "全选当前页");
+  sa.onclick = () => selectAllVisible();
+  const add = el("button", "btn sm", "＋ 加标签");
+  add.dataset.needSel = "1";
+  add.onclick = () => openBatchTagModal("add");
+  const rm = el("button", "btn sm", "－ 减标签");
+  rm.dataset.needSel = "1";
+  rm.onclick = () => openBatchTagModal("remove");
+  const del = el("button", "btn sm danger", "🗑 删除");
+  del.dataset.needSel = "1";
+  del.onclick = () => {
+    if (!batchSel.size) return;
+    askConfirm("删除已选的 " + batchSel.size + " 条内容？此操作不可恢复（已配置 WebDAV 备份则下次同步也会从远端删除）。", guard(del, async () => {
+      const r = await api("/api/clips/batch", { method: "POST", json: { action: "delete", ids: [...batchSel] } }).catch((e) => errToast(e.message));
+      if (!r) return;
+      flash("已批量删除 " + r.deleted + " 条");
+      setBatchMode(false); // 删除后退出批量模式（选择已无意义）
+      await refreshList();
+    }), "批量删除");
+  };
+  const done = el("button", "btn sm primary", "完成");
+  done.onclick = () => setBatchMode(false);
+  bar.append(cnt, sa, add, rm, del, done);
+  document.body.append(bar);
+  const empty = batchSel.size === 0;
+  bar.querySelectorAll("[data-need-sel]").forEach((b) => { b.disabled = empty; });
+}
+/** 批量加/减标签弹窗：add=选要加的标签（含新建）；remove=在已选条目的标签并集中挑要移除的 */
+function openBatchTagModal(mode) {
+  if (!batchSel.size) return errToast("请先选择条目");
+  const isAdd = mode === "add";
+  const root = $("#modal-root");
+  const m = el("div", "mask");
+  const modal = el("div", "modal");
+  modal.append(el("h3", "", isAdd ? "批量加标签" : "批量减标签"),
+    el("div", "sub", "对已选 " + batchSel.size + " 条" + (isAdd ? "添加标签" : "移除标签")));
+  const pickSel = [];
+  const wrap = el("div");
+  if (isAdd) {
+    renderTagPicker(wrap, pickSel, state.tags, (s) => { pickSel.length = 0; pickSel.push(...s); });
+  } else {
+    const union = new Set();
+    for (const c of state.clips) if (batchSel.has(c.id)) for (const t of c.tags || []) union.add(t);
+    if (!union.size) {
+      const row = el("div", "form-row");
+      const close = el("button", "btn ghost", "关闭"); close.style.flex = "1";
+      close.onclick = () => m.remove();
+      row.append(close);
+      modal.append(el("div", "empty", "所选条目没有任何标签"), row);
+      m.append(modal); root.append(m);
+      return;
+    }
+    renderTagPicker(wrap, pickSel, [...union].map((t) => ({ tag: t })), (s) => { pickSel.length = 0; pickSel.push(...s); });
+  }
+  modal.append(wrap);
+  const row = el("div", "form-row");
+  const ok = el("button", "btn primary", "确定"); ok.style.flex = "1";
+  const cancel = el("button", "btn ghost", "取消"); cancel.style.flex = "1";
+  row.append(ok, cancel); modal.append(row);
+  ok.onclick = guard(ok, async () => {
+    if (!pickSel.length) return errToast("请选择标签");
+    const r = await api("/api/clips/batch", { method: "POST", json: { action: isAdd ? "addTags" : "removeTags", ids: [...batchSel], tags: pickSel } }).catch((e) => errToast(e.message));
+    if (!r) return;
+    m.remove();
+    flash((isAdd ? "已批量加标签（" : "已批量减标签（") + r.affected + " 条）");
+    await refreshList();
+  });
+  cancel.onclick = () => m.remove();
+  m.append(modal); root.append(m);
 }
 
 // ---------- 卡片工厂（v0.4.3 拆分：clipCard 从 CC49 降到组装级，各事件按钮独立小函数）
@@ -925,6 +1071,7 @@ async function handleCardClick(c, card, e) {
 
 function clipCard(c) {
   const card = el("div", "clip-card");
+  card.dataset.clipId = c.id; // v0.6.15：批量选择按 id 映射 DOM 卡片（syncBatchUI 用）
   if (c.pinned) card.classList.add("pinned"); // 星标卡片高亮描边
   if (c.archived) card.classList.add("archived"); // 归档：降透明（v0.6.5 状态视觉化）
   // 顶部徽章行（方案18：类型徽章 + 标题 + 状态徽章）
@@ -951,6 +1098,18 @@ function clipCard(c) {
   // v0.6.12：富文本复制入口在内容区左右分栏（左纯文本/右富文本）；链接打开为内容区金色主按钮——ops 不重复添加
   if (footOps.children.length) foot.append(footOps);
   card.append(row1, makeCardBody(c), foot);
+
+  // 批量模式（v0.6.15）：整卡=选择切换（透明覆盖层），左上角勾选框；禁用复制/双击编辑/图片 hover 预览
+  if (batchMode) {
+    card.classList.add("batching");
+    card.classList.toggle("selected", batchSel.has(c.id));
+    const chk = el("div", "sel-chk" + (batchSel.has(c.id) ? " on" : ""), "✓");
+    chk.onclick = (e) => { e.stopPropagation(); toggleSelect(c.id); };
+    const ov = el("div", "batch-overlay");
+    ov.onclick = () => toggleSelect(c.id);
+    card.append(chk, ov);
+    return card;
+  }
 
   // 图片卡片 hover 预览（v0.4.3 状态显式化 + 独立函数）：默认 100%，滚轮缩放（50%~300%）
   //  - 状态收敛为单一对象 previewState（open/scale/timer/box/drag），不再散落闭包变量（防布尔失控，架构评估 v2 #1）

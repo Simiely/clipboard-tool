@@ -63,6 +63,15 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 - 修复：**前端单轨化**——`loadClips()` 恒拉全量（仅 `archived` 影响数据源范围），搜索/标签/类型/拼音全部由 `renderList` 本地过滤；标签筛选自愈（筛选标签全量已无 → 自动回全部）改为前端判断。后端 `listClips` 的 `q/tag` 参数保留（API 兼容，闲置）
 - 教训：**同一份 state 只允许一个过滤器**；改"即时过滤"类交互时先查数据源是否还被旧参数污染
 
+### 优化：批量编辑（多选 + 批量删除/加标签/减标签，v0.6.15）
+
+**TL;DR**：工具行「编辑」进入多选模式，卡片整卡点击切换选择（透明覆盖层 + 左上角勾选框），底部悬浮条做全选/批量删除/批量加减标签。后端单入口 `POST /api/clips/batch` 按 `action` 分发。
+
+- 关键设计：`getVisibleClips()` 抽纯函数——`renderList` 与「全选当前页」共用同一份过滤逻辑，避免两处各写一份导致"全选"与"渲染"范围不一致
+- **关键坑（必守）**：`batchSetTags` 加减标签后**必须刷新 `updatedAt`**——`updatedAt` 是 WebDAV `mergeSnapshots` 的合并 key，不刷新则批量改标签**不会同步到远端**，也不会反映到排序（编辑过的条目不浮到前面）。对照单条 `updateClip` 同样刷新，批量必须对齐
+- 删除语义：`batchDeleteClips` 跨活跃区+归档，与单条 `deleteClip`/`deleteArchivedClip` 完全一致——记墓碑（由 `recordTombstoneIfConfigured` 判断是否已配置 WebDAV）+ 路由层联动 `deleteFile` 清理文件实体
+- 交互：进入批量模式用透明覆盖层（`z-index:5`）盖住整卡承载点击，勾选框 `z-index:6` 在上——这样卡片内所有复制/编辑/图片预览行为天然失效，无需逐个禁用；退出批量（完成/删除/登出/会话失效）统一走 `resetBatchMode()`
+
 ### 问题：AI 沙箱里 `fs.rmSync` 报 `[safe-delete] 操作失败`（v0.3.1 容错 / 2026-08-14 澄清根源）
 
 **TL;DR**：WorkBuddy（AI 沙箱）通过 `NODE_OPTIONS=--require=genie-safe-delete.cjs` 注入安全删除 shim，把 `fs.rmSync`/`fs.rm` 猴补丁为"送回收站"（genie-trash 二进制），该二进制在 Windows 11 无交互上下文返回 exit 1 + "Some operations were aborted"，但文件实际已删除。删除一律用自写 `rmForce()`（逐个 try/catch 容错）。
