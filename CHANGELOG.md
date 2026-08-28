@@ -8,6 +8,7 @@
 - 🟢 **全选当前页**：抽取 `getVisibleClips()` 纯函数（`renderList` 与「全选当前页」共用同一份可见集定义），全选=当前搜索/标签/类型过滤出的可见条目；已全选则再点取消全选
 - 🟢 **后端批量接口**（`POST /api/clips/batch`）：单入口按 `action` 分发 `delete / addTags / removeTags`——`batchDeleteClips` 跨活跃区+归档删除（记墓碑 + 联动文件实体清理，与单条删除同语义）；`batchSetTags` 跨区加/减标签，**刷新 `updatedAt`**（WebDAV 合并的 key，不刷新则改动不同步远端、也不反映到排序）；空 ids / 未知 action 返回 400
 - ✅ 验证：冒烟 42/42（新增批量加/减标签、批量删除、空选择/未知操作 400 共 8 条）· merge 17/17 · html 10/10 · playwright 端到端 13/13（进批量→点卡选中→全选→加标签→减标签→删除→退出）
+- 🟢 **favicon**（index.html）：📋 emoji 内嵌 SVG data-URI 设为网站图标（`<link rel="icon">`，尖括号编码兼容严格解析器；零额外文件，平台托管/独立运行均生效）
 
 ## v0.6.14 (2026-08-27)
 
