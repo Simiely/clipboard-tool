@@ -72,6 +72,21 @@ public partial class MainForm : Form
         base.WndProc(ref m);
     }
 
+    // ---------------- 前台捕获开关（用户确认 2026-08-28） ----------------
+
+    /// <summary>窗口激活（前台）→ 开启自动捕获；失活/最小化 → 关闭。未激活时绝不读剪贴板。</summary>
+    protected override void OnActivated(EventArgs e)
+    {
+        base.OnActivated(e);
+        _watcher.CaptureEnabled = true;
+    }
+
+    protected override void OnDeactivate(EventArgs e)
+    {
+        base.OnDeactivate(e);
+        _watcher.CaptureEnabled = false;
+    }
+
     private void ApplyDarkTitleBar()
     {
         // DWMWA_USE_IMMERSIVE_DARK_MODE = 20（Win10 1809+ / Win11）
@@ -236,6 +251,7 @@ public partial class MainForm : Form
         base.OnResize(e);
         if (WindowState == FormWindowState.Minimized)
         {
+            _watcher.CaptureEnabled = false; // 最小化到托盘 → 停止自动捕获
             Hide();
             TrayIcon?.ShowBalloonTip(1500, "Clipboard", "已最小化到托盘（双击图标恢复）", ToolTipIcon.Info);
         }

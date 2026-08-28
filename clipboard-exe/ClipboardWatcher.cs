@@ -19,6 +19,13 @@ public sealed class ClipboardWatcher
     private readonly Action _onCaptured;
     private long _suppressUntilMs;
 
+    /// <summary>
+    /// 自动捕获开关：仅当主窗口处于激活（前台）状态时才捕获剪贴板。
+    /// 由 MainForm 的 Activated/Deactivate 事件切换——窗口未激活/最小化到托盘时不读剪贴板（隐私优先，用户确认 2026-08-28）。
+    /// 手动存入（CaptureNow）不受此开关限制（显式操作）。
+    /// </summary>
+    public bool CaptureEnabled { get; set; } = true;
+
     public ClipboardWatcher(Storage storage, Action onCaptured)
     {
         _storage = storage;
@@ -31,9 +38,10 @@ public sealed class ClipboardWatcher
     /// <summary>点击卡片复制前调用：抑制接下来一次剪贴板变更，避免自身回写被误捕获。</summary>
     public void SuppressNext() => _suppressUntilMs = DateTimeOffset.Now.ToUnixTimeMilliseconds() + SuppressWindowMs;
 
-    /// <summary>由 MainForm WndProc 转发剪贴板变更消息（UI 线程）。</summary>
+    /// <summary>由 MainForm WndProc 转发剪贴板变更消息（UI 线程）。仅前台激活时捕获。</summary>
     public void OnClipboardUpdate()
     {
+        if (!CaptureEnabled) return; // 窗口未激活 → 不读剪贴板
         if (DateTimeOffset.Now.ToUnixTimeMilliseconds() < _suppressUntilMs) return;
         try
         {
