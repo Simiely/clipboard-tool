@@ -338,6 +338,18 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .copied-flash{position:fixed;left:50%;bottom:32px;transform:translateX(-50%);background:var(--accent);color:#101014;font-weight:600;font-size:13px;padding:8px 18px;border-radius:99px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99;box-shadow:var(--sh-raised-lg)}
 .copied-flash.at-pos{left:auto;bottom:auto;transform:translate(-50%,-130%)}
 .copied-flash.show{opacity:1}
+/* 批量编辑（v0.6.15）：整卡选择层 + 左上勾选框 + 选中金描边 */
+.clip-card.batching{cursor:pointer}
+.clip-card.batching .row1{padding-left:28px} /* 勾选框占位：类型徽章/标题右移不重叠 */
+.clip-card .batch-overlay{position:absolute;inset:0;z-index:5;border-radius:var(--r-lg);cursor:pointer}
+.clip-card .sel-chk{position:absolute;top:10px;left:10px;z-index:6;width:22px;height:22px;border-radius:50%;background:var(--inset);box-shadow:var(--sh-inset-sm),0 0 0 1.5px var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;color:transparent;cursor:pointer;transition:all .15s}
+.clip-card .sel-chk.on{background:var(--accent);box-shadow:0 0 6px rgba(var(--gold),.55),1px 1px 3px rgba(0,0,0,.4);color:#101014}
+.clip-card.selected{box-shadow:var(--sh-raised-lg),0 0 0 1.5px rgba(var(--gold),.8)}
+.clip-card.selected:hover{box-shadow:var(--sh-raised-lg),0 0 0 1.5px rgba(var(--gold),.85)}
+/* 悬浮批量操作条（固定底部居中，多选时显示） */
+.batch-bar{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);z-index:60;display:flex;align-items:center;gap:8px;background:var(--elev);box-shadow:var(--sh-raised-lg),0 0 0 1px rgba(var(--gold),.3);border-radius:var(--r-pill);padding:10px 14px;max-width:calc(100vw - 28px);flex-wrap:wrap;justify-content:center}
+.batch-bar .batch-count{font-size:12px;color:var(--accent);font-weight:600;margin-right:4px;white-space:nowrap}
+.batch-bar .btn{white-space:nowrap}
 /* 层4 · 弹窗 */
 .mask{position:fixed;inset:0;background:rgba(10,12,16,.66);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
 .modal{background:var(--elev);box-shadow:var(--sh-raised-lg);border:none;border-radius:var(--r-lg);width:100%;max-width:450px;padding:24px;max-height:80vh;overflow-y:auto}
