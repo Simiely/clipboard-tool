@@ -98,7 +98,7 @@ public sealed class CardControl : UserControl
             _ => "(空)",
         };
         var area = new Rectangle(44, 12, Width - 56, 22);
-        TextRenderer.DrawText(g, Truncate(g, title, TitleFont, area.Width), TitleFont, area, TextColor,
+        TextRenderer.DrawText(g, TruncateLines(g, title, TitleFont, area.Width, 1), TitleFont, area, TextColor,
             TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
     }
 
@@ -154,14 +154,6 @@ public sealed class CardControl : UserControl
         path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
         path.CloseFigure();
         return path;
-    }
-
-    private static string Truncate(Graphics g, string text, Font font, int width)
-    {
-        var full = TextRenderer.MeasureText(text, font);
-        if (full.Width <= width) return text;
-        return TextRenderer.MeasureText(text + "…", font).Width <= width ? text + "…"
-            : text[..Math.Max(1, text.Length - 1)] + "…";
     }
 
     private static string TruncateLines(Graphics g, string text, Font font, int width, int maxLines)
