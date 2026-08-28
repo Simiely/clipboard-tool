@@ -69,11 +69,17 @@ input:focus,textarea:focus{box-shadow:var(--sh-inset)}
 .btn.on{color:var(--amber)}
 
 /* 层2 · 容器 */
+/* v0.6.15 宽屏自适应：基础 960px（兼容窄屏），≥1280px 放宽到 1440px，≥1920px(4K) 放宽到 1920px——
+   卡片墙自动多列铺开（.list auto-fill 随容器变宽），充分利用宽屏宽度 */
 .view{max-width:960px;margin:0 auto;padding:24px 16px 80px}
+@media (min-width:1280px){.view{max-width:1440px}}
+@media (min-width:1920px){.view{max-width:1920px}}
 .hidden{display:none!important}
 .serif{font-family:"Noto Serif SC","Source Han Serif SC","Songti SC",STSong,Georgia,serif}
 /* 用户选择页（v0.6.3 · 极简墙：居中品牌 + 紧凑卡片网格 + 底部编辑胶囊） */
 .wall{max-width:960px;margin:0 auto;padding:52px 20px 60px;min-height:100vh;display:flex;flex-direction:column;align-items:center}
+@media (min-width:1280px){.wall{max-width:1440px}}
+@media (min-width:1920px){.wall{max-width:1920px}}
 .brand{text-align:center;margin-bottom:44px}
 .brand .mark{width:44px;height:44px;margin:0 auto 14px;border-radius:14px;background:var(--inset);box-shadow:var(--sh-inset);display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--accent);font-family:"Noto Serif SC","Songti SC",STSong,Georgia,serif}
 .brand h1{font-size:clamp(20px,2.6vw,26px);font-weight:500;letter-spacing:.14em}
