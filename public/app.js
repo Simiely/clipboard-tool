@@ -2101,6 +2101,19 @@ document.addEventListener("keydown", (e) => {
   const last = masks[masks.length - 1];
   if (last) last.remove();
 });
+// v0.6.15 快捷键：主页面按空格 = 存入（打开存入弹窗）。
+// 条件守卫：已登录 / 无弹窗打开 / 焦点不在输入类元素（搜索框打字空格不误触发）/ 主页面已渲染（有存入按钮）。
+// preventDefault 阻止空格滚动页面。
+document.addEventListener("keydown", (e) => {
+  if (e.code !== "Space") return;
+  if (!state.current) return;                       // 未登录
+  if ($(".mask")) return;                            // 已有弹窗不覆盖
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // 输入场景不拦截
+  if (!$(".store-btn")) return;                      // 不在主页面（用户选择页无存入按钮）
+  e.preventDefault();                                // 阻止空格滚动
+  openPasteModal();
+});
 async function boot() {
   state.cols = LS.get("cols", "auto") || "auto"; // 恢复列数偏好
   if (LS.get("mono")) document.documentElement.classList.add("mono"); // v0.6.13：恢复无饱和度配色记忆
