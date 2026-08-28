@@ -1,5 +1,17 @@
 # CHANGELOG.md
 
+## v0.7.0 (2026-08-28) · EXE 桌面版 MVP
+
+### M3 数据层 + M4 MVP（clipboard-exe/，C# WinForms net9.0-windows）
+
+- 🟢 **M3 数据层**（`Storage.cs` + `ClipItem.cs`）：JSON 存储 16 字段与 Web 版 `publicClip` 完全对齐（camelCase）；原子写（tmp + rename）；排序与 Web 版一致（星标 → 复制次数降序 → 最近更新）；Web 导出 JSON 导入合并（同 id 取 updatedAt 新者，非 UUID id 自动重生成）；损坏文件自动备份不崩溃
+- 🟢 **M4 自动捕获**（`ClipboardWatcher.cs`）：Win32 `AddClipboardFormatListener` 原生监听——文本 → text、URL → link、图片 → file（PNG 实体存 `data/files/`）；与最近一条同 type+content 去重（不产生重复，刷新 updatedAt 置顶）；自身回写剪贴板用抑制窗口跳过（Web 版 v0.1.3 同款思路）
+- 🟢 **卡片墙 UI**（`CardControl.cs` + `MainForm.UI.cs`）：黑金深色自绘卡片（类型徽标 T/L/I + 标题 + 摘要两行截断 + 相对时间 + 置顶★/复制次数），悬停金边；搜索框实时过滤（标题/内容/链接，Esc 清空）；空态引导提示
+- 🟢 **卡片操作**：点击复制（文本/链接 SetText；图片还原 PNG SetImage）；复制次数 +1 参与排序；右键菜单（复制/置顶/删除含实体清理）；工具栏「存入」手动保存当前剪贴板
+- 🟢 **导入导出**：导出 = Web 版格式 JSON；导入 = Web 版导出文件直接合并——**Web ↔ EXE 数据互导闭环**
+- ✅ 验证：Storage 单测 13/13（原子写/排序/导出格式/导入合并/删除清理/损坏容错）；端到端（Debug 实例）文本捕获 ✅、URL→link ✅、重复复制去重 ✅、数据落盘 ✅；发布单文件 **Clipboard.exe ≈ 200 KB**（框架依赖）
+- 📌 待真机验证：剪贴板图片捕获（沙箱无法模拟剪贴板图片）
+
 ## v0.6.15 (2026-08-28)
 
 ### 批量编辑：多选 + 批量删除 / 批量加标签 / 批量减标签
