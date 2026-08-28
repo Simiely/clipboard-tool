@@ -1,44 +1,5 @@
 # CHANGELOG.md
 
-## v0.8.0 (2026-08-28) · EXE 桌面版交互层重写（对齐 Web 版操作逻辑）
-
-> 背景：v0.7.x 是"自创交互"（静默捕获/单一卡片/右键菜单），与 Web 版成熟操作逻辑差异巨大。用户确认后交互层清零重写，逐项对照 Web 版 app.js 迁移。
-
-- 🔴 **确认式存入**（对齐 `openPasteModal`）：前台复制 → 自动弹出存入确认窗（类型徽章/内容可编辑/标题/标签 chips/富文本提示）→ 存入/放弃；空格键=存入
-- 🟢 **类型化卡片**（对齐 `clipCard`+`makeCardBody`）：文本卡（摘要+JSON `{}`+富文本分栏）/ 链接卡（host 徽章）/ 图片卡（缩略图）；整卡点击=复制
-- 🟢 **富文本分栏**（对齐 `makeRichSplit`）：「T 普通文本 | ✦ 富文本」两段点击分别复制纯文本/富文本
-- 🟢 **卡片按钮行**（对齐 Web 按钮）：★置顶/✎编辑/↺归档恢复/✕删除直接显示在卡片上（不再是右键菜单）
-- 🟢 **拼音搜索**（对齐 `strToPy`+PY_MAP）：3755 常用字映射表从 Web app.js 原样提取，`sf`→身份
-- 🟢 **批量编辑**（对齐 `setBatchMode`+`renderBatchBar`）：工具行「编辑」→ 卡片勾选 → 底部批量条（全选当前页/批量加/减标签/删除/完成）
-- 🟢 **JSON 格式化预览**（对齐 `openJsonPreview`）：卡片 `{}` 按钮 → 美化/复制/覆盖保存
-- 🟢 **编辑弹窗**（对齐 `openEditModal`）：清除格式（富文本转纯文本）/归档/删除
-- 🟡 保留（用户确认的既有决策）：前台激活才捕获（隐私优先）/ 去重 / URL 清理 / 标签体系 / 归档 / Web 互导 / 托盘单实例
-- ✅ 验证：单测 18/18（拼音 8 / CleanUrl 3 / Storage 回归 7）；构建 0 警告 0 错误；发布单文件约 240 KB
-- 📌 待真机验证：存入弹窗/分栏复制/图片/批量编辑/前台开关/拼音；待补：图片 hover 悬浮预览
-
-## v0.7.1 (2026-08-28) · EXE 桌面版 M5 迭代（标签/归档/编辑/富文本/URL 清理）
-
-- 🟢 **标签体系**（`EditDialog.cs` + `Storage.cs`）：编辑弹窗标签 chips（点选已有标签金色选中态 + 输入框即时新增，对齐用户交互偏好）；顶栏标签栏（「全部」+ 各标签，点击过滤）；`RenameTag`/`DeleteTag` 跨活跃+归档全部条目同步生效（对齐 Web 版标签管理语义）
-- 🟢 **归档**：编辑弹窗/右键菜单「移入归档 / 从归档恢复」；工具栏「含归档」开关切换视图（金色高亮表示开启）；归档条目与活跃条目同语义删除
-- 🟢 **编辑弹窗**：双击卡片打开——标题 / 内容（text）/ 链接 URL（link，保存时自动 cleanUrl）/ 文件信息（只读）/ 标签；保存刷新 updatedAt 参与排序
-- 🟢 **富文本**：捕获 text 类型时同时读取剪贴板 CF_HTML 存 `html` 字段（≤512KB，对齐 Web `MAX_HTML`）；右键菜单「复制富文本」原文回写（Word/网页格式保留）；编辑弹窗显示富文本指示
-- 🟢 **URL 清理**（`CleanUrl.cs`）：移植 Web 版 `cleanUrl`——link 捕获/编辑时自动剔除 UTM/fbclid/gclid/igshid/from/spm 等 24 个追踪参数（无追踪参数原样保留，畸形 URL 容错）
-- ✅ 验证：M5 单测 19/19（CleanUrl 8 项 / 标签重命名删除跨条目 / 归档恢复删除 / 容错）；构建 0 错误；发布单文件 **≈ 210 KB**
-- 📌 待真机验证：标签/归档/编辑/富文本的 GUI 交互与剪贴板图片捕获
-
-## v0.7.0 (2026-08-28) · EXE 桌面版 MVP
-
-### M3 数据层 + M4 MVP（clipboard-exe/，C# WinForms net9.0-windows）
-
-- 🟢 **M3 数据层**（`Storage.cs` + `ClipItem.cs`）：JSON 存储 16 字段与 Web 版 `publicClip` 完全对齐（camelCase）；原子写（tmp + rename）；排序与 Web 版一致（星标 → 复制次数降序 → 最近更新）；Web 导出 JSON 导入合并（同 id 取 updatedAt 新者，非 UUID id 自动重生成）；损坏文件自动备份不崩溃
-- 🟢 **M4 自动捕获**（`ClipboardWatcher.cs`）：Win32 `AddClipboardFormatListener` 原生监听——文本 → text、URL → link、图片 → file（PNG 实体存 `data/files/`）；与最近一条同 type+content 去重（不产生重复，刷新 updatedAt 置顶）；自身回写剪贴板用抑制窗口跳过（Web 版 v0.1.3 同款思路）
-- 🟢 **卡片墙 UI**（`CardControl.cs` + `MainForm.UI.cs`）：黑金深色自绘卡片（类型徽标 T/L/I + 标题 + 摘要两行截断 + 相对时间 + 置顶★/复制次数），悬停金边；搜索框实时过滤（标题/内容/链接，Esc 清空）；空态引导提示
-- 🟢 **卡片操作**：点击复制（文本/链接 SetText；图片还原 PNG SetImage）；复制次数 +1 参与排序；右键菜单（复制/置顶/删除含实体清理）；工具栏「存入」手动保存当前剪贴板
-- 🟢 **导入导出**：导出 = Web 版格式 JSON；导入 = Web 版导出文件直接合并——**Web ↔ EXE 数据互导闭环**
-- ✅ 验证：Storage 单测 13/13（原子写/排序/导出格式/导入合并/删除清理/损坏容错）；端到端（Debug 实例）文本捕获 ✅、URL→link ✅、重复复制去重 ✅、数据落盘 ✅；发布单文件 **Clipboard.exe ≈ 200 KB**（框架依赖）
-- 📌 待真机验证：剪贴板图片捕获（沙箱无法模拟剪贴板图片）
-- 🟢 **前台捕获开关（2026-08-28 用户确认）**：自动捕获仅在主窗口**激活（前台）**时生效——`OnActivated` 开 / `OnDeactivate` 关 / 最小化到托盘显式关闭；窗口未激活时 `OnClipboardUpdate` 直接早退，绝不读剪贴板（隐私优先）。手动「存入」按钮不受限（显式操作）
-
 ## v0.6.15 (2026-08-28)
 
 ### 批量编辑：多选 + 批量删除 / 批量加标签 / 批量减标签
@@ -67,12 +28,9 @@
 - 🔴 **数据清空事件排查结论**（2026-08-27 上午，两次「数据全空」）：最终判定为**环境问题**——机器上有 20+ 个不同版本/不同数据目录的遗留 `server.mjs` 实例（端口 8132/8133/8134/8135/8136/8137/8138/8139，08/26 起反复启动）长期未关，叠加冒烟测试默认连 8130 主服务污染 `users.json`（残留 u815113b/u5830b/u665694b 测试用户），多重混乱导致数据被清。**代码本身经全量测试 + 副本复现（富文本编辑/清除格式/删除标签/存入富文本）验证无可复现清空 bug**；数据经 WebDAV 远端快照完整恢复
 - 🟢 **环境清理**：杀光全部遗留实例（仅保留 8130 主服务 + 8190 诊断页）；删除测试残留用户（u815113b/u5830b/u665694b）与孤儿测试文件（11111111）
 - 🟢 **冒烟测试默认端口加固**（smoke-test.mjs）：默认端口 **8130 → 8131**，防止测试直连主服务污染真实数据（本次事件教训）；注释补血泪教训说明
-- 🟢 **交付形态目录 delivery/**（2026-08-27）：三形态总览 README + 子目录——`local-service/`（本地服务版 README + `start.cmd` 一键启动）、`exe/`（引用 docs/exe-plan.md，规划中）、`server/`（平台托管/独立服务器两种路径，规划中）；三形态数据格式一致可互导
 - 🟢 **版本指纹**（server.mjs + package.json）：启动日志打印 `clipboard v0.6.14 (git commit)`——实例身份可追溯（多实例混跑事故的直接对策）；`package.json version` 0.5.1 → 0.6.14（此前与 CHANGELOG 脱节）
 - 🟢 **平台版接入 tools-center**（delivery/platform/）：`tool.json`（id=clipboard / capabilities storage / dataFiles 声明）+ 部署说明——平台版 zip 解压到服务器 `tools/` 挂载目录即托管；数据落平台注入的 CAP_STORAGE_DIR（随平台 data/ 挂载持久化）
 - 🟢 **发布规范 docs/发布规范.md**：专门发版规则——版本号（vX.Y.Z 语义化 + package.json 同步）/ 四形态产物命名 / 平台版 zip 结构约定 / 发版 Checklist（测试→打包→tag→gh release→服务器部署→验证）/ 回滚策略 / 历史记录
-- 🟢 **EXE 桌面版 M2 骨架启动**（clipboard-exe/）：C# WinForms **net9.0-windows**——单实例互斥 + 托盘常驻（最小化/点 X → 托盘，菜单退出）+ Win32 剪贴板监听骨架（AddClipboardFormatListener）+ 黑金深色 UI（对齐 Web 配色令牌）+ 沉浸式深色标题栏 + 程序化图标 + 版本指纹日志（data/clipboard-exe.log）；单文件框架依赖发布 **176KB**；决策：主仓库子目录 / 数据存 exe 同目录 data/ / MVP 含 Web JSON 导入
-- 🟢 **EXE 深色菜单修复**（net8→net9 升级）：实测 .NET 8 默认菜单在系统深色下仍浅色（253,253,253，SetPreferredAppMode 无效、WindowTinter 文档亦无菜单方案）→ 升级 net9 用官方 `Application.SetColorMode(SystemColorMode.Dark)`（实测菜单背景 253→47 全应用生效：菜单/滚动条/对话框）；net9 为 STS（2026-05 EOL）个人工具可接受，未来升 .NET 10 LTS；本机已装 9.0.5 Desktop Runtime 零额外安装
 
 ## v0.6.13 (2026-08-26)
 

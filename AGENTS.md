@@ -8,7 +8,6 @@
 - 平台：tools-center（manifest V2，`runtime: node` + `entry: server.mjs` + `port: 8130` + `capabilities: ["storage"]`）
 - 前端：`public/index.html`（结构+CSS，**暗黑新拟态 Neumorphism**：双阴影浮雕、设计令牌全在 `:root`；v0.6.2 起为**酒红金**配色——依据 dark-design-style-guide「酒红金」#0A0A0A/#1A1A1A/#8B0000/#C9A96E/#FFFFFF，强调=酒红+金、阴影高光暖棕，改主题只动 `:root` 令牌与 users.js PALETTE，app.js 禁止硬编码颜色）+ `public/app.js`，原生 JS 零框架、无构建
 - 存储：JSON 文件（原子写：tmp + rename），无数据库；WebDAV 用 HTTP 直连（Basic 认证）
-- **EXE 桌面版**（`clipboard-exe/`，v0.7.0 MVP）：C# WinForms **net9.0-windows**（官方深色 `Application.SetColorMode(SystemColorMode.Dark)`，.NET 8 无此 API）；剪贴板监听 `AddClipboardFormatListener`；数据 `ClipItem` 16 字段与 Web `publicClip` 对齐（Web ↔ EXE 导出 JSON 互导）；单文件发布约 200 KB（框架依赖，用户装 .NET 9 Desktop Runtime）；数据存 exe 同目录 `data/`（便携迁移）
 
 ## 关键坑（3~5 条，越具体越好）
 - **`transform` 会劫持内部 `position:fixed` 子元素的定位（v0.6.0 实战坑）**：卡片内部挂 `position:fixed` 的图片预览浮层（`card.appendChild(box)`），若卡片 hover/active 带 `transform`，会创建 containing block 使 fixed 相对卡片而非视口 → JS 用 `getBoundingClientRect()` 算的视口坐标全部错位、浮层"飘远"。**卡片上禁用 transform 动画**，hover 层次用 box-shadow/背景表达（新拟态本就靠阴影）
