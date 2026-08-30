@@ -8,5 +8,6 @@
   "capabilities": ["storage"],
   "entry": "server.mjs",
   "port": 8130,
+  "_portNote": "主端口 8130 + 测试端口 8131 为配套铁律（见 AGENTS.md：测试禁止连 8130）；端口由 tools-center/docs/ports.md 统一分配，改端口须先登记并同步 cmd 与 port",
   "health": "/health"
 }
