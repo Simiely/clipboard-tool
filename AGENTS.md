@@ -15,7 +15,7 @@
 - **富文本双版本字段 `html`（v0.6.0）**：文本条目可有 `html` 字段（≤512KB，`sanitizeHtml` 净化）。语义=纯文本 `content` 用于搜索/排序/重复检测，`html` 仅作富文本复制素材。改条目模型必须同步：publicClip / createClip / updateClip / sanitizeImported 四处置 `html`，导出/WebDAV 序列化天然携带
 - **平台反代注入 `__BASE__`**：前端资源/API 路径必须用 `window.__BASE__ + "/api/.."`，不能写死 `/api/..`（独立运行时 `__BASE__=""`）；前端统一走 `api(path)` / `apiBlob(path)` 封装
 - **数据只写 `CAP_STORAGE_DIR`**（config.js 单点封装），不要写代码目录（可能被更新覆盖）；独立运行 fallback `./.data/`；端口从 `process.argv[2]` 读，不写死
-- **排序/归拢逻辑只在服务端实现**（`lib/core/clips.js` 的 sortClips / groupByTags / groupSimilar），前端只渲染——改排序只动 clips.js，不要在前端重排
+- **排序逻辑只在服务端实现**（`lib/core/clips-store.js` 的 sortClips：pinned 置顶 → copyCount 降序 → updatedAt 降序），前端只渲染——改排序只动 clips-store.js/clips-query.js，不要在前端重排
 - **前端 JS 在 `public/app.js`**（v0.4.0 拆分）：改前端逻辑只动 app.js；结构/CSS 在 index.html；server.mjs 的 `/app.js` 静态路由别删
 - **测试脚本已参数化（P0-2）**：`test-webdav-sync.mjs`/`test-auto-sync.mjs` 读 `TEST_PORT`（默认 8131）+ `TEST_DATA_DIR`（默认 `C:/Temp/clipboard-test`），与 smoke-test 风格一致；webdav 测试用固定用户名（"WebDAV测试"），重跑前必须清空测试数据目录或删掉残留用户，否则 409；smoke-test 已用随机后缀无此问题
 - **mock-webdav 路径（P0-3）**：`dataDir` 请用绝对路径（如 `C:/Temp/mock-webdav`）；safeJoin 已统一 `path.resolve` 两侧，`/tmp/...` 相对路径在 Windows 下也正常，但建议仍用绝对路径避免歧义

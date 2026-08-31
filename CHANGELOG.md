@@ -1,5 +1,14 @@
 # CHANGELOG.md
 
+## v0.6.16 (2026-08-31)
+
+### 排序修复：严格按点击次数排序（移除标签/内容归拢）
+
+- 🔴 **修复卡片不按点击次数排序**（clips-query.js / clips-store.js）：`listClips` 排序管道原为 `sortClips → groupByTags → groupSimilar`——`sortClips` 按 copyCount 排好后，标签/内容归拢会把共享标签或相似内容的条目拉到一起，导致点击次数高的卡片被挤到低次数卡片后面（实测 3 次点击的卡片排在 4 次点击的前面）
+- 🟢 **排序策略定稿**：① pinned 置顶 → ② copyCount 降序 → ③ updatedAt 降序。`listClips` 直接 `sortClips(list).map(publicClip)`，点击次数越高越靠前，严格全局单调
+- 🟢 **删除死代码**：`groupByTags` / `groupSimilar` 及其 ngram 倒排索引逻辑整体移除（仅此一处调用）
+- ✅ 验证：排序行为验证（pinned 置顶 / copyCount 降序 / 同次数按 updatedAt）+ 冒烟测试无回归
+
 ## v0.6.15 (2026-08-28)
 
 ### 批量编辑：多选 + 批量删除 / 批量加标签 / 批量减标签

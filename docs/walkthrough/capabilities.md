@@ -25,7 +25,7 @@
 | D-01 | 条目 CRUD(建/改/删/清空/归档闭环) | lib/core/clips.js `createClip` L334 / `updateClip` / `deleteClip` L406 / `clearAllClips` / `archiveClip` L440 / `unarchiveClip` L453(注:v0.6.13 已删未使用的 `getClip`/`readFileBuffer`,行号以 main-flow.md 为准) |
 | D-02 | 复制计数 + 星标 | clips.js `bumpCopy` L419 / `togglePin` L431 |
 | D-03 | 列表/搜索/标签过滤(后端 q/tag/archived) | clips.js `listClips` L239 / `listTags` L262 |
-| D-04 | 排序管道(sort→标签归拢→相似归拢) | clips.js `sortClips` L115 / `groupByTags` L211 / `groupSimilar` L131 |
+| D-04 | 排序(pinned→copyCount→updatedAt，v0.6.16 移除归拢) | clips.js `sortClips` L115 |
 | D-05 | 滚动归档(活跃区 500 上限) | clips.js `rollToArchive` L42 / `loadArchive` L25 |
 | D-06 | 墓碑机制(删除传播) | clips.js L54-94 `loadTombstones/saveTombstones/recordTombstone/pruneTombstones/clearTombstones` |
 | D-07 | 标签重命名/删除(跨归档) | clips.js `renameTag` L272 / `deleteTag` L295 |
