@@ -151,6 +151,10 @@ public partial class MainWindow : Window
             catch { return Array.Empty<byte>(); }
         });
         card.SetClip(c);
+        // 卡片间距：WrapPanel 无 gap 概念，Web .list{gap:16px} 靠右/下外边距实现。
+        // ItemWidth 已在 UpdateColumnWidth 里减掉一个 Gap，此处补上对应的右/下 Margin，
+        // 否则每张卡紧贴排列（左侧视觉连成一片），Gap 只变成行尾空白。
+        card.Margin = new Thickness(0, 0, Gap, Gap);
         card.CopyBumped += _ =>
         {
             if (_watcher != null) _watcher.Suppress(800); // 来源抑制：本次复制不触发自动弹窗
@@ -264,7 +268,11 @@ public partial class MainWindow : Window
         var w = WallPanel.ActualWidth;
         if (w <= 0) return;
         var cols = LayoutRules.ColumnsFor(w, _settings.MaxColumns);
-        WallPanel.ItemWidth = (w / cols) - Gap;
+        // ItemWidth 只负责「卡片 + 右间隙」的槽位宽度，不能再减 Gap：
+        // 卡片自身已有 Margin.Right=Gap（见 MakeCard），若这里再减一次，
+        // 每行右端会白白空出 (cols+1)*Gap —— 看起来像「给滚动条留了一大条空位」。
+        // Floor 防止 cols 个槽位因小数累加超出 w 而误换行。
+        WallPanel.ItemWidth = Math.Floor(w / cols);
     }
 
     private void WallPanel_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateColumnWidth();

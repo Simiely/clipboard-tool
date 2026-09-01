@@ -157,7 +157,7 @@ public partial class CardView : UserControl
         {
             Child = scroll,
             Style = (Style)FindResource("InsetPanel"),
-            Padding = new Thickness(11, 9, 11, 9),
+            Padding = new Thickness(11, 9, 6, 9),
         };
     }
 
@@ -323,7 +323,7 @@ public partial class CardView : UserControl
         {
             Child = url,
             Style = (Style)FindResource("InsetPanel"),
-            Padding = new Thickness(11, 8, 11, 8),
+            Padding = new Thickness(11, 8, 6, 8),
         };
         var open = new Button
         {

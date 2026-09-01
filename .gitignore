@@ -19,3 +19,9 @@ clipboard-exe/bin/
 clipboard-exe/obj/
 clipboard-exe/data/
 
+# 截图工具构建产物与临时验证截图
+clipboard-exe/tools/shot/bin/
+clipboard-exe/tools/shot/obj/
+clipboard-exe/tools/shot/*.png
+clipboard-exe/tools/shot/*.txt
+

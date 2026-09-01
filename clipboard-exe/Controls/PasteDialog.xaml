@@ -45,8 +45,9 @@
                             <ColumnDefinition Width="138"/>
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="TitleBox" Grid.Column="0" Tag="别名（可留空，默认取首行）" FontSize="12.5"/>
+                        <!-- Web .paste-adv .adv-row select：flex 0 0 138px / inset(#141414) 底 / r-10 / padding 10px 13px（与编辑弹窗 r-9/elev 底不同） -->
                         <ComboBox x:Name="ExpireBox" Grid.Column="1" Style="{StaticResource DarkCombo}"
-                                  Margin="10,0,0,0" VerticalAlignment="Center">
+                                  Padding="13,10" Margin="10,0,0,0" VerticalAlignment="Center">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding Label}"/>
@@ -58,12 +59,18 @@
                 </StackPanel>
             </Border>
 
-            <!-- 操作行（.paste-actions）：📁 选择文件 + 存入 primary + 关闭 btn-close -->
-            <StackPanel Style="{StaticResource ModalActions}">
-                <Button Content="📁 选择文件" Style="{StaticResource BtnFile}" Click="PickFileBtn_Click"/>
-                <Button Content="存入" Style="{StaticResource BtnPrimary}" MinWidth="130" Click="Save_Click"/>
-                <Button Content="关闭" Style="{StaticResource BtnClose}" MinWidth="130" Click="Cancel_Click"/>
-            </StackPanel>
+            <!-- 操作行（对齐 Web .paste-actions{display:flex;gap:10px}）：
+                 .btn-file flex:0 0 112px / 主按钮 存入 flex:1 = 占满剩余（最大面积居中）/ .btn-close flex:0 0 88px -->
+            <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button Content="📁 选择文件" Style="{StaticResource BtnFile}" Margin="0,0,10,0" Click="PickFileBtn_Click"/>
+                <Button Grid.Column="1" Content="存入" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="Save_Click"/>
+                <Button Grid.Column="2" Content="关闭" Style="{StaticResource BtnClose}" MinWidth="88" Click="Cancel_Click"/>
+            </Grid>
 
             <!-- 底部提示 -->
             <TextBlock Text="Ctrl + Enter 快速存入 · 粘贴图片/文件自动识别"

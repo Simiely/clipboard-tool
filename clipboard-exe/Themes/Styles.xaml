@@ -482,30 +482,41 @@
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="Padding" Value="13,10"/><!-- .paste-adv .adv-row select padding:10px 13px -->
+        <!-- 圆角默认 r-10（存入弹窗）；编辑弹窗用 local:Combo.Radius="{StaticResource RadiusCombo}"(r-9) 覆盖 -->
+        <Setter Property="local:Combo.Radius" Value="{StaticResource RadiusBtnSm}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
                     <Grid>
-                        <ToggleButton x:Name="toggle"
-                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                      Focusable="False" ClickMode="Press" Background="Transparent">
-                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusBtnSm}" Padding="13,10">
-                                <Grid>
-                                    <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
-                                                      ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
-                                                      VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,14,0"/>
-                                    <Path Data="M0,0 L4,4 L8,0" Stroke="{StaticResource MutedBrush}" StrokeThickness="1.5"
-                                          HorizontalAlignment="Right" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
-                        </ToggleButton>
+                        <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                CornerRadius="{Binding Path=(local:Combo.Radius), RelativeSource={RelativeSource TemplatedParent}}"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <ContentPresenter x:Name="content" Content="{TemplateBinding SelectionBoxItem}"
+                                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                                  VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,16,0"/>
+                                <Path x:Name="arrow" Data="M0,0 L4,4 L8,0" Stroke="{StaticResource MutedBrush}" StrokeThickness="1.5"
+                                      HorizontalAlignment="Right" VerticalAlignment="Center">
+                                    <Path.RenderTransform>
+                                        <RotateTransform x:Name="arrowRot" Angle="0"/>
+                                    </Path.RenderTransform>
+                                </Path>
+                            </Grid>
+                        </Border>
+                        <ToggleButton x:Name="toggle" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      Focusable="False" ClickMode="Press" Background="Transparent" Opacity="0" />
                         <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
-                               Focusable="False" PopupAnimation="Slide" PlacementTarget="{Binding ElementName=bd}">
+                               Focusable="False" PopupAnimation="Slide" PlacementTarget="{Binding ElementName=bd}" Margin="0,4,0,0">
                             <Border Background="{StaticResource ElevBrush}" CornerRadius="{StaticResource RadiusBtnSm}"
                                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
-                                    MinWidth="{TemplateBinding ActualWidth}" Margin="0,2,0,0" MaxHeight="240">
-                                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                    MinWidth="{TemplateBinding ActualWidth}" MaxHeight="280" Padding="3">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="Black" BlurRadius="14" ShadowDepth="2" Opacity="0.5" Direction="270"/>
+                                </Border.Effect>
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0">
                                     <ItemsPresenter/>
                                 </ScrollViewer>
                             </Border>
@@ -514,6 +525,23 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource ElevHiBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsDropDownOpen" Value="True">
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource ElevHiBrush}"/>
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="arrowRot" Storyboard.TargetProperty="Angle" To="180" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="arrowRot" Storyboard.TargetProperty="Angle" To="0" Duration="0:0:0.15"/>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -524,20 +552,35 @@
     <Style TargetType="ComboBoxItem">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="FontSize" Value="12.5"/>
+        <Setter Property="MinHeight" Value="30"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="Padding" Value="11,6"/>
+        <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
-                    <Border x:Name="bd" Background="Transparent" CornerRadius="{StaticResource RadiusIcon}" Margin="2,1" Padding="13,8">
-                        <ContentPresenter/>
+                    <Border x:Name="bd" Background="Transparent" CornerRadius="6" Margin="3,2" Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsHighlighted" Value="True">
-                            <Setter TargetName="bd" Property="Background" Value="{StaticResource ElevHiBrush}"/>
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentBrush}"/>
                             <Setter Property="Foreground" Value="{StaticResource AccentTextBrush}"/>
                             <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsSelected" Value="True"/>
+                                <Condition Property="IsHighlighted" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentHiBrush}"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+                            <Setter Property="Opacity" Value="0.5"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

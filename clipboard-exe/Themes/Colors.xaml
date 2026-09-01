@@ -17,7 +17,9 @@
 
     <!-- 强调/点缀/徽章 -->
     <SolidColorBrush x:Key="AccentBrush" Color="#C9A96E"/>  <!-- accent 金 · 主强调，深字配 -->
-    <SolidColorBrush x:Key="AccentTextBrush" Color="#101014"/> <!-- 主强调上的深色文字 -->
+    <SolidColorBrush x:Key="AccentTextBrush" Color="#2D1A0A"/>  <!-- accent 配深字（选中态文字/置顶图标等） -->
+    <SolidColorBrush x:Key="AccentSoftBrush" Color="#33C9A96E"/>  <!-- accent 16% 透明 · hover 高亮(下拉项) -->
+    <SolidColorBrush x:Key="AccentHiBrush" Color="#D4B47A"/>  <!-- accent-hi 金略亮 · 选中+hover 重叠态 -->
     <SolidColorBrush x:Key="Accent2Brush" Color="#AE4D4D"/> <!-- accent2 砖红 · 点缀 -->
     <SolidColorBrush x:Key="Accent2TextBrush" Color="#F5E6E6"/> <!-- 砖红上的暖白字 -->
     <SolidColorBrush x:Key="GreenBrush" Color="#9FBF8F"/>   <!-- green 文本徽章 -->
@@ -29,7 +31,8 @@
     <CornerRadius x:Key="RadiusFold">3,3,0,0</CornerRadius><!-- .fic .fold 折叠角 顶 3 / 底 0 -->
     <CornerRadius x:Key="RadiusIconSm">6</CornerRadius>   <!-- .edit-sec 20x20 序号块 r-6 -->
     <CornerRadius x:Key="RadiusIcon">8</CornerRadius>     <!-- .ops .b 图标钮 -->
-    <CornerRadius x:Key="RadiusBtnSm">10</CornerRadius>   <!-- .btn.sm / .typetab .tt / who 区小按钮 -->
+    <CornerRadius x:Key="RadiusCombo">9</CornerRadius>    <!-- .edit-sec select：编辑弹窗「过期」下拉 r-9（比存入弹窗 r-10 略收） -->
+    <CornerRadius x:Key="RadiusBtnSm">10</CornerRadius>   <!-- .btn.sm / .typetab .tt / who 区小按钮 / .paste-adv select r-10 -->
     <CornerRadius x:Key="RadiusBtn">12</CornerRadius>     <!-- .btn / input / 通用按钮 -->
     <CornerRadius x:Key="RadiusIconLg">11</CornerRadius>  <!-- 36x36 弹窗头图标块 / 46x56 .fic r-11 -->
     <CornerRadius x:Key="RadiusMd">14</CornerRadius>        <!-- r-md 容器/typetab 轨道 -->

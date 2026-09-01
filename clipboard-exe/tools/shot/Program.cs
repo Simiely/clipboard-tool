@@ -77,6 +77,8 @@ class Shot
         if (args.Length > 0 && args[0] == "clickby") return DoClickByName(args);
         // 子命令: list <procName> [filter]  — 枚举窗口内所有控件 Name（UI 状态精确验证）
         if (args.Length > 0 && args[0] == "list") return DoList(args);
+        // 子命令: crop <procName> <outPath> <x> <y> <w> <h> [scale] — 截图后裁剪放大（小控件细节核对）
+        if (args.Length > 0 && args[0] == "crop") return DoCrop(args);
 
         // 默认: 截图。args: [procName] [outPath] [targetW?]
         var procName = args.Length > 0 ? args[0] : "Clipboard";
@@ -168,6 +170,52 @@ class Shot
         var cls = new StringBuilder(64); GetClassName(hwnd, cls, 64);
         var txt = new StringBuilder(256); GetWindowTextW(hwnd, txt, 256);
         Console.WriteLine($"screen ({pt.X},{pt.Y}) hwnd={hwnd:X} class={cls} text='{txt}'");
+        return 0;
+    }
+
+    /// <summary>截图后裁剪放大（小控件细节核对：圆角/间距/配色）。
+    /// 用法: shot crop &lt;procName&gt; &lt;outPath&gt; &lt;x&gt; &lt;y&gt; &lt;w&gt; &lt;h&gt; [scale]</summary>
+    static int DoCrop(string[] args)
+    {
+        if (args.Length < 7) { Console.WriteLine("用法: shot crop <procName> <outPath> <x> <y> <w> <h> [scale]"); return 1; }
+        var procName = args[1];
+        var outPath = args[2];
+        if (!int.TryParse(args[3], out int cx) || !int.TryParse(args[4], out int cy) ||
+            !int.TryParse(args[5], out int cw) || !int.TryParse(args[6], out int ch))
+        { Console.WriteLine("ERR: x/y/w/h must be int"); return 1; }
+        int scale = args.Length > 7 && int.TryParse(args[7], out var s) && s > 0 ? s : 1;
+
+        var proc = System.Diagnostics.Process.GetProcessesByName(procName);
+        if (proc.Length == 0) { Console.WriteLine("ERR no proc"); return 1; }
+        var target = FindWindow(procName, out _);
+        if (target == IntPtr.Zero) { Console.WriteLine("ERR no window"); return 1; }
+
+        ShowWindow(target, SW_SHOW);
+        Thread.Sleep(300);
+
+        GetClientRect(target, out var rect);
+        int w = rect.R - rect.L, h = rect.B - rect.T;
+        using var bmp = new Bitmap(w, h);
+        using (var g = Graphics.FromImage(bmp))
+        {
+            var hdc = g.GetHdc();
+            PrintWindow(target, hdc, 2);
+            g.ReleaseHdc(hdc);
+        }
+        var rw = Math.Max(1, Math.Min(cw, Math.Max(1, w - cx)));
+        var rh = Math.Max(1, Math.Min(ch, Math.Max(1, h - cy)));
+        using var src = bmp.Clone(new Rectangle(cx, cy, rw, rh), bmp.PixelFormat);
+        if (scale == 1) { src.Save(outPath, ImageFormat.Png); Console.WriteLine($"OK crop ({cx},{cy}) {rw}x{rh} -> {outPath}"); return 0; }
+
+        using var big = new Bitmap(rw * scale, rh * scale);
+        using (var g2 = Graphics.FromImage(big))
+        {
+            g2.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.NearestNeighbor;
+            g2.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.Half;
+            g2.DrawImage(src, 0, 0, rw * scale, rh * scale);
+        }
+        big.Save(outPath, ImageFormat.Png);
+        Console.WriteLine($"OK crop ({cx},{cy}) {rw}x{rh} x{scale} -> {outPath}");
         return 0;
     }
 

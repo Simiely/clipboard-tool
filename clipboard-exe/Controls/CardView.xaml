@@ -17,7 +17,7 @@
     <Border x:Name="CardBorder"
             Background="{StaticResource ElevBrush}"
             CornerRadius="{StaticResource RadiusLg}"
-            Padding="16,14,16,12">
+            Padding="10,14,10,12">
         <!-- 新拟态 raised 阴影（对齐 .clip-card box-shadow: sh-raised） -->
         <Border.Effect>
             <DropShadowEffect Color="Black" BlurRadius="6" ShadowDepth="2" Opacity="0.45" Direction="135"/>

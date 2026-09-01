@@ -61,10 +61,13 @@
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="138"/>
+                            <ColumnDefinition Width="126"/><!-- Web .edit-row select{flex:0 0 126px} -->
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="TitleBox" Grid.Column="0" Tag="别名" FontSize="12.5"/>
+                        <!-- Web .edit-sec select：background elev(#1F1F1F) / r-9 / padding 10px 12px -->
                         <ComboBox x:Name="ExpireBox" Grid.Column="1" Style="{StaticResource DarkCombo}"
+                                  Background="{StaticResource ElevBrush}" Padding="12,10"
+                                  ctl:Combo.Radius="{StaticResource RadiusCombo}"
                                   Margin="10,0,0,0" VerticalAlignment="Center">
                             <ComboBox.ItemTemplate>
                                 <DataTemplate>
