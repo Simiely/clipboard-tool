@@ -35,6 +35,7 @@
     <CornerRadius x:Key="RadiusMd">14</CornerRadius>        <!-- r-md 容器/typetab 轨道 -->
     <CornerRadius x:Key="RadiusLg">18</CornerRadius>        <!-- r-lg 卡片/顶栏 -->
     <CornerRadius x:Key="RadiusPill">99</CornerRadius>      <!-- r-pill 胶囊（搜索框/存入/标签/开关） -->
+    <CornerRadius x:Key="RadiusScroll">3</CornerRadius>     <!-- 细滚动条 thumb 小圆角（对齐 Web ::-webkit-scrollbar-thumb 9px 圆角缩比；非胶囊） -->
 
     <!-- 新拟态阴影基色（NeuBorder 用） -->
     <SolidColorBrush x:Key="ShadowDarkBrush" Color="#80000000"/>   <!-- 深色投影 rgba(0,0,0,.5) -->

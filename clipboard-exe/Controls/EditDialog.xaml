@@ -65,19 +65,30 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="TitleBox" Grid.Column="0" Tag="别名" FontSize="12.5"/>
                         <ComboBox x:Name="ExpireBox" Grid.Column="1" Style="{StaticResource DarkCombo}"
-                                  Margin="10,0,0,0" VerticalAlignment="Center"/>
+                                  Margin="10,0,0,0" VerticalAlignment="Center">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Label}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                     </Grid>
                     <ctl:TagPicker x:Name="TagPick" Margin="0,10,0,0"/>
                 </StackPanel>
             </Border>
 
-            <!-- 操作行：归档（非归档时）/ 保存 / 取消 -->
-            <StackPanel Style="{StaticResource ModalActions}">
-                <Button x:Name="ArchiveBtn" Content="归档" Style="{StaticResource BtnClose}" MinWidth="130"
+            <!-- 操作行（对齐 Web .paste-actions：保存 flex:1 占满剩余=最大面积居中；归档/取消 btn-close 固定 88px 小按钮） -->
+            <Grid Margin="0,16,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Button x:Name="ArchiveBtn" Content="归档" Style="{StaticResource BtnClose}" MinWidth="88"
                         Margin="0,0,10,0" Click="Archive_Click" ToolTip="移入归档区——「含归档」可查看，可恢复或删除"/>
-                <Button Content="保存" Style="{StaticResource BtnPrimary}" MinWidth="130" Margin="0,0,10,0" Click="Save_Click"/>
-                <Button Content="取消" Style="{StaticResource BtnClose}" MinWidth="130" Click="Cancel_Click"/>
-            </StackPanel>
+                <Button Grid.Column="1" Content="保存" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="Save_Click"/>
+                <Button Grid.Column="2" Content="取消" Style="{StaticResource BtnClose}" MinWidth="88" Click="Cancel_Click"/>
+            </Grid>
         </StackPanel>
     </Border>
 </UserControl>

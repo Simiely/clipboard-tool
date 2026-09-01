@@ -262,7 +262,7 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="bd"
                             Background="{TemplateBinding Background}"
-                            local:PillBorder.Pill="99"
+                            CornerRadius="8"
                             ClipToBounds="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
                     </Border>
@@ -392,10 +392,13 @@
     </Style>
 
     <!-- ================================================================
-         层2 · 滚动条（thumb 全圆胶囊）
-         ================================================================ -->    <Style TargetType="ScrollBar">
+         层2 · 滚动条（细条默认样式：对齐 Web ::-webkit-scrollbar 主 9px/卡内 .pv 4px 的超细感，
+               统一为 6px 细条 + 小圆角（RadiusScroll 3，非全圆胶囊）+ thumb hover 变亮）
+         ================================================================ -->
+    <Style TargetType="ScrollBar">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Width" Value="9"/>
+        <Setter Property="Width" Value="2"/>
+        <Setter Property="MinWidth" Value="2"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ScrollBar">
@@ -411,7 +414,13 @@
                                 <Thumb>
                                     <Thumb.Template>
                                         <ControlTemplate TargetType="Thumb">
-                                            <Border Background="{StaticResource BorderBrush}" CornerRadius="{StaticResource RadiusPill}" Margin="1"/>
+                                            <Border x:Name="tb" Background="{StaticResource BorderBrush}"
+                                                    CornerRadius="{StaticResource RadiusScroll}" Margin="0"/>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="tb" Property="Background" Value="{StaticResource DimBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
                                         </ControlTemplate>
                                     </Thumb.Template>
                                 </Thumb>
@@ -424,7 +433,7 @@
         <Style.Triggers>
             <Trigger Property="Orientation" Value="Horizontal">
                 <Setter Property="Width" Value="Auto"/>
-                <Setter Property="Height" Value="9"/>
+                <Setter Property="Height" Value="6"/>
             </Trigger>
         </Style.Triggers>
     </Style>
@@ -526,8 +535,9 @@
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource ElevHiBrush}"/>
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentGlowBrush}"/>
-                            <Setter Property="Foreground" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentBrush}"/>
+                            <Setter Property="Foreground" Value="{StaticResource AccentTextBrush}"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
@@ -574,7 +584,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusPill}" ClipToBounds="True"
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusBtn}" ClipToBounds="True"
                             RenderTransformOrigin="0.5,0.5">
                         <Border.RenderTransform><TranslateTransform/></Border.RenderTransform>
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
@@ -635,7 +645,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <Border x:Name="bd" Background="{StaticResource InsetBrush}" CornerRadius="{StaticResource RadiusPill}" Padding="11,3" ClipToBounds="True">
+                    <Border x:Name="bd" Background="{StaticResource InsetBrush}" CornerRadius="{StaticResource RadiusIconSm}" Padding="11,3" ClipToBounds="True">
                         <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"
                                           TextElement.FontSize="{TemplateBinding FontSize}"
                                           TextElement.FontWeight="{TemplateBinding FontWeight}"/>
