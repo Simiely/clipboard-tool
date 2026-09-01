@@ -1,11 +1,11 @@
 // Controls/PasteDialog.xaml.cs - 存入弹窗（对齐 app.js openPasteModal / savePasteContent）
-//  - 类型徽章实时识别（文件 / 链接 / 文本，对齐 updateBadge：pickedFile 优先「将存为：文件」）
+//  - 类型徽章实时识别（文件 / 图片 / 链接 / 文本，对齐 updateBadge：pickedFile 优先「将存为：文件」；图片也走 file 通道不切徽章）
 //  - Ctrl+Enter 快速存入；300ms 防抖重复检测 → 命中关自己 + DuplicateFound（MainWindow 打开该条目编辑窗带提示）
 //  - 打开时自动填入剪贴板文本（autoFillPasteModal 对齐：readText → textarea，flash "已填入剪贴板内容"）
-//  - 文件线（M3b-2a）：粘贴/拖放/📁 选择文件 → 10MB 拒收（对齐 pick：>10MB errToast）→ chip 显示
+//  - 文件线（M3b-2a）+ 图片线（M3b-2b）：粘贴/拖放/📁 选择文件 → 10MB 拒收（对齐 pick：>10MB errToast）→ chip 显示
 //    （对齐 .file-chip：📎 + fname + fsize + ✕ 取消；选中后隐藏 textarea + 徽章切「将存为：文件」）
 //    → 存入走 FileStore.Save（实体落 data/files/）+ svc.Create(type=file)
-//    ⚠️ 图片在 2a 阶段暂拒收（toast 提示 2b 支持）——图片卡体/预览在 M3b-2b
+//    M3b-2b：图片（MimeFromPath/剪贴板 Bitmap）也是文件，直接走同一路径（Web 版图也是 file）
 //  - Save：文件/链接/文本三分支（对齐 savePasteContent）；文件分支 title 用别名 || 文件名
 using System.IO;
 using System.Windows;
@@ -28,7 +28,7 @@ public partial class PasteDialog : UserControl
     private readonly DispatcherTimer _dupTimer;
     private bool _dupJumped;
 
-    /// <summary>已选文件（非图片；图片 2a 拒收）。</summary>
+    /// <summary>已选文件（含图片：图片在 M3b-2b 也走 file 通道）。</summary>
     private PickedFile? _pickedFile;
 
     /// <summary>输入命中重复 → MainWindow 关闭本窗并打开该条目编辑弹窗（dup=true）。</summary>
@@ -103,7 +103,7 @@ public partial class PasteDialog : UserControl
 
     private static bool LooksLikeUrl(string s) => System.Text.RegularExpressions.Regex.IsMatch(s, @"^https?://\S+$", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
-    // ---- 文件拾取（对齐 pick：>10MB 拒收；chip 显示；隐藏 textarea；徽章切文件） ----
+    // ---- 文件拾取（对齐 pick：>10MB 拒收；chip 显示；隐藏 textarea；徽章切文件；M3b-2b 图片也走此路径） ----
     private void PickFile(string path)
     {
         try
@@ -116,19 +116,39 @@ public partial class PasteDialog : UserControl
                 return;
             }
             var mime = FileStore.MimeFromPath(path);
-            if (mime.StartsWith("image/"))
-            {
-                ToastService.Error("图片存入将在下一轮（图片线）支持");
-                return;
-            }
+            var isImage = mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
             _pickedFile = new PickedFile { Name = info.Name, Bytes = File.ReadAllBytes(path), Mime = mime, Size = info.Length };
             RenderChip();
             InputBox.Visibility = Visibility.Collapsed; // 对齐 syncTextareaVisibility：选文件后隐藏文本区
             UpdateBadge();
+            ToastService.Flash(isImage ? "已接收图片，点存入即可" : "已接收文件，点存入即可"); // 对齐 Web flash
         }
         catch (Exception ex)
         {
             ToastService.Error("读取文件失败: " + ex.Message);
+        }
+    }
+
+    /// <summary>M3b-2b：直接接收 (bytes/name/mime)——用于剪贴板截图/拖放图片等非 FileDrop 路径。</summary>
+    private void PickBytes(byte[] bytes, string name, string mime)
+    {
+        try
+        {
+            if (bytes == null || bytes.Length == 0) { ToastService.Error("文件为空"); return; }
+            if (bytes.Length > FileStore.MaxFileSize)
+            {
+                ToastService.Error("文件超过 10MB 上限");
+                return;
+            }
+            _pickedFile = new PickedFile { Name = name, Bytes = bytes, Mime = mime, Size = bytes.Length };
+            RenderChip();
+            InputBox.Visibility = Visibility.Collapsed;
+            UpdateBadge();
+            ToastService.Flash(mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "已接收图片，点存入即可" : "已接收文件，点存入即可");
+        }
+        catch (Exception ex)
+        {
+            ToastService.Error("接收文件失败: " + ex.Message);
         }
     }
 
@@ -197,23 +217,59 @@ public partial class PasteDialog : UserControl
     private void OnPasting(object sender, DataObjectPastingEventArgs e)
     {
         var data = e.DataObject;
+        // M3b-2b：剪贴板截图（Bitmap）→ 转 PNG 字节 → 走 PickBytes（对齐 Web paste ②图片优先）
+        if (data.GetDataPresent(DataFormats.Bitmap))
+        {
+            e.CancelCommand();
+            if (data.GetData(DataFormats.Bitmap) is System.Windows.Media.Imaging.BitmapSource bmp)
+            {
+                var bytes = EncodePng(bmp);
+                if (bytes != null) PickBytes(bytes, "paste-image.png", "image/png");
+            }
+            return;
+        }
+        // 文件粘贴：FileDrop → PickFile（对齐 Web paste ②文件优先 + preventDefault）
         if (data.GetDataPresent(DataFormats.FileDrop))
         {
-            e.CancelCommand(); // 文件粘贴：不插入文本（对齐 Web paste ②文件优先 + preventDefault）
+            e.CancelCommand();
             if (data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0) PickFile(files[0]);
         }
     }
 
     private void Root_DragOver(object sender, DragEventArgs e)
     {
-        e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+        // 文件或图片均可拖入
+        var ok = e.Data.GetDataPresent(DataFormats.FileDrop) || e.Data.GetDataPresent(DataFormats.Bitmap);
+        e.Effects = ok ? DragDropEffects.Copy : DragDropEffects.None;
         e.Handled = true;
     }
 
     private void Root_Drop(object sender, DragEventArgs e)
     {
-        if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0) PickFile(files[0]);
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+        {
+            PickFile(files[0]);
+        }
+        else if (e.Data.GetDataPresent(DataFormats.Bitmap) && e.Data.GetData(DataFormats.Bitmap) is System.Windows.Media.Imaging.BitmapSource bmp)
+        {
+            var bytes = EncodePng(bmp);
+            if (bytes != null) PickBytes(bytes, "paste-image.png", "image/png");
+        }
         e.Handled = true;
+    }
+
+    /// <summary>M3b-2b：BitmapSource → PNG 字节（剪贴板/拖放截图 → 实体存储）。对齐 Web blobToPng canvas.toBlob("image/png")。</summary>
+    private static byte[]? EncodePng(System.Windows.Media.Imaging.BitmapSource bmp)
+    {
+        try
+        {
+            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
+            using var ms = new MemoryStream();
+            encoder.Save(ms);
+            return ms.ToArray();
+        }
+        catch { return null; }
     }
 
     private void PickFileBtn_Click(object sender, RoutedEventArgs e)
@@ -302,7 +358,7 @@ public partial class PasteDialog : UserControl
         }
     }
 
-    /// <summary>已选文件（字节 + 元信息；仅非图片）。</summary>
+    /// <summary>已选文件（字节 + 元信息；含图片——M3b-2b 图片也走 file 通道）。</summary>
     private sealed class PickedFile
     {
         public string Name { get; init; } = "";

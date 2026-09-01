@@ -57,6 +57,8 @@
     <SolidColorBrush x:Key="Accent2SoftBrush" Color="#26AE4D4D"/>  <!-- rgba(accent2, .15)：链接徽章底 -->
     <SolidColorBrush x:Key="RedSoftBrush" Color="#26E08A7A"/>      <!-- rgba(red, .15)：危险/错误底 -->
     <SolidColorBrush x:Key="BlueSoftBrush" Color="#268FA3B8"/>     <!-- rgba(blue2, .15)：富文本徽章底 -->
+    <SolidColorBrush x:Key="PurpleBrush" Color="#B39DDB"/>     <!-- M3b-2b：图片徽章字（紫） -->
+    <SolidColorBrush x:Key="PurpleSoftBrush" Color="#26B39DDB"/>    <!-- M3b-2b：rgba(purple, .15)：图片徽章底 -->
     <!-- 金色描边（rgba(gold, x)：hover .28 / pinned .65 / 选中 .4） -->
     <SolidColorBrush x:Key="GoldRingBrush" Color="#47C9A96E"/>
     <SolidColorBrush x:Key="GoldRingHiBrush" Color="#66C9A96E"/>

@@ -310,6 +310,9 @@
     <Style x:Key="BadgeText" TargetType="ContentControl" BasedOn="{StaticResource Badge}">
         <Setter Property="Foreground" Value="{StaticResource GreenBrush}"/>
     </Style>
+    <Style x:Key="BadgeImage" TargetType="ContentControl" BasedOn="{StaticResource Badge}">
+        <Setter Property="Foreground" Value="{StaticResource PurpleBrush}"/>
+    </Style>
     <Style x:Key="BadgeExp" TargetType="ContentControl" BasedOn="{StaticResource Badge}">
         <Setter Property="Foreground" Value="{StaticResource RedBrush}"/>
     </Style>

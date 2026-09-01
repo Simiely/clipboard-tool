@@ -1,7 +1,9 @@
 ﻿using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using ClipboardExe.Controls;
 using ClipboardExe.Models;
@@ -143,7 +145,11 @@ public partial class MainWindow : Window
     /// <summary>卡片装配 + 事件接线（对齐 clipCard 各按钮 → MainWindow 编排）。</summary>
     private CardView MakeCard(ClipItem c)
     {
-        var card = new CardView();
+        var card = new CardView(fileId =>
+        {
+            try { return _fileStore.ReadAllBytes(fileId); }
+            catch { return Array.Empty<byte>(); }
+        });
         card.SetClip(c);
         card.CopyBumped += _ =>
         {
@@ -183,12 +189,13 @@ public partial class MainWindow : Window
                 var dlg = new Microsoft.Win32.SaveFileDialog { FileName = cc.FileName ?? "file", Filter = "所有文件 (*.*)|*.*" };
                 if (dlg.ShowDialog(this) == true)
                 {
-                    System.IO.File.WriteAllBytes(dlg.FileName, _fileStore.ReadAllBytes(cc.FileId)); // 对齐 downloadFile：attachment 原名落盘
+                    File.WriteAllBytes(dlg.FileName, _fileStore.ReadAllBytes(cc.FileId)); // 对齐 downloadFile：attachment 原名落盘
                     ToastService.Flash("已下载");
                 }
             }
             catch (Exception ex) { ToastService.Error("下载失败: " + ex.Message); }
         };
+        card.CopyImageRequested += cc => CopyImageToClipboard(cc, _watcher); // M3b-2b：图片卡单击复制到系统剪贴板
         card.OpenJsonRequested += cc =>
         {
             var dlg = new JsonDialog(cc);
@@ -220,6 +227,34 @@ public partial class MainWindow : Window
             catch (Exception ex) { ToastService.Error(ex.Message); }
         };
         return card;
+    }
+
+    /// <summary>复制图片到系统剪贴板（M3b-2b，对齐 Web copyImageToClipboard：直接 System.Windows.Clipboard.SetImage(BitmapSource)，
+    /// 成功 flash + 计数 + 来源抑制；失败降级 errToast，不打开预览（WPF 已有 toast 反馈）。</summary>
+    private void CopyImageToClipboard(ClipItem c, ClipboardWatcher? watcher)
+    {
+        if (string.IsNullOrEmpty(c.FileId)) { ToastService.Error("图片缺失"); return; }
+        try
+        {
+            var bytes = _fileStore.ReadAllBytes(c.FileId);
+            if (bytes == null || bytes.Length == 0) { ToastService.Error("图片为空"); return; }
+            using var ms = new MemoryStream(bytes);
+            var bmp = new BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = BitmapCacheOption.OnLoad;
+            bmp.StreamSource = ms;
+            bmp.EndInit();
+            bmp.Freeze();
+            Clipboard.SetImage(bmp);
+            if (watcher != null) watcher.Suppress(800); // 来源抑制：避免本程序写剪贴板触发自动弹窗
+            try { _svc.BumpCopyCount(c.Id); } catch { /* 计数失败不影响 */ }
+            ToastService.Flash("图片已复制，可直接粘贴");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Info("copy image failed: " + ex.Message);
+            ToastService.Error("复制图片失败: " + ex.Message);
+        }
     }
 
     /// <summary>列宽自适应（对齐 CSS auto-fill minmax(280px,1fr)；仅改 ItemWidth 不重建卡片——拖动窗口不闪烁）。

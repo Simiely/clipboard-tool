@@ -132,7 +132,7 @@ class Shot
         { Console.WriteLine("ERR: x/y must be int"); return 1; }
         var target = FindWindow(procName, out _);
         if (target == IntPtr.Zero) { Console.WriteLine("ERR no window"); return 1; }
-        SetWindowPos(target, HWND_TOP, 0, 0, 0, 0, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(target, HWND_TOP, 0, 0, 0, 0, SWP_NOZORDER | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE);
         SetForegroundWindow(target);
         Thread.Sleep(150);
         var pt = new POINT { X = x, Y = y };
@@ -185,7 +185,7 @@ class Shot
         var cond = new System.Windows.Automation.PropertyCondition(AutomationElement.NameProperty, name);
         var btn = element.FindFirst(TreeScope.Descendants, cond);
         if (btn == null) { Console.WriteLine($"ERR no button named '{name}'"); return 1; }
-        SetWindowPos(target, HWND_TOP, 0, 0, 0, 0, SWP_NOZORDER | SWP_SHOWWINDOW);
+        SetWindowPos(target, HWND_TOP, 0, 0, 0, 0, SWP_NOZORDER | SWP_SHOWWINDOW | SWP_NOMOVE | SWP_NOSIZE);
         SetForegroundWindow(target);
         Thread.Sleep(200);
         if (btn.TryGetCurrentPattern(InvokePattern.Pattern, out var p))

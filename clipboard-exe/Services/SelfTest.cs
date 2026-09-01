@@ -244,6 +244,39 @@ public static class SelfTest
             Check("Create file 标题 = 空（兜底在 UI 层取文件名）", fc.Title == "", Line);
             Check("Create file 字段落库", fc.FileId == fid1 && fc.FileName == "报告.txt" && fc.FileSize == fsize1 && fc.FileMime == "text/plain", Line);
             Check("Create file 缺 fileId 拒绝", Throws(() => svc.Create("file", "", null, null, null, null, null)), Line);
+
+            // ---- M3b-2b 增量：图片线（对齐 Web png/jpg/gif/webp + IsImageMime + FileStore 实体落库） ----
+            // PNG: 最小合法 1x1 PNG 字节（67 字节）→ 验证解码 + 字段落库 + 扩展名映射
+            var png1x1 = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82 };
+            var (imgFid, imgName, imgSize, imgMime) = fs.Save(png1x1, "screenshot.png", "image/png");
+            Check("Save PNG fileMime 字段落库", imgMime == "image/png" && imgName == "screenshot.png" && imgSize == png1x1.Length, Line);
+            Check("Save PNG 扩展名映射 → .png", fs.GetPath(imgFid).EndsWith(".png"), Line);
+            Check("ReadAllBytes PNG 字节一致", fs.ReadAllBytes(imgFid).Length == png1x1.Length && fs.ReadAllBytes(imgFid)[0] == 0x89, Line);
+            var (jpgFid, _, _, jpgMime) = fs.Save(png1x1, "a.jpg", "image/jpeg"); // 字节不是真 JPEG 但 Save 接受（解码由 CardView 试错）
+            Check("Save JPG 扩展名映射 → .jpg", fs.GetPath(jpgFid).EndsWith(".jpg"), Line);
+            Check("Save JPG mime 小写化", jpgMime == "image/jpeg", Line);
+            var (gifFid, _, _, _) = fs.Save(png1x1, "a.gif", "image/gif");
+            Check("Save GIF 扩展名映射 → .gif", fs.GetPath(gifFid).EndsWith(".gif"), Line);
+            var (webpFid, _, _, _) = fs.Save(png1x1, "a.webp", "image/webp");
+            Check("Save WEBP 扩展名映射 → .webp", fs.GetPath(webpFid).EndsWith(".webp"), Line);
+            // BMP: image/bmp 不在 ExtByMime → 原始安全扩展名兜底
+            var (bmpFid, _, _, _) = fs.Save(png1x1, "a.bmp", "image/bmp");
+            Check("Save image/bmp 未知 mime 兜底原扩展名 .bmp", fs.GetPath(bmpFid).EndsWith(".bmp"), Line);
+            // 大于 10MB 拒收
+            Check("10MB 图片拒收", Throws(() => fs.Save(new byte[FileStore.MaxFileSize + 1], "big.png", "image/png")), Line);
+            // Format.IsImageMime（M3b-2b：卡片/弹窗图片分流依据，对齐 Web handleCardClick/bindImageHoverPreview 判定）
+            Check("IsImageMime image/png → true", Format.IsImageMime("image/png"), Line);
+            Check("IsImageMime image/jpeg → true", Format.IsImageMime("image/jpeg"), Line);
+            Check("IsImageMime text/plain → false", !Format.IsImageMime("text/plain"), Line);
+            Check("IsImageMime null → false", !Format.IsImageMime(null), Line);
+            // FileStore.MimeFromPath 图片扩展名判定（图片判定供 2b 弹窗分流）
+            Check("MimeFromPath jpg → image/jpeg", FileStore.MimeFromPath("a.jpg") == "image/jpeg", Line);
+            Check("MimeFromPath jpeg → image/jpeg", FileStore.MimeFromPath("a.jpeg") == "image/jpeg", Line);
+            Check("MimeFromPath gif → image/gif", FileStore.MimeFromPath("a.gif") == "image/gif", Line);
+            Check("MimeFromPath webp → image/webp", FileStore.MimeFromPath("a.webp") == "image/webp", Line);
+            // Create file 字段带图片 mime（落入 ClipItem 用于 CardView 图片卡体判定）
+            var imgClip = svc.Create("file", "截图", null, null, null, null, null, imgFid, "screenshot.png", imgSize, "image/png");
+            Check("Create file mime=image/png 字段落库", imgClip.FileMime == "image/png" && imgClip.FileId == imgFid, Line);
         }
         catch (Exception ex)
         {

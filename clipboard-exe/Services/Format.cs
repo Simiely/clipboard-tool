@@ -85,4 +85,7 @@ public static class Format
         if (System.Text.RegularExpressions.Regex.IsMatch(n, @"\.(zip|rar|7z|tar|gz)$")) return "zip";
         return "file";
     }
+
+    /// <summary>是否图片（M3b-2b：fileMime 起始 image/；对齐 app.js handleCardClick/bindImageHoverPreview/file-chip 判定）。</summary>
+    public static bool IsImageMime(string? mime) => (mime ?? "").StartsWith("image/", StringComparison.OrdinalIgnoreCase);
 }
