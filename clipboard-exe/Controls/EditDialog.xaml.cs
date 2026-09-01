@@ -65,7 +65,8 @@ public partial class EditDialog : UserControl
             new ExpOpt("7d", "7 天后"),
             new ExpOpt("30d", "30 天后"),
         };
-        ExpireBox.DisplayMemberPath = nameof(ExpOpt.Label);
+        // 注:不能同时设 DisplayMemberPath + ItemTemplate(WPF 抛 InvalidOperationException)。
+        //   DarkCombo 自定义 Template 不应用 DisplayMemberPath,只能靠 XAML 的 ItemTemplate 绑 Label。
         ExpireBox.SelectedIndex = ExpireIndex(clip.ExpireAt);
 
         TagPick.SetTags(clip.Tags ?? new List<string>(), getTags());

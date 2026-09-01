@@ -53,7 +53,8 @@ public partial class PasteDialog : UserControl
             new ExpOpt("7d", "7 天后过期"),
             new ExpOpt("30d", "30 天后过期"),
         };
-        ExpireBox.DisplayMemberPath = nameof(ExpOpt.Label);
+        // 注:不能同时设 DisplayMemberPath + ItemTemplate(WPF 抛 InvalidOperationException)。
+        //   DarkCombo 自定义 Template 不应用 DisplayMemberPath,只能靠 XAML 的 ItemTemplate 绑 Label。
         ExpireBox.SelectedIndex = 0;
 
         TagPick.SetTags(Array.Empty<string>(), getTags());
