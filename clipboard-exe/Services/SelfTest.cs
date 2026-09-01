@@ -76,7 +76,8 @@ public static class SelfTest
             Check("归档 id 去重防翻倍（仍 20 条）", arch2.Count == 20, Line);
 
             // Create → LoadClips round-trip：字段无损 + camelCase JSON
-            var svc = new ClipService(storage);
+            var fileStore = new FileStore(dir);
+            var svc = new ClipService(storage, fileStore);
             var created = svc.Create("link", "", null, "<b>x</b>", "https://ex.com/s?utm_source=ad&keep=1",
                 new List<string> { "标签", "标签", "  ", "标签" }, "7d");
             var loaded = storage.LoadClips();
@@ -277,6 +278,49 @@ public static class SelfTest
             // Create file 字段带图片 mime（落入 ClipItem 用于 CardView 图片卡体判定）
             var imgClip = svc.Create("file", "截图", null, null, null, null, null, imgFid, "screenshot.png", imgSize, "image/png");
             Check("Create file mime=image/png 字段落库", imgClip.FileMime == "image/png" && imgClip.FileId == imgFid, Line);
+
+            // ---- M3b-3a 增量：批量编辑数据层（BatchDelete / BatchSetTags）----
+            // 准备：活跃区 2 条（b1 文本, b2 文件），归档区 1 条（b3 文件）
+            storage.SaveClips(new List<ClipItem>
+            {
+                new ClipItem { Id = "b1", Type = "text", Content = "x", UpdatedAt = 100, CreatedAt = 100, Tags = new() { "t1" } },
+                new ClipItem { Id = "b2", Type = "file", FileId = fid1, FileName = "报告.txt", UpdatedAt = 200, CreatedAt = 200, Tags = new() { "t1", "t2" } },
+            });
+            storage.SaveArchive(new List<ClipItem>
+            {
+                new ClipItem { Id = "b3", Type = "file", FileId = imgFid, FileName = "screenshot.png", UpdatedAt = 300, CreatedAt = 300, Tags = new() { "t2" } },
+            });
+            var fileBefore = File.Exists(fileStore.GetPath(fid1));
+            var deleted = svc.BatchDelete(new[] { "b1", "b3" });
+            Check("BatchDelete 跨活跃+归档删除 2 条", deleted == 2, Line);
+            Check("BatchDelete 后活跃区剩 b2", storage.LoadClips().Select(c => c.Id).SequenceEqual(new[] { "b2" }), Line);
+            Check("BatchDelete 后归档区为空", storage.LoadArchive().Count == 0, Line);
+            Check("BatchDelete 清理 b3 文件实体", !fileStore.Exists(imgFid), Line);
+            Check("BatchDelete 保留 b2 文件实体", fileStore.Exists(fid1) == fileBefore, Line);
+            Check("BatchDelete 记录墓碑 b1+b3", storage.LoadTombstones().Select(t => t.Id).OrderBy(x => x).SequenceEqual(new[] { "b1", "b3" }), Line);
+            Check("BatchDelete 空 ids 抛异常", Throws(() => svc.BatchDelete(Array.Empty<string>())), Line);
+
+            // 批量加标签：b2 加 t3/t4，updatedAt 刷新
+            var beforeAdd = storage.LoadClips().First(c => c.Id == "b2").UpdatedAt;
+            var affectedAdd = svc.BatchSetTags(new[] { "b2" }, new[] { "t3", "t4", "t1" }, true);
+            Check("BatchSetTags add affected=1", affectedAdd == 1, Line);
+            var b2AfterAdd = storage.LoadClips().First(c => c.Id == "b2");
+            Check("BatchSetTags add tags 去重上限", string.Join(",", b2AfterAdd.Tags) == "t1,t2,t3,t4", Line);
+            Check("BatchSetTags add updatedAt 刷新", b2AfterAdd.UpdatedAt > beforeAdd, Line);
+
+            // 批量减标签：b2 减 t1/t2，保留 t3/t4
+            var affectedRm = svc.BatchSetTags(new[] { "b2" }, new[] { "t1", "t2" }, false);
+            Check("BatchSetTags remove affected=1", affectedRm == 1, Line);
+            var b2AfterRm = storage.LoadClips().First(c => c.Id == "b2");
+            Check("BatchSetTags remove 结果", string.Join(",", b2AfterRm.Tags) == "t3,t4", Line);
+            Check("BatchSetTags 空 ids 抛异常", Throws(() => svc.BatchSetTags(Array.Empty<string>(), new[] { "x" }, true)), Line);
+            Check("BatchSetTags 空 tags 抛异常", Throws(() => svc.BatchSetTags(new[] { "b2" }, Array.Empty<string>(), true)), Line);
+
+            // 批量加标签 MAX_TAGS 上限：b2 已有 t3,t4，再加 t5~t13（9 个）→ 保留前 10
+            b2AfterRm.Tags = new List<string> { "t3", "t4" };
+            storage.SaveClips(new List<ClipItem> { b2AfterRm });
+            svc.BatchSetTags(new[] { "b2" }, new[] { "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12", "t13" }, true);
+            Check("BatchSetTags add MAX_TAGS 上限 10", storage.LoadClips().First(c => c.Id == "b2").Tags.Count == 10, Line);
         }
         catch (Exception ex)
         {

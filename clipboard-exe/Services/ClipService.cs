@@ -18,8 +18,13 @@ public sealed class ClipService
     private static readonly Regex ExpireRe = new(@"^(\d+)([hd])$");
 
     private readonly Storage _storage;
+    private readonly FileStore _fileStore;
 
-    public ClipService(Storage storage) => _storage = storage;
+    public ClipService(Storage storage, FileStore fileStore)
+    {
+        _storage = storage;
+        _fileStore = fileStore;
+    }
 
     // ---- 创建（对齐 createClip：type 白名单 → 校验 → cleanUrl → 自动标题）----
     /// <param name="expire">过期选项 '1h'|'1d'|'7d'|'30d'|''(永久)。</param>
@@ -182,6 +187,115 @@ public sealed class ClipService
         c.UpdatedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         _storage.SaveClips(list);
         return c;
+    }
+
+    // ---- 批量编辑（对齐 Web 版 clips-mutate.js batchDeleteClips / batchSetTags）----
+    /// <summary>批量删除：跨活跃区+归档；联动 FileStore 清理文件实体；记录墓碑供 M5 WebDAV 同步传播删除。</summary>
+    public int BatchDelete(IEnumerable<string?> ids)
+    {
+        var idSet = new HashSet<string>(
+            (ids ?? Enumerable.Empty<string?>())
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Select(x => x!),
+            StringComparer.Ordinal);
+        if (idSet.Count == 0) throw new InvalidOperationException("未选择条目");
+
+        var fileIds = new List<string>();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var tombstones = new List<Tombstone>();
+        int deleted = 0;
+
+        foreach (var (load, save) in new (Func<List<ClipItem>> load, Action<List<ClipItem>> save)[]
+        {
+            (_storage.LoadClips, _storage.SaveClips),
+            (_storage.LoadArchive, _storage.SaveArchive),
+        })
+        {
+            var list = load();
+            var kept = new List<ClipItem>(list.Count);
+            foreach (var c in list)
+            {
+                if (idSet.Contains(c.Id))
+                {
+                    deleted++;
+                    if (c.Type == "file" && !string.IsNullOrEmpty(c.FileId)) fileIds.Add(c.FileId);
+                    tombstones.Add(new Tombstone { Id = c.Id, DeletedAt = now });
+                }
+                else kept.Add(c);
+            }
+            if (kept.Count != list.Count) save(kept);
+        }
+
+        // 墓碑：同 id 保留最新 deletedAt
+        var existing = _storage.LoadTombstones().Where(t => !idSet.Contains(t.Id)).ToList();
+        existing.AddRange(tombstones);
+        _storage.SaveTombstones(existing);
+
+        // 文件实体清理（与单条删除同语义；失败不阻断返回）
+        foreach (var fid in fileIds.Distinct(StringComparer.Ordinal)) _fileStore.Delete(fid);
+
+        return deleted;
+    }
+
+    /// <summary>批量加/减标签：跨活跃区+归档；mode 为 add 时 tags 去重/截长/上限 MAX_TAGS；刷新 updatedAt 驱动排序。</summary>
+    public int BatchSetTags(IEnumerable<string?> ids, IEnumerable<string?>? tags, bool isAdd)
+    {
+        var idSet = new HashSet<string>(
+            (ids ?? Enumerable.Empty<string?>())
+            .Where(x => !string.IsNullOrEmpty(x))
+            .Select(x => x!),
+            StringComparer.Ordinal);
+        if (idSet.Count == 0) throw new InvalidOperationException("未选择条目");
+
+        var names = SanitizeTags(tags);
+        if (names.Count == 0) throw new InvalidOperationException("标签不能为空");
+
+        int affected = 0;
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        foreach (var (load, save) in new (Func<List<ClipItem>> load, Action<List<ClipItem>> save)[]
+        {
+            (_storage.LoadClips, _storage.SaveClips),
+            (_storage.LoadArchive, _storage.SaveArchive),
+        })
+        {
+            var list = load();
+            var touched = false;
+            foreach (var c in list)
+            {
+                if (!idSet.Contains(c.Id)) continue;
+                var cur = new HashSet<string>(c.Tags ?? new List<string>(), StringComparer.Ordinal);
+                if (isAdd)
+                {
+                    foreach (var t in names) cur.Add(t);
+                    c.Tags = cur.Take(MaxTags).ToList();
+                }
+                else
+                {
+                    foreach (var t in names) cur.Remove(t);
+                    c.Tags = cur.ToList();
+                }
+                c.UpdatedAt = now;
+                affected++;
+                touched = true;
+            }
+            if (touched) save(list);
+        }
+        return affected;
+    }
+
+    private List<string> SanitizeTags(IEnumerable<string?>? tags)
+    {
+        var list = new List<string>();
+        if (tags == null) return list;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var raw in tags)
+        {
+            var t = Truncate((raw ?? "").Trim(), MaxTagLen);
+            if (t.Length == 0 || seen.Contains(t)) continue;
+            seen.Add(t);
+            list.Add(t);
+        }
+        return list;
     }
 
     // ---- 查询（对齐 listClips + getVisibleClips 前端拼音过滤）----    /// <summary>q（标题/内容/URL/标签模糊 + 拼音首字母缩写）+ tag（精确）+ type + 含归档；自动过滤已过期。</summary>

@@ -24,15 +24,18 @@ public sealed class Storage
 
     private readonly string _clipsFile;
     private readonly string _archiveFile;
+    private readonly string _tombstonesFile;
 
     public Storage(string dataDir)
     {
         _clipsFile = Path.Combine(dataDir, "clips.json");
         _archiveFile = Path.Combine(dataDir, "archive.json");
+        _tombstonesFile = Path.Combine(dataDir, "tombstones.json");
     }
 
     public string ClipsFile => _clipsFile;
     public string ArchiveFile => _archiveFile;
+    public string TombstonesFile => _tombstonesFile;
 
     // ---- 读（readJson 容错：坏文件/不存在 → 默认空）----
     public List<ClipItem> LoadClips()
@@ -45,6 +48,12 @@ public sealed class Storage
     {
         var list = ReadJson<List<ClipItem>>(_archiveFile);
         return list ?? new List<ClipItem>();
+    }
+
+    public List<Tombstone> LoadTombstones()
+    {
+        var list = ReadJson<List<Tombstone>>(_tombstonesFile);
+        return list ?? new List<Tombstone>();
     }
 
     // ---- 写 ----
@@ -64,6 +73,12 @@ public sealed class Storage
     public void SaveArchive(List<ClipItem> list)
     {
         WriteJson(_archiveFile, list);
+    }
+
+    /// <summary>写墓碑数组（直接替换；删除时由调用方先读再追加）。</summary>
+    public void SaveTombstones(List<Tombstone> list)
+    {
+        WriteJson(_tombstonesFile, list);
     }
 
     /// <summary>

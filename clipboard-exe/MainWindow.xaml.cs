@@ -47,7 +47,7 @@ public partial class MainWindow : Window
         // 服务装配（数据目录 exe 同目录 data/）
         _storage = new Storage(App.DataDir);
         _fileStore = new FileStore(App.DataDir);
-        _svc = new ClipService(_storage);
+        _svc = new ClipService(_storage, _fileStore);
 
         // 弹窗宿主 + Toast 初始化
         ModalHost.Attach(ModalLayer);
