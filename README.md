@@ -25,6 +25,7 @@
 - 后端：Node.js（内置 `http` + `fetch`，零第三方依赖）
 - 前端：原生 HTML/JS（Alpine 式轻量、无框架），暗黑新拟态双阴影浮雕风格（设计令牌集中在 `:root`）
 - 存储：JSON 文件（原子写），WebDAV 用 HTTP 协议直连
+- **exe 桌面版（规划中，`clipboard-exe/`）**：C# WPF net9.0-windows 原生重写，逻辑与 Web 版对齐（排序/合并/清理规则一致）、数据 JSON 互导；框架依赖单文件发布（~1-3MB，需装 .NET 9 Desktop Runtime；方案见 `docs/exe-wpf-plan.md`）
 
 ## 运行
 
@@ -63,7 +64,8 @@ lib/core/           # 纯业务逻辑（store/clips/users/files/webdav + clips �
 lib/routes/         # 路由薄层 + 会话中间件
 public/index.html   # 单文件前端（暗黑新拟态，设计令牌在 :root）
 scripts/            # 测试与工具脚本（mock WebDAV、冒烟、集成、html 字段单测、复杂度测量）
-delivery/           # 交付形态（本地服务版 start.cmd / 平台版 / 服务器版，总览见 delivery/README.md）
+delivery/           # 交付形态（本地服务版 start.cmd / 平台版 / 服务器版 / exe 版，总览见 delivery/README.md）
+clipboard-exe/      # exe 桌面版（C# WPF，规划中，方案见 docs/exe-wpf-plan.md）
 ```
 
 ## 文档
@@ -71,6 +73,7 @@ delivery/           # 交付形态（本地服务版 start.cmd / 平台版 / 服
 - [开发文档 DEVELOPMENT.md](DEVELOPMENT.md) — 架构说明与关键问题记录
 - [变更日志 CHANGELOG.md](CHANGELOG.md) — 版本记录
 - [AI 项目规则 AGENTS.md](AGENTS.md) — 技术栈 / 关键坑 / 约定
-- [交付形态 delivery/README.md](delivery/README.md) — 本地服务版 / 平台版 / 服务器版三形态
+- [交付形态 delivery/README.md](delivery/README.md) — 本地服务版 / 平台版 / 服务器版 / exe 版四形态
+- [exe 版开发方案 docs/exe-wpf-plan.md](docs/exe-wpf-plan.md) — WPF 重写方案（还原度确认 / 技术选型 / 里程碑）
 - [发布规范 docs/发布规范.md](docs/发布规范.md) — 版本号 / 产物命名 / 打包 / 发布 / 部署全流程
 

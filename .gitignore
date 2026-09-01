@@ -14,3 +14,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 
+# WPF exe 构建产物与运行时数据
+clipboard-exe/bin/
+clipboard-exe/obj/
+clipboard-exe/data/
+

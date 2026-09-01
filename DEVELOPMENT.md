@@ -43,6 +43,17 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 
 **排序（服务端单一实现）**：① pinned 置顶 → ② copyCount 降序 → ③ updatedAt 降序。严格按点击次数排序（v0.6.16 移除标签/内容归拢——归拢会把高次数卡片挤到后面，破坏次数排序）。读取时计算，任何修改即时反映。
 
+## exe 桌面版（clipboard-exe/，WPF 重写）
+
+> 第四交付形态，C# WPF net9.0-windows 原生重写（**非壳方案、非旧 WinForms 路线**——旧路线已废弃不参考）。
+> 方案全文见 `docs/exe-wpf-plan.md`；状态：M1 骨架完成（2026-08-31），M2 数据层进行中。
+
+- **还原铁律**：规则类逻辑（sortClips / rollToArchive / isExpired / resolveExpire / cleanUrl / mergeSnapshots / 墓碑）与 Web 版逐字一致，**唯一新增功能 = 置顶按钮**；数据 JSON 与 Web 版互导。改 Web 版排序/合并/清理规则时必须同步改 clipboard-exe，反之亦然。
+- **发布**：框架依赖单文件（~1-3MB），需 .NET 9 Desktop Runtime（用户确认装运行库是小问题）；不采用 NativeAOT（WPF 数据绑定与裁剪兼容差）。
+- **数据目录**：exe 同目录 `data/`（便携式）：`clips.json`（等价 Web 活跃区）、`settings.json`（置顶等偏好）、`clipboard-exe.log`（首行版本指纹）、`files/`（M3+）。
+- **工程结构**：`Themes/`（Colors 设计令牌 = Web `:root` 逐项照搬 / Styles / Generic）+ `Controls/NeuBorder`（新拟态双阴影）+ `Services/`（AppLog / Settings / TrayIconService）+ `MainWindow`（深色主窗体 + 置顶）。
+- **M1 验证**：构建 0 警告 0 错误；Release 单文件 173KB；启动不崩溃；日志首行 `clipboard v0.7.0 (dev)`。
+
 ## 关键问题与方案
 
 ### 问题：数据莫名被清空——多实例共存 + 测试直连主服务（2026-08-27 排查，环境问题）

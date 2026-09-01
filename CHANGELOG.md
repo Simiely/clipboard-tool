@@ -1,5 +1,19 @@
 # CHANGELOG.md
 
+## v0.7.0 (2026-09-01, exe 版开发中)
+
+### exe 桌面版启动（C# WPF 原生重写，含置顶按钮）
+
+- 🟢 **新增第四交付形态**：exe 桌面版（`clipboard-exe/`，C# WPF net9.0-windows 原生重写，非壳方案、非旧 WinForms 路线）。方案见 `docs/exe-wpf-plan.md`
+- 🟢 **还原铁律**：规则类逻辑（sortClips / rollToArchive / isExpired / resolveExpire / cleanUrl / mergeSnapshots / 墓碑）与 Web 版逐字一致；**唯一新增功能 = 窗口置顶按钮**（Window.Topmost）；数据 JSON 与 Web 版互导
+- 🟢 **发布形态**：框架依赖单文件（~1-3MB），.NET 9 Desktop Runtime 另行安装（用户确认小问题）；**不采用 NativeAOT**（WPF 数据绑定与裁剪兼容差，准确优先）
+- ✅ **M1 骨架**（2026-08-31）：工程 + 设计令牌主题（Colors/Styles/Generic + NeuBorder 新拟态）+ 深色主窗体 + 托盘 + 单实例 + 置顶按钮 + 三档自适应（`LayoutRules.MaxWidthFor` 纯函数）+ 沉浸式深色标题栏（`WindowExtensions` 扩展）+ 软件渲染修复（单文件发布白屏）+ 文档契约 §5.4（数据层独立文件 / MainWindow 只编排 / Tag 不扩散 / 布局规则走纯函数）
+- ✅ **M2 数据层**（2026-09-01）：`Models/ClipItem.cs`（17 字段 camelCase，对齐 publicClip 实际代码，修正原规划 16 字段与 `expiresAt` 笔误）+ `Services/Storage.cs`（原子写 tmp+rename / `SortClips` LINQ 稳定链 / `RollToArchive` 500 上限 + id 去重防膨胀 / `data/clips.json`+`archive.json` 双文件）+ `Services/Pinyin.cs`（GB2312 一级字库 3755 字 23 组逐字搬运）+ `Services/CleanUrl.cs`（24 追踪参数三态）+ `Services/ClipService.cs`（Create 类型判定/校验/自动标题、FindDuplicate link 比 url、Search 含拼音缩写、ResolveExpire、Sanitize）
+- ✅ **`--selftest` 自检开关**（App.OnStartup 顶部，Mutex 之前，跑完退出不启动主窗）：**42 项断言全过**——排序对拍 / 拼音（总数 3755、23 组、已知字）/ CleanUrl 三态 / 去重 / 归档防膨胀（520→keep 500 + 二次保存不翻倍）/ round-trip 写读无损 + camelCase / ResolveExpire / SanitizeInput / IsExpired / Search
+- 🟢 **M2 红线**：MainWindow.xaml/.cs 零改动（数据层全独立文件）；UI 外观不动；`Tag="on"` 不扩散
+- 🟢 **M3b-2a 文件线**（2026-09-01，M3b-2 拆 2a/2b 后单轮交付）：`Services/FileStore.cs`（文件实体 saveFile/getPath/deleteFile 对齐 Web `lib/core/files.js` 语义：10MB 上限、MIME/扩展名黑名单、EXT_BY_MIME 扩展名映射、不安全扩展名回退 bin、前缀查找防穿越、Delete 静默、MimeFromPath 扩展名推断）+ `PasteDialog` 文件 chip（📎 fname·fsize ✕，对齐 `.file-chip`） + 📁 选择文件 + 粘贴/拖放拦截 + 10MB 拒收 + 文件图标卡（PDF 红边 / ZIP 金边 / FILE 中性 + 折叠角 + 内虚线框，对齐 `makeFileIcon` L1173）+ ↓ 下载（SaveFileDialog 原名落盘）+ 删除联动清文件实体（对齐 Web 路由层 `deleteFile`）。**图片粘贴 2a 暂拒收，toast 提示 2b 支持**（图片卡体/hover 预览延后 M3b-2b）。`--selftest` **126 断言全过**（99 + 27 增量：FileStore 存取/黑名单/10MB/扩展名映射/Delete 静默 + FileKindFor 6 态 + Create file 字段）；UIAutomation 冒烟：文件图标卡渲染 + 删除 → 文件实体联动清理
+- 🟡 待续：M3b-2b 图片线（图片卡体 + hover 预览 + 复制/下载）/ M3b-3 批量编辑条 / M4 导入导出 + 清空 + 富文本分栏 + JSON 覆盖保存 / M5 WebDAV
+
 ## v0.6.16 (2026-08-31)
 
 ### 排序修复：严格按点击次数排序（移除标签/内容归拢）
