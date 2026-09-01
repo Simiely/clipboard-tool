@@ -42,6 +42,12 @@ public partial class CardView : UserControl
     /// <summary>归档卡 ↺ 恢复（M3b-1：归档只读但可恢复到活跃区）。</summary>
     public event Action<ClipItem>? RestoreRequested;
 
+    /// <summary>批量模式：进入/退出时由 MainWindow 设置；控制 .sel-chk 覆盖层显隐与单击行为。</summary>
+    public bool BatchMode { get; set; }
+    private bool _selected;
+    /// <summary>批量模式下单击整卡切换选择时触发（传出条目 id）。</summary>
+    public event Action<string>? SelectionToggled;
+
     /// <summary>当前条目（供调用方读取）。</summary>
     public ClipItem? Item => _clip;
 
@@ -136,6 +142,40 @@ public partial class CardView : UserControl
             OpsPanel.Children.Add(MakeOpBtn("{}", "JSON 格式化预览", del: false, () => OpenJsonRequested?.Invoke(c)));
 
         OpsPanel.Visibility = OpsPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // ---- 批量选择（M3b-3b：BatchMode 下整卡单击切换选择 + .sel-chk 覆盖层 + 选中金描边） ----
+
+    /// <summary>进入/退出批量模式（MainWindow 调用）。退出时清除选中态。</summary>
+    public void SetBatchMode(bool on)
+    {
+        BatchMode = on;
+        if (!on) _selected = false;
+        RefreshBatchVisual();
+    }
+
+    /// <summary>设置选中态（不触发 SelectionToggled；MainWindow 在 ToggleSelect 时反向同步单卡视觉用）。</summary>
+    public void SetSelected(bool sel)
+    {
+        _selected = sel;
+        RefreshBatchVisual();
+    }
+
+    private void RefreshBatchVisual()
+    {
+        bool show = BatchMode;
+        SelChk.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        bool sel = BatchMode && _selected;
+        SelChk.Background = sel ? (Brush)FindResource("AccentBrush") : Brushes.Transparent;
+        SelChk.BorderBrush = sel ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("MutedBrush");
+        SelChkMark.Visibility = sel ? Visibility.Visible : Visibility.Collapsed;
+        // 选中金描边：仅当选中且非 pinned 时强制本地值；其余清除本地值交还 hover/pin 触发控制（避免覆盖 hover 金环）
+        if (CardBorder.Tag?.ToString() == "pin")
+            CardBorder.ClearValue(Border.BorderBrushProperty);
+        else if (sel)
+            CardBorder.BorderBrush = (Brush)FindResource("AccentBrush");
+        else
+            CardBorder.ClearValue(Border.BorderBrushProperty);
     }
 
     // ---- body 构建 ----
@@ -340,6 +380,7 @@ public partial class CardView : UserControl
 
     private void ImgWrap_MouseEnter(object sender, MouseEventArgs e)
     {
+        if (BatchMode) return; // 批量模式不弹预览（避免误触 + 干净的选择交互）
         if (_imageBytes == null) return;
         if (_imgPreviewTimer != null) _imgPreviewTimer.Stop();
         _imgPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(260) }; // 对齐 Web 260ms 延迟防快速划过误弹
@@ -494,13 +535,21 @@ public partial class CardView : UserControl
     private void Card_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_clip == null) return;
-        if (e.OriginalSource is DependencyObject src && IsInsideInteractive(src)) return; // ops/标签/主按钮自己处理
+        if (BatchMode)
+        {
+            if (e.OriginalSource is DependencyObject src && IsInsideInteractive(src)) return; // ops/标签/主按钮自己处理（如 ✕ 删除）
+            e.Handled = true;
+            SelectionToggled?.Invoke(_clip.Id); // 批量模式：单击整卡切换选择（对齐 Web 勾选）
+            return;
+        }
+        if (e.OriginalSource is DependencyObject src2 && IsInsideInteractive(src2)) return; // ops/标签/主按钮自己处理
         var pos = e.GetPosition(null); // 屏幕坐标（对齐 e.clientX/Y）
         Copy(_clip, pos.X, pos.Y);
     }
 
     private void Card_MouseDoubleClick(object sender, MouseButtonEventArgs e)
     {
+        if (BatchMode) return; // 批量模式禁用双击编辑（避免与选择切换冲突）
         if (_clip == null || _clip.Archived) return; // 归档只读（对齐 ondblclick 守卫）
         if (e.OriginalSource is DependencyObject src && IsInsideInteractive(src)) return;
         EditRequested?.Invoke(_clip);

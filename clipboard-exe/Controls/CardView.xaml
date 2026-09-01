@@ -67,6 +67,20 @@
                 <StackPanel x:Name="OpsPanel" DockPanel.Dock="Right" Orientation="Horizontal"
                             HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </DockPanel>
+
+            <!-- 批量模式勾选覆盖层（.sel-chk：左上角；仅 BatchMode 时显示，点击整卡切换选择） -->
+            <Border x:Name="SelChk" Grid.RowSpan="3"
+                    HorizontalAlignment="Left" VerticalAlignment="Top"
+                    Margin="9,9,0,0" Width="22" Height="22"
+                    CornerRadius="7"
+                    Background="Transparent"
+                    BorderBrush="{StaticResource MutedBrush}" BorderThickness="1.5"
+                    Visibility="Collapsed" Panel.ZIndex="10">
+                <TextBlock x:Name="SelChkMark" Text="✓" FontSize="13" FontWeight="Bold"
+                           Foreground="{StaticResource AccentTextBrush}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Visibility="Collapsed"/>
+            </Border>
         </Grid>
     </Border>
 </UserControl>

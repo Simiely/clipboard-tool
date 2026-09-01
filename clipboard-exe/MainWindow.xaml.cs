@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -36,6 +37,12 @@ public partial class MainWindow : Window
     private bool _includeArchived; // M3b-1：归档按钮 toggle 状态（默认 false）
 
     private const double Gap = 16; // .list gap:16px
+
+    // 批量编辑状态（M3b-3b：进入批量模式后维护；_batchSel 跨刷新持久，卡片按 id 重渲染选中态）
+    private bool _batchMode;
+    private readonly HashSet<string> _batchSel = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CardView> _cards = new(StringComparer.Ordinal);
+    private List<string> _visibleIds = new();
 
     public MainWindow(Settings settings, TrayIconService? tray)
     {
@@ -130,7 +137,17 @@ public partial class MainWindow : Window
     {
         var clips = _svc.Search(_q, _tagFilter, _typeFilter, includeArchived: _includeArchived);
         WallPanel.Children.Clear();
-        foreach (var c in clips) WallPanel.Children.Add(MakeCard(c));
+        _cards.Clear();
+        _visibleIds = clips.Select(c => c.Id).ToList();
+        foreach (var c in clips)
+        {
+            var card = MakeCard(c);
+            card.BatchMode = _batchMode; // 批量模式：卡片显示 .sel-chk 覆盖层 + 单击切换选择
+            card.SetSelected(_batchMode && _batchSel.Contains(c.Id)); // 重建后恢复选中态
+            card.SelectionToggled += OnCardSelectionToggled;
+            _cards[c.Id] = card;
+            WallPanel.Children.Add(card);
+        }
 
         var hasFilter = _q.Length > 0 || _tagFilter.Length > 0 || _typeFilter != "all" || _includeArchived;
         EmptyHint.Text = hasFilter
@@ -140,6 +157,7 @@ public partial class MainWindow : Window
 
         RenderTagBar();   // 标签集合随活跃+归档变化同步刷新
         UpdateColumnWidth(); // 重建后同步列宽
+        SyncBatchUI();    // 批量计数/全选按钮文案随可见集变化
     }
 
     /// <summary>卡片装配 + 事件接线（对齐 clipCard 各按钮 → MainWindow 编排）。</summary>
@@ -401,7 +419,156 @@ public partial class MainWindow : Window
         RefreshWall();
     }
 
-    /// <summary>真正退出（托盘退出 / 顶栏退出按钮）。</summary>
+    // ---- 批量编辑（M3b-3b：对齐 Web 版 .batch-bar + batchDeleteClips / batchSetTags） ----
+
+    /// <summary>进入/退出批量模式（编辑按钮 / 完成按钮）。进入时清空选择；重建卡片墙应用 BatchMode。</summary>
+    private void SetBatchMode(bool on)
+    {
+        _batchMode = on;
+        if (!on) _batchSel.Clear();
+        BatchBar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+        RefreshWall(); // 重建以应用 BatchMode 覆盖层 + 恢复选中态
+    }
+
+    private void EditBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(true);
+    private void BatchDoneBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(false);
+
+    /// <summary>卡片 SelectionToggled → 切换选择集 → 同步该卡视觉 + 计数。</summary>
+    private void OnCardSelectionToggled(string id)
+    {
+        if (!_batchMode) return;
+        if (_batchSel.Contains(id)) _batchSel.Remove(id);
+        else _batchSel.Add(id);
+        if (_cards.TryGetValue(id, out var card)) card.SetSelected(_batchSel.Contains(id));
+        SyncBatchUI();
+    }
+
+    /// <summary>全选/取消全选当前页（基于当前 Search 可见集，对齐 getVisibleClips；非全库）。</summary>
+    private void BatchSelectAllBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_visibleIds.Count == 0) return;
+        bool allSel = _visibleIds.All(id => _batchSel.Contains(id));
+        if (allSel) foreach (var id in _visibleIds) _batchSel.Remove(id);
+        else foreach (var id in _visibleIds) _batchSel.Add(id);
+        foreach (var id in _visibleIds)
+            if (_cards.TryGetValue(id, out var card)) card.SetSelected(_batchSel.Contains(id));
+        SyncBatchUI();
+    }
+
+    private void BatchAddTagBtn_Click(object sender, RoutedEventArgs e) => OpenBatchTagModal(isAdd: true);
+    private void BatchRemoveTagBtn_Click(object sender, RoutedEventArgs e) => OpenBatchTagModal(isAdd: false);
+
+    /// <summary>批量标签弹窗：复用 TagPicker；add=全局标签（可新建）/ remove=已选条目标签并集。确认后走 ClipService.BatchSetTags。</summary>
+    private void OpenBatchTagModal(bool isAdd)
+    {
+        if (_batchSel.Count == 0) { ToastService.Flash("请先选择内容"); return; }
+
+        var title = new TextBlock
+        {
+            Text = isAdd ? "批量添加标签" : "批量移除标签",
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Margin = new Thickness(0, 0, 0, 4),
+        };
+        var hint = new TextBlock
+        {
+            Text = isAdd ? "选择要添加的标签（输入框回车可新建）" : "选择要移除的标签",
+            FontSize = 12,
+            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x84, 0x84, 0x84)),
+            Margin = new Thickness(0, 0, 0, 12),
+        };
+        var picker = new TagPicker();
+        if (isAdd)
+            picker.SetTags(new List<string>(), GetAllTagsIncludingArchive()); // 全局标签（可新建）
+        else
+            picker.SetTags(new List<string>(), UnionTagsOfSelection());       // 已选条目标签并集
+
+        var wrap = new StackPanel { Children = { title, hint, picker } };
+
+        var ok = new Button
+        {
+            Style = (Style)FindResource("BtnPrimary"),
+            Content = isAdd ? "添加" : "移除",
+            MinWidth = 130,
+            Margin = new Thickness(0, 16, 10, 0),
+        };
+        var cancel = new Button
+        {
+            Style = (Style)FindResource("BtnClose"),
+            Content = "取消",
+            MinWidth = 130,
+        };
+        var row = new Grid { Margin = new Thickness(0, 0, 0, 0) };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(ok, 0);
+        Grid.SetColumn(cancel, 1);
+        ok.Margin = new Thickness(0, 0, 10, 0);
+        row.Children.Add(ok);
+        row.Children.Add(cancel);
+
+        var sp = new StackPanel { Children = { wrap, row } };
+        var card = new Border
+        {
+            Style = (Style)FindResource("ModalCard"),
+            Width = 420,
+            Child = sp,
+        };
+
+        ok.Click += (_, _) =>
+        {
+            ModalHost.Close();
+            try
+            {
+                var n = _svc.BatchSetTags(_batchSel, picker.Selected, isAdd);
+                ToastService.Flash(isAdd ? $"已为 {n} 条添加标签" : $"已从 {n} 条移除标签");
+                RefreshWall(); // 标签变化可能触发重排序；重建后保留批量选中态
+            }
+            catch (Exception ex) { ToastService.Error(ex.Message); }
+        };
+        cancel.Click += (_, _) => ModalHost.Close();
+        ModalHost.Show(card);
+    }
+
+    /// <summary>已选条目标签并集（跨活跃+归档读取），供批量移除弹窗展示可选标签。</summary>
+    private List<string> UnionTagsOfSelection()
+    {
+        var items = _storage.LoadClips().Concat(_storage.LoadArchive())
+            .Where(c => _batchSel.Contains(c.Id));
+        return items.SelectMany(c => c.Tags ?? new List<string>())
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(x => x, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>系统已有标签（聚合全部条目去重，含归档；对齐 /api/tags 全量）。</summary>
+    private List<string> GetAllTagsIncludingArchive()
+        => _svc.Search("", includeArchived: true).SelectMany(c => c.Tags ?? new List<string>())
+            .Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
+
+    /// <summary>批量删除：确认 → ClipService.BatchDelete（跨区+清文件+墓碑）→ 退出批量模式 → 刷新。</summary>
+    private void BatchDelBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_batchSel.Count == 0) { ToastService.Flash("请先选择内容"); return; }
+        ModalHost.Confirm($"删除选中的 {_batchSel.Count} 条内容？此操作不可撤销", () =>
+        {
+            try
+            {
+                var n = _svc.BatchDelete(_batchSel);
+                ToastService.Flash($"已删除 {n} 条");
+                SetBatchMode(false); // 选择集已删除，退出批量模式
+            }
+            catch (Exception ex) { ToastService.Error(ex.Message); }
+        }, "删除");
+    }
+
+    /// <summary>同步批量条 UI：已选计数 + 全选按钮文案（全选→取消全选）。</summary>
+    private void SyncBatchUI()
+    {
+        BatchCountText.Text = $"已选 {_batchSel.Count}";
+        bool allSel = _visibleIds.Count > 0 && _visibleIds.All(id => _batchSel.Contains(id));
+        BatchSelectAllBtn.Content = allSel ? "取消全选" : "全选当前页";
+    }
     public void ReallyExit()
     {
         _reallyExit = true;

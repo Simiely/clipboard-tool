@@ -99,8 +99,8 @@
                                         Margin="12,0" VerticalAlignment="Center"/>
                             <!-- 操作组（对齐 .tb .ops：编辑/归档/列数/同步） -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal">
-                                <Button Style="{StaticResource BtnGhostSm}" Content="编辑"
-                                        IsEnabled="False" ToolTip="批量编辑（M3b 接入）"/>
+                                <Button x:Name="EditBtn" Style="{StaticResource BtnGhostSm}" Content="编辑"
+                                        Click="EditBtn_Click" ToolTip="进入批量编辑：勾选多条内容后批量加/减标签或删除"/>
                                 <Button x:Name="ArchBtn" Style="{StaticResource BtnGhostSm}"
                                         Click="ArchBtn_Click"
                                         ToolTip="显示/隐藏归档（点击切换）"/>
@@ -125,6 +125,32 @@
                     </Grid>
                 </ScrollViewer>
             </Grid>
+        </Grid>
+
+        <!-- 批量操作条（对齐 Web .batch-bar：底部悬浮 elev 卡，居中 max-width 与 ViewGrid 一致；仅批量模式可见） -->
+        <Grid x:Name="BatchBar" VerticalAlignment="Bottom" Margin="16,0,16,18"
+              MaxWidth="960" HorizontalAlignment="Stretch"
+              Visibility="Collapsed">
+            <ctl:NeuBorder Kind="Raised" Background="{StaticResource ElevBrush}" CornerRadius="{StaticResource RadiusLg}">
+                <StackPanel Orientation="Horizontal" Margin="14,10" VerticalAlignment="Center">
+                    <TextBlock x:Name="BatchCountText" Text="已选 0" Foreground="{StaticResource TextBrush}"
+                               FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0,18,0"/>
+                    <Button x:Name="BatchSelectAllBtn" Style="{StaticResource BtnGhostSm}" Content="全选当前页"
+                            Margin="0,0,8,0" Click="BatchSelectAllBtn_Click"
+                            ToolTip="选中当前过滤下可见的全部内容（再次点击取消全选）"/>
+                    <Button x:Name="BatchAddTagBtn" Style="{StaticResource BtnGhostSm}" Content="＋ 加标签"
+                            Margin="0,0,8,0" Click="BatchAddTagBtn_Click"
+                            ToolTip="为选中内容批量添加标签（可新建）"/>
+                    <Button x:Name="BatchRemoveTagBtn" Style="{StaticResource BtnGhostSm}" Content="－ 减标签"
+                            Margin="0,0,8,0" Click="BatchRemoveTagBtn_Click"
+                            ToolTip="为选中内容批量移除标签"/>
+                    <Button x:Name="BatchDelBtn" Style="{StaticResource BtnDanger}" Content="🗑 删除"
+                            Margin="0,0,8,0" Click="BatchDelBtn_Click"
+                            ToolTip="删除选中内容（不可撤销）"/>
+                    <Button x:Name="BatchDoneBtn" Style="{StaticResource BtnPrimary}" Content="完成"
+                            Click="BatchDoneBtn_Click" ToolTip="退出批量编辑"/>
+                </StackPanel>
+            </ctl:NeuBorder>
         </Grid>
 
         <!-- 弹窗遮罩层（对齐 #modal-root：全窗口覆盖 + 半透明遮罩；ModalHost 挂载弹窗） -->
