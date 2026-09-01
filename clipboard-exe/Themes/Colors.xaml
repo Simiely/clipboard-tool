@@ -26,9 +26,12 @@
     <SolidColorBrush x:Key="RedBrush" Color="#E08A7A"/>     <!-- red 危险/错误 -->
 
     <!-- 圆角（对齐 Web 各控件实际圆角；统一令牌避免硬编码散落） -->
+    <CornerRadius x:Key="RadiusFold">3,3,0,0</CornerRadius><!-- .fic .fold 折叠角 顶 3 / 底 0 -->
+    <CornerRadius x:Key="RadiusIconSm">6</CornerRadius>   <!-- .edit-sec 20x20 序号块 r-6 -->
     <CornerRadius x:Key="RadiusIcon">8</CornerRadius>     <!-- .ops .b 图标钮 -->
     <CornerRadius x:Key="RadiusBtnSm">10</CornerRadius>   <!-- .btn.sm / .typetab .tt / who 区小按钮 -->
     <CornerRadius x:Key="RadiusBtn">12</CornerRadius>     <!-- .btn / input / 通用按钮 -->
+    <CornerRadius x:Key="RadiusIconLg">11</CornerRadius>  <!-- 36x36 弹窗头图标块 / 46x56 .fic r-11 -->
     <CornerRadius x:Key="RadiusMd">14</CornerRadius>        <!-- r-md 容器/typetab 轨道 -->
     <CornerRadius x:Key="RadiusLg">18</CornerRadius>        <!-- r-lg 卡片/顶栏 -->
     <CornerRadius x:Key="RadiusPill">99</CornerRadius>      <!-- r-pill 胶囊（搜索框/存入/标签/开关） -->

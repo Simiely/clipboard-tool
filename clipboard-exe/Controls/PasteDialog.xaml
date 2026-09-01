@@ -11,7 +11,7 @@
         <StackPanel>
             <!-- p-head：📥 图标块 + 存入内容 -->
             <DockPanel Style="{StaticResource ModalHead}">
-                <Border Width="36" Height="36" CornerRadius="11" Background="{StaticResource InsetBrush}"
+                <Border Width="36" Height="36" CornerRadius="{StaticResource RadiusIconLg}" Background="{StaticResource InsetBrush}"
                         DockPanel.Dock="Left" VerticalAlignment="Center">
                     <TextBlock Text="📥" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>

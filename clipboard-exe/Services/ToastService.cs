@@ -29,7 +29,7 @@ public static class ToastService
         {
             Child = _text,
             Padding = new Thickness(18, 8, 18, 8),
-            CornerRadius = new CornerRadius(99),
+            CornerRadius = (CornerRadius)Application.Current.Resources["RadiusPill"],
             Effect = CreateShadow(),
         };
         _popup = new Popup

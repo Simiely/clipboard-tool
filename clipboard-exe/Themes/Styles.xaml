@@ -478,7 +478,7 @@
                         <ToggleButton x:Name="toggle"
                                       IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
                                       Focusable="False" ClickMode="Press" Background="Transparent">
-                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="10" Padding="13,10">
+                            <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusBtnSm}" Padding="13,10">
                                 <Grid>
                                     <ContentPresenter Content="{TemplateBinding SelectionBoxItem}"
                                                       ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
@@ -490,7 +490,7 @@
                         </ToggleButton>
                         <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
                                Focusable="False" PopupAnimation="Slide" PlacementTarget="{Binding ElementName=bd}">
-                            <Border Background="{StaticResource ElevBrush}" CornerRadius="10"
+                            <Border Background="{StaticResource ElevBrush}" CornerRadius="{StaticResource RadiusBtnSm}"
                                     BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                     MinWidth="{TemplateBinding ActualWidth}" Margin="0,2,0,0" MaxHeight="240">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -515,7 +515,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBoxItem">
-                    <Border x:Name="bd" Background="Transparent" CornerRadius="8" Margin="2,1" Padding="13,8">
+                    <Border x:Name="bd" Background="Transparent" CornerRadius="{StaticResource RadiusIcon}" Margin="2,1" Padding="13,8">
                         <ContentPresenter/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -618,7 +618,7 @@
         <Setter Property="Background" Value="{StaticResource AmberWarnBrush}"/>
         <Setter Property="BorderBrush" Value="{StaticResource AmberSoftBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusBtn}"/>
         <Setter Property="Padding" Value="14,10"/>
         <Setter Property="Margin" Value="0,0,0,12"/>
     </Style>
@@ -700,7 +700,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="8" ClipToBounds="True">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusIcon}" ClipToBounds="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -785,7 +785,35 @@
     <!-- .pv / .url / .imgwrap 通用内嵌面板：inset 底 + r-10（卡片 body 内容区共用） -->
     <Style x:Key="InsetPanel" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource InsetBrush}"/>
-        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="CornerRadius" Value="{StaticResource RadiusBtnSm}"/>
+    </Style>
+
+    <!-- 全局 ToolTip：深色圆角胶囊（覆盖 WPF 系统默认的白底直角矩形——所有按钮 hover 都受惠） -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background" Value="{StaticResource InsetBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontSize" Value="11.5"/>
+        <Setter Property="Padding" Value="9,5"/>
+        <Setter Property="HasDropShadow" Value="False"/>
+        <Setter Property="Placement" Value="Mouse"/>
+        <Setter Property="HorizontalOffset" Value="0"/>
+        <Setter Property="VerticalOffset" Value="-2"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource RadiusPill}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"
+                                          TextElement.FontSize="{TemplateBinding FontSize}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- .main-btn：链接卡金色主按钮（accent 底 + bg 深字 + pill + raised-sm；hover amber） -->

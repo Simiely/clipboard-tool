@@ -172,13 +172,13 @@ public partial class CardView : UserControl
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        // 折叠角（.fic .fold：top -1 left 6 18x5 elev-hi 顶圆角）
+        // 折叠角（.fic .fold：top -1 left 6 18x5 elev-hi 顶圆角 3 / 底 0）
         var fold = new Border
         {
             Width = 18,
             Height = 5,
             Background = ElevHiBrush,
-            CornerRadius = new CornerRadius(3, 3, 0, 0),
+            CornerRadius = (CornerRadius)FindResource("RadiusFold"),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(6, -1, 0, 0),
@@ -190,7 +190,7 @@ public partial class CardView : UserControl
             Width = 46,
             Height = 56,
             Background = InsetBrush,
-            CornerRadius = new CornerRadius(11),
+            CornerRadius = (CornerRadius)FindResource("RadiusIconLg"),
             BorderThickness = new Thickness(1),
             Child = grid,
             Margin = new Thickness(0, 0, 14, 0), // gap 14（.filebody gap）

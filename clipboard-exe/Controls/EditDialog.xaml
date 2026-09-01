@@ -10,7 +10,7 @@
         <StackPanel>
             <!-- edit-head：类型图标 + 标题 + 类型徽章 -->
             <DockPanel Style="{StaticResource ModalHead}">
-                <Border Width="36" Height="36" CornerRadius="11" Background="{StaticResource InsetBrush}"
+                <Border Width="36" Height="36" CornerRadius="{StaticResource RadiusIconLg}" Background="{StaticResource InsetBrush}"
                         DockPanel.Dock="Left" VerticalAlignment="Center">
                     <TextBlock x:Name="HeadIcon" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                 </Border>
@@ -31,7 +31,7 @@
             <Border Style="{StaticResource SecCard}">
                 <StackPanel>
                     <DockPanel Style="{StaticResource SecTitle}">
-                        <Border Width="20" Height="20" CornerRadius="6" Background="{StaticResource BgBrush}"
+                        <Border Width="20" Height="20" CornerRadius="{StaticResource RadiusIconSm}" Background="{StaticResource BgBrush}"
                                 DockPanel.Dock="Left" VerticalAlignment="Center">
                             <TextBlock Text="1" FontSize="11" Foreground="{StaticResource MutedBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -50,7 +50,7 @@
             <Border Style="{StaticResource SecCard}" Margin="0">
                 <StackPanel>
                     <DockPanel Style="{StaticResource SecTitle}">
-                        <Border Width="20" Height="20" CornerRadius="6" Background="{StaticResource BgBrush}"
+                        <Border Width="20" Height="20" CornerRadius="{StaticResource RadiusIconSm}" Background="{StaticResource BgBrush}"
                                 DockPanel.Dock="Left" VerticalAlignment="Center">
                             <TextBlock Text="2" FontSize="11" Foreground="{StaticResource MutedBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center"/>

@@ -141,7 +141,7 @@ public partial class PasteDialog : UserControl
         var chip = new Border
         {
             Background = (Brush)FindResource("InsetBrush"),
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = (CornerRadius)FindResource("RadiusBtn"),
             Padding = new Thickness(11, 14, 11, 14),
             Margin = new Thickness(0, 10, 0, 0),
         };
