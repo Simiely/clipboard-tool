@@ -5,6 +5,7 @@ using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using ClipboardExe.Controls;
@@ -451,6 +452,33 @@ public partial class MainWindow : Window
     {
         base.OnDeactivated(e);
         if (_watcher != null) _watcher.Paused = true; // 失活暂停（对齐 Web 前台语义）
+    }
+
+    // ---- 全局快捷键（仅在主窗口已激活、无弹窗、且焦点不在文本框内时生效） ----
+    //  - Ctrl+V：快速打开存入编辑器并自动填入剪贴板内容（PasteDialog 打开即 autoFill）
+    //  - 空格：把输入光标快速定位到搜索框（打字即可搜索）；空格本身不落入搜索框
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+
+        // 已有弹窗时不拦截（交给弹窗自身处理，避免重复开窗或吞掉弹窗内的空格/粘贴）
+        if (ModalHost.IsOpen) return;
+        // 焦点已在文本框（搜索框/存入框等）：保留原生行为（空格正常输入、Ctrl+V 正常粘贴）
+        if (Keyboard.FocusedElement is TextBox or PasswordBox or ComboBox) return;
+
+        if (e.Key == Key.V && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        {
+            e.Handled = true;
+            OpenPasteDialog(); // 打开即自动填入剪贴板内容
+            return;
+        }
+
+        if (e.Key == Key.Space)
+        {
+            e.Handled = true; // 空格不落入搜索框
+            SearchBox.Focus();
+            SearchBox.CaretIndex = SearchBox.Text.Length; // 光标置于末尾，直接打字即从末尾续写
+        }
     }
 
     protected override void OnStateChanged(EventArgs e)
