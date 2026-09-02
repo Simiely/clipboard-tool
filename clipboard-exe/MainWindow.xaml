@@ -48,8 +48,8 @@
                                     IsEnabled="False" ToolTip="无饱和度配色（V2 接入）"/>
                             <Button Style="{StaticResource BtnGhostSm}" Content="密码"
                                     IsEnabled="False" ToolTip="密码（单机版不启用）"/>
-                            <Button Style="{StaticResource BtnGhostSm}" Content="数据管理"
-                                    IsEnabled="False" ToolTip="导入/导出/WebDAV（M5 接入）"/>
+                            <Button x:Name="DataBtn" Style="{StaticResource BtnGhostSm}" Content="数据管理"
+                                    Click="DataBtn_Click" ToolTip="导入 / 导出 / 清空（本地备份）"/>
                             <Button Style="{StaticResource BtnGhostSm}" Content="退出"
                                     Click="ExitBtn_Click" ToolTip="退出并停止捕获"/>
                         </StackPanel>

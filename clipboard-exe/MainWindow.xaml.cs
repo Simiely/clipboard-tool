@@ -431,6 +431,10 @@ public partial class MainWindow : Window
     }
 
     private void EditBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(true);
+
+    /// <summary>数据管理弹窗：导入 / 导出 / 清空（对齐 Web 版 openDataModal 备份区）。</summary>
+    private void DataBtn_Click(object sender, RoutedEventArgs e)
+        => ModalHost.Show(new DataDialog(_svc, RefreshWall));
     private void BatchDoneBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(false);
 
     /// <summary>卡片 SelectionToggled → 切换选择集 → 同步该卡视觉 + 计数。</summary>

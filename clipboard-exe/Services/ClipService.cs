@@ -189,6 +189,105 @@ public sealed class ClipService
         return c;
     }
 
+    // ---- 导入导出 / 清空（对齐 Web 版 clips-transfer.js exportClips/importClips + clips-mutate.js clearAllClips）----
+
+    /// <summary>导出全部（活跃区 + 归档区合并为扁平 clips[]），包成 {app,version,exportedAt,clips[]}（对齐 exportClips）。</summary>
+    public ExportDoc BuildExport()
+    {
+        var all = new List<ClipItem>(_storage.LoadClips().Count + _storage.LoadArchive().Count);
+        all.AddRange(_storage.LoadClips());
+        all.AddRange(_storage.LoadArchive());
+        return new ExportDoc
+        {
+            App = "clipboard",
+            Version = 1,
+            ExportedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            Clips = all,
+        };
+    }
+
+    /// <summary>
+    /// 导入合并（对齐 importClips）：同 id 取 updatedAt 新者（更新计数），旧者跳过，新 id 新增；
+    /// 不清理本地已有数据（合并语义）；超 1000 条拒绝；保存时自动滚动超限进归档，不丢。
+    /// </summary>
+    public ImportResult ImportClips(IEnumerable<ClipItem>? items)
+    {
+        var list = items?.ToList() ?? new List<ClipItem>();
+        if (list.Count > Storage.MaxClipsPerUser * 2) throw new InvalidOperationException("导入条目过多");
+        var byId = new Dictionary<string, ClipItem>(StringComparer.Ordinal);
+        foreach (var c in _storage.LoadClips()) byId[c.Id] = c; // 仅活跃区（对齐 Web：归档不进 byId，避免与导入项重复）
+        int added = 0, updated = 0, skipped = 0;
+        foreach (var raw in list)
+        {
+            if (raw == null || string.IsNullOrEmpty(raw.Id)) { skipped++; continue; }
+            var clip = SanitizeImported(raw);
+            if (byId.TryGetValue(clip.Id, out var ex))
+            {
+                if (clip.UpdatedAt > ex.UpdatedAt) { byId[clip.Id] = clip; updated++; }
+                else skipped++;
+            }
+            else { byId[clip.Id] = clip; added++; }
+        }
+        _storage.SaveClips(byId.Values.ToList()); // 内部自动滚动超限进归档，不丢
+        return new ImportResult { Added = added, Updated = updated, Skipped = skipped, Total = byId.Count };
+    }
+
+    /// <summary>
+    /// 全部清空（对齐 clearAllClips）：活跃区 + 归档一并清空；清空不记墓碑（= 想从网上同步，不传播删除）；
+    /// 联动 FileStore 清理文件实体。返回清空前的活跃区条目数。
+    /// </summary>
+    public int ClearAll()
+    {
+        var list = _storage.LoadClips();
+        var fileIds = list
+            .Where(c => c.Type == "file" && !string.IsNullOrEmpty(c.FileId))
+            .Select(c => c.FileId)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        _storage.SaveClips(new List<ClipItem>());
+        _storage.SaveArchive(new List<ClipItem>());
+        _storage.SaveTombstones(new List<Tombstone>());
+        foreach (var fid in fileIds) _fileStore.Delete(fid);
+        return list.Count;
+    }
+
+    /// <summary>导入条目净化（对齐 sanitizeImported）：只保留合法字段、校验类型/长度、id 非 UUID 重生成、超长截断。</summary>
+    private ClipItem SanitizeImported(ClipItem raw)
+    {
+        var ty = raw.Type is "text" or "link" or "file" ? raw.Type : "text";
+        // v0.6.11：id 必须符合 UUID（非 UUID 重新生成，否则后续查不到此条目）。exe id 为 GUID "D" 格式，Guid.TryParse 覆盖。
+        var id = Guid.TryParse(raw.Id, out _) ? raw.Id : Guid.NewGuid().ToString("D");
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var clip = new ClipItem
+        {
+            Id = id,
+            Type = ty,
+            Title = Truncate(raw.Title ?? "", MaxTitle),
+            Content = Truncate(raw.Content ?? "", MaxContent),
+            Html = SanitizeHtml(raw.Html),
+            Url = "",
+            Tags = SanitizeTags(raw.Tags),
+            CopyCount = Math.Max(0, raw.CopyCount),
+            Pinned = raw.Pinned,
+            ExpireAt = raw.ExpireAt,
+            CreatedAt = raw.CreatedAt == 0 ? now : raw.CreatedAt,
+            UpdatedAt = raw.UpdatedAt == 0 ? now : raw.UpdatedAt,
+        };
+        if (ty == "link")
+        {
+            var url = raw.Url ?? "";
+            if (LinkRe.IsMatch(url)) clip.Url = CleanUrl.Clean(url); // 导入同样清理追踪参数
+        }
+        else if (ty == "file" && !string.IsNullOrEmpty(raw.FileId))
+        {
+            clip.FileId = raw.FileId;
+            clip.FileName = Truncate(raw.FileName ?? "file", 255);
+            clip.FileSize = Math.Max(0, raw.FileSize);
+            clip.FileMime = raw.FileMime ?? "";
+        }
+        return clip;
+    }
+
     // ---- 批量编辑（对齐 Web 版 clips-mutate.js batchDeleteClips / batchSetTags）----
     /// <summary>批量删除：跨活跃区+归档；联动 FileStore 清理文件实体；记录墓碑供 M5 WebDAV 同步传播删除。</summary>
     public int BatchDelete(IEnumerable<string?> ids)

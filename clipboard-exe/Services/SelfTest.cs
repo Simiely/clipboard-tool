@@ -321,6 +321,73 @@ public static class SelfTest
             storage.SaveClips(new List<ClipItem> { b2AfterRm });
             svc.BatchSetTags(new[] { "b2" }, new[] { "t5", "t6", "t7", "t8", "t9", "t10", "t11", "t12", "t13" }, true);
             Check("BatchSetTags add MAX_TAGS 上限 10", storage.LoadClips().First(c => c.Id == "b2").Tags.Count == 10, Line);
+
+            // ---- M4a 增量：导入导出 / 清空（对齐 clips-transfer.js + clips-mutate.js clearAllClips）----
+            // 注：导入净化会重生成非 UUID 的 id（对齐 Web ID_RE），故测试 id 用合法 GUID 格式
+            const string gx1 = "11111111-1111-1111-1111-111111111111";
+            const string gx2 = "22222222-2222-2222-2222-222222222222";
+            const string gx3 = "33333333-3333-3333-3333-333333333333";
+            const string gx9 = "99999999-9999-9999-9999-999999999999";
+            storage.SaveClips(new List<ClipItem>
+            {
+                new ClipItem { Id = gx1, Type = "text", Content = "原内容", UpdatedAt = 100, CreatedAt = 100, Tags = new() { "a" } },
+                new ClipItem { Id = gx2, Type = "link", Url = "https://x.com", UpdatedAt = 200, CreatedAt = 200 },
+            });
+            storage.SaveArchive(new List<ClipItem>
+            {
+                new ClipItem { Id = gx3, Type = "text", Content = "归档内容", UpdatedAt = 300, CreatedAt = 300 },
+            });
+            var exp = svc.BuildExport();
+            Check("Export 含活跃+归档共 3 条", exp.Clips.Count == 3, Line);
+            Check("Export app=clipboard（互导 Web 实际导出）", exp.App == "clipboard", Line);
+            Check("Export 含归档条目 gx3", exp.Clips.Any(c => c.Id == gx3), Line);
+            var expJson = Storage.Serialize(exp);
+            Check("Export 序列化含 clips 数组", expJson.Contains("\"clips\""), Line);
+            var expBack = Storage.Deserialize<ExportDoc>(expJson);
+            Check("Export round-trip 条数一致", expBack != null && expBack.Clips != null && expBack.Clips.Count == 3, Line);
+
+            // 导入合并：同 id 取新 → updated；旧 → skipped；新 id → added
+            var impList = new List<ClipItem>
+            {
+                new ClipItem { Id = gx1, Type = "text", Content = "新内容", UpdatedAt = 999, CreatedAt = 100 }, // 新于原 100 → updated
+                new ClipItem { Id = gx2, Type = "text", Content = "旧内容", UpdatedAt = 1, CreatedAt = 1 },     // 旧于原 200 → skipped
+                new ClipItem { Id = gx9, Type = "text", Content = "新增", UpdatedAt = 50, CreatedAt = 50 },       // 新 id → added
+            };
+            var imp = svc.ImportClips(impList);
+            Check("Import updated=1（gx1 更新）", imp.Updated == 1, Line);
+            Check("Import skipped=1（gx2 旧）", imp.Skipped == 1, Line);
+            Check("Import added=1（gx9 新增）", imp.Added == 1, Line);
+            Check("Import total=3（gx1,gx2,gx9）", imp.Total == 3, Line);
+            Check("Import gx1 内容被更新为新内容", storage.LoadClips().First(c => c.Id == gx1).Content == "新内容", Line);
+
+            // 非 UUID id 重新生成（不抛、生成合法 UUID 落库）
+            var impBad = svc.ImportClips(new List<ClipItem>
+            {
+                new ClipItem { Id = "not-a-uuid", Type = "text", Content = "z", UpdatedAt = 1, CreatedAt = 1 },
+            });
+            Check("Import 非 UUID id 重新生成 added=1", impBad.Added == 1, Line);
+            Check("Import 非 UUID id 落库为合法 UUID", storage.LoadClips().Any(c => Guid.TryParse(c.Id, out _)), Line);
+
+            // 导入超 1000 条拒绝
+            var tooMany = Enumerable.Range(0, 1001)
+                .Select(i => new ClipItem { Id = "m" + i, Type = "text", Content = "x", UpdatedAt = 1, CreatedAt = 1 })
+                .ToList();
+            Check("Import 超 1000 条抛异常", Throws(() => svc.ImportClips(tooMany)), Line);
+
+            // 导入非法 JSON（无 clips 数组）抛异常
+            Check("Import 非法备份抛异常", Throws(() =>
+            {
+                var d = Storage.Deserialize<ExportDoc>("{\"foo\":1}");
+                if (d == null || d.Clips == null) throw new InvalidOperationException("不是剪贴板备份文件");
+            }), Line);
+
+            // 清空：活跃 + 归档 + 墓碑清空（清空不传播删除）。此时活跃区 = gx1,gx2,gx9 + 1 条非UUID重生成的 GUID = 4 条
+            storage.SaveTombstones(new List<Tombstone> { new Tombstone { Id = "t1", DeletedAt = 1 } });
+            var clearN = svc.ClearAll();
+            Check("ClearAll 返回清空条数 4", clearN == 4, Line);
+            Check("ClearAll 活跃区清空", storage.LoadClips().Count == 0, Line);
+            Check("ClearAll 归档清空", storage.LoadArchive().Count == 0, Line);
+            Check("ClearAll 墓碑清空（清空不传播删除）", storage.LoadTombstones().Count == 0, Line);
         }
         catch (Exception ex)
         {

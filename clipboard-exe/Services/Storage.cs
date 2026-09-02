@@ -114,6 +114,14 @@ public sealed class Storage
             .ToList();
     }
 
+    /// <summary>序列化（对齐 Web 导出 JSON：camelCase + 缩进 + 无 BOM）。供导入导出包 {app,version,exportedAt,clips[]} 复用。</summary>
+    public static string Serialize<T>(T data)
+        => JsonSerializer.Serialize(data, Json);
+
+    /// <summary>反序列化（与写回同一组选项，字段名严格 camelCase 对齐 Web 导出）。</summary>
+    public static T? Deserialize<T>(string json)
+        => JsonSerializer.Deserialize<T>(json, Json);
+
     /// <summary>原子写 JSON：先写临时文件再 rename（对齐 writeJson 语义）。</summary>
     public void WriteJson<T>(string file, T data)
     {
