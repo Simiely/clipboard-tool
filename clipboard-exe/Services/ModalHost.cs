@@ -1,8 +1,8 @@
-// Services/ModalHost.cs - 弹窗宿主（对齐 Web #modal-root：遮罩 + 居中弹窗卡片，一次只挂一个）
-//  实现：独立顶层 Window（全屏半透明遮罩 + 居中卡片）。挂到 MainWindow.Owner 之上，
-//  因此弹窗尺寸由内容决定、可超出主窗口边界完整显示在屏幕上（主窗口很小时不再被裁剪）。
+// Services/ModalHost.cs - 弹窗宿主（对齐 Web #modal-root：居中弹窗卡片，一次只挂一个）
+//  实现：独立顶层 Window（透明背景、无全屏压暗遮罩），卡片自带阴影、尺寸由内容决定，
+//  因此可超出主窗口边界完整显示；位置相对主窗口居中，并夹在屏幕工作区内保证完整可见。
 //  - Attach(owner)：MainWindow 构造时绑定主窗口
-//  - Show(content)：清旧弹窗 → 包 ScrollViewer → 显示遮罩 Window（模态 ShowDialog）；Close()：收 Window
+//  - Show(content)：清旧弹窗 → 包 ScrollViewer（限制最大尺寸避免超出屏幕）→ 居中于主窗口的模态 Window；Close()：收 Window
 //  - Confirm(msg, onOk, ...) ：确认框（对齐 askConfirm）
 using System.Windows;
 using System.Windows.Controls;
@@ -21,7 +21,7 @@ public static class ModalHost
     /// <summary>当前是否有弹窗（对齐 $(".mask") 判断——已有弹窗时不叠加）。</summary>
     public static bool IsOpen => _current != null;
 
-    /// <summary>挂载弹窗：独立顶层 Window + 全屏半透明遮罩 + 居中内容（可超出主窗口边界）。</summary>
+    /// <summary>挂载弹窗：独立顶层 Window（透明背景、不压暗界面）+ 相对主窗口居中。</summary>
     public static void Show(FrameworkElement content)
     {
         if (_owner == null) return;
@@ -33,29 +33,54 @@ public static class ModalHost
             Owner = _owner,
             WindowStyle = WindowStyle.None,
             AllowsTransparency = true,
-            Background = new SolidColorBrush(Color.FromArgb(0xA8, 0x0A, 0x0C, 0x10)), // 对齐 .mask rgba(10,12,16,.66)
+            Background = null, // 透明：不压暗整个界面
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.Manual,
-            Width = wa.Width,
-            Height = wa.Height,
-            Left = wa.Left,
-            Top = wa.Top,
+            SizeToContent = SizeToContent.WidthAndHeight,
         };
 
-        // 内容居中；包 ScrollViewer 以防内容超出屏幕时可滚动
+        // 内容居中；包 ScrollViewer 限制最大尺寸，避免内容过大时超出屏幕（仅弹窗自身可滚动）
         content.HorizontalAlignment = HorizontalAlignment.Center;
         content.VerticalAlignment = VerticalAlignment.Center;
         win.Content = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            MaxWidth = wa.Width - 24,
+            MaxHeight = wa.Height - 24,
             Content = content,
         };
 
+        // 先把窗口摆到主窗口附近（用估算尺寸），避免 ShowDialog 瞬间的 0,0 闪烁；Loaded 再用真实尺寸精修
+        content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var est = content.DesiredSize;
+        (win.Left, win.Top) = PositionFor(est.Width, est.Height);
+
         _current = win;
-        win.Loaded += (_, _) => KeyboardFocus(content);
+        win.Loaded += (_, _) =>
+        {
+            // 用真实渲染尺寸再夹一次，确保完整可见
+            (win.Left, win.Top) = PositionFor(win.ActualWidth, win.ActualHeight);
+            KeyboardFocus(content);
+        };
         win.ShowDialog();
+    }
+
+    /// <summary>计算相对主窗口居中、并夹在屏幕工作区内的左上角坐标。</summary>
+    private static (double left, double top) PositionFor(double w, double h)
+    {
+        var ow = _owner!;
+        var wa = SystemParameters.WorkArea;
+        var owW = ow.ActualWidth > 0 ? ow.ActualWidth : ow.Width;
+        var owH = ow.ActualHeight > 0 ? ow.ActualHeight : ow.Height;
+
+        var left = ow.Left + (owW - w) / 2;
+        var top = ow.Top + (owH - h) / 2;
+
+        left = System.Math.Clamp(left, wa.Left, System.Math.Max(wa.Left, wa.Right - w));
+        top = System.Math.Clamp(top, wa.Top, System.Math.Max(wa.Top, wa.Bottom - h));
+        return (left, top);
     }
 
     public static void Close()
