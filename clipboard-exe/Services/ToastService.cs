@@ -1,9 +1,10 @@
 // Services/ToastService.cs - 轻提示（对齐 Web 版 #flash .copied-flash 与 .toast-err）
 //  - Flash(msg) / Flash(msg, x, y)：金色胶囊（accent 底 + 深字 600），跟随鼠标上方（Placement=Mouse 锚定），1400ms
 //  - FlashAtMouse(msg)：显式跟随鼠标（图片复制等无需调用方传坐标）
-//  - Error(msg)：红底白字，顶部居中，2600ms
-// 实现：Popup（独立 Win32 窗口）。at-pos 用 Placement=Mouse 由 WPF 按当前光标+所在显示器 DPI 内部锚定，
-//      规避 GetPosition+Absolute 在高分屏缩放/多显示器下坐标错配导致不跟随鼠标的问题；其余用 Absolute + WorkArea（均 DIU，一致）。
+//  - Error(msg)：红底白字，同样跟随鼠标上方（与成功提示一致），2600ms
+// 实现：Popup（独立 Win32 窗口）。统一 Placement=Mouse：由 WPF 按当前光标 + 所在显示器 DPI 内部锚定，
+//      规避 GetPosition+Absolute 在高分屏缩放 / 多显示器下坐标错配导致不跟随鼠标的问题。
+//      注：所有提示（成功/失败）均跟随鼠标 —— 用户诉求「所有提示信息都跟随鼠标」。
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -54,10 +55,11 @@ public static class ToastService
     /// <summary>金色提示：显式跟随鼠标（无需调用方传坐标，如图片复制）。</summary>
     public static void FlashAtMouse(string msg) => Show(msg, null, null, isError: false, 1400, atMouse: true);
 
-    /// <summary>红色错误提示：顶部居中。2600ms 自动关闭。</summary>
-    public static void Error(string msg) => Show(msg, null, null, isError: true, 2600);
+    /// <summary>红色错误提示：与成功提示一致，跟随鼠标上方。2600ms 自动关闭。</summary>
+    public static void Error(string msg) => Show(msg, null, null, isError: true, 2600, atMouse: true);
 
-    private static void Show(string msg, double? x, double? y, bool isError, int ms, bool atMouse = false)
+    // 统一跟随鼠标：x/y 保留仅为兼容既有调用点（坐标由 Placement=Mouse 内部锚定，不再参与计算）。
+    private static void Show(string msg, double? x, double? y, bool isError, int ms, bool atMouse = true)
     {
         if (_popup == null || _body == null || _text == null) return;
         _isError = isError;
@@ -71,30 +73,13 @@ public static class ToastService
         _body.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var w = _body.DesiredSize.Width;
         var h = _body.DesiredSize.Height;
-        var wa = SystemParameters.WorkArea;
 
-        if (atMouse)
-        {
-            // 跟随鼠标：Placement=Mouse 由 WPF 按当前光标 + 所在显示器 DPI 内部锚定，
-            // 规避 GetPosition+Absolute 在高分屏缩放 / 多显示器下坐标错配导致不跟随鼠标的问题。
-            _popup.Placement = PlacementMode.Mouse;
-            _popup.HorizontalOffset = -w / 2;   // 水平居中对齐光标
-            _popup.VerticalOffset = -(h + 10);  // 光标上方 10px
-        }
-        else if (isError)
-        {
-            // toast-err：顶部居中（Absolute + WorkArea 均为 DIU，坐标一致）
-            _popup.Placement = PlacementMode.Absolute;
-            _popup.HorizontalOffset = (wa.Width - w) / 2;
-            _popup.VerticalOffset = 16;
-        }
-        else
-        {
-            // copied-flash 默认：底部居中（bottom 32px）
-            _popup.Placement = PlacementMode.Absolute;
-            _popup.HorizontalOffset = (wa.Width - w) / 2;
-            _popup.VerticalOffset = wa.Height - h - 32;
-        }
+        // 所有提示（成功/失败）统一跟随鼠标：Placement=Mouse 由 WPF 按当前光标 + 所在显示器 DPI 内部锚定，
+        // 规避 GetPosition+Absolute 在高分屏缩放 / 多显示器下坐标错配导致不跟随鼠标的问题。
+        _popup.Placement = PlacementMode.Mouse;
+        _popup.HorizontalOffset = -w / 2;   // 水平居中对齐光标
+        _popup.VerticalOffset = -(h + 10);  // 光标上方 10px
+
         _body.Opacity = 0;
         _popup.IsOpen = true;
         // 淡入（对齐 .copied-flash transition opacity .25s；软件渲染下动画仍安全）
