@@ -477,7 +477,7 @@ public partial class MainWindow : Window
         {
             e.Handled = true; // 空格不落入搜索框
             SearchBox.Focus();
-            SearchBox.CaretIndex = SearchBox.Text.Length; // 光标置于末尾，直接打字即从末尾续写
+            SearchBox.SelectAll(); // 全选既有查询，直接输入即新检索（对齐 Web 平台版）
         }
     }
 

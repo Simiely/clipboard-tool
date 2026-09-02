@@ -565,7 +565,8 @@ function renderMain() {
   // —— 行1：搜索 + 存入小按钮（右置，点开大弹窗）
   const row1 = el("div", "row1");
   const search = el("input"); search.type = "search"; search.className = "search";
-  search.placeholder = "搜索内容 / 标题 / 标签…"; search.value = state.filter.q;
+  search.placeholder = "搜索内容 / 标题 / 标签…（空格定位光标）"; search.value = state.filter.q;
+  search.title = "搜索内容 / 标题 / 标签 — 主页面按「空格」快速定位光标到此";
   // 一边输入一边筛选：本地即时过滤（100ms 微防抖只防极速输入时的 DOM 重建，无网络请求）
   let searchTimer = null;
   search.oninput = () => {
@@ -577,7 +578,7 @@ function renderMain() {
   };
   const storeBtn = el("button", "store-btn", "");
   storeBtn.append(el("span", "plus", "＋"), el("span", "", "存入"));
-  storeBtn.title = "存入内容 — 粘贴 / 拖文件 / Ctrl+V 后自动弹出";
+  storeBtn.title = "存入内容 — 粘贴 / 拖文件 / 按 Ctrl+V 打开（自动填入剪贴板）";
   storeBtn.onclick = () => openPasteModal(); // v0.6.4：存入入口收缩为右置小按钮
   row1.append(search, storeBtn);
   tool.append(row1);
@@ -2101,18 +2102,32 @@ document.addEventListener("keydown", (e) => {
   const last = masks[masks.length - 1];
   if (last) last.remove();
 });
-// v0.6.15 快捷键：主页面按空格 = 存入（打开存入弹窗）。
-// 条件守卫：已登录 / 无弹窗打开 / 焦点不在输入类元素（搜索框打字空格不误触发）/ 主页面已渲染（有存入按钮）。
-// preventDefault 阻止空格滚动页面。
+// v0.6.17 快捷键调整（对齐桌面 exe 版）：
+//  - Ctrl+V：主页面无弹窗、焦点不在输入区时 → 打开「存入」弹窗并自动填入剪贴板（手动补充自动弹窗未触发的情况）
+//  - 空格：主页面无弹窗、焦点不在输入/交互元素时 → 光标快速定位到搜索框（打字即检索）；空格本身不落入搜索框
+// 守卫：已登录 / 无弹窗 / 焦点不在文本类或交互元素（避免吞掉搜索框/卡片上的空格与粘贴）/ 仅主页面
 document.addEventListener("keydown", (e) => {
+  // —— Ctrl+V → 打开「存入」弹窗（自动填入剪贴板内容）——
+  if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
+    if (!state.current) return;                       // 未登录
+    if ($(".mask")) return;                            // 已有弹窗不覆盖
+    const t = e.target;
+    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // 输入场景保留原生粘贴
+    if (!$(".store-btn")) return;                      // 不在主页面
+    e.preventDefault();
+    openPasteModal();                                  // 打开即自动填入剪贴板内容
+    return;
+  }
+  // —— 空格 → 快速定位光标到搜索框 ——
   if (e.code !== "Space") return;
-  if (!state.current) return;                       // 未登录
+  if (!state.current) return;                         // 未登录
   if ($(".mask")) return;                            // 已有弹窗不覆盖
   const t = e.target;
-  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // 输入场景不拦截
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.tagName === "BUTTON" || t.tagName === "A" || t.isContentEditable)) return; // 输入/交互元素保留原生行为（空格不误触、不吞卡片回车）
   if (!$(".store-btn")) return;                      // 不在主页面（用户选择页无存入按钮）
   e.preventDefault();                                // 阻止空格滚动
-  openPasteModal();
+  const sb = $(".search");
+  if (sb) { sb.focus(); sb.select(); }               // 聚焦并全选，直接输入即新检索
 });
 async function boot() {
   state.cols = LS.get("cols", "auto") || "auto"; // 恢复列数偏好
