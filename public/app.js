@@ -1401,7 +1401,7 @@ function openJsonPreview(c) {
 // ---------- 存入大弹窗（万能入口：检测到复制内容自动弹出 / 点小入口手动打开） ----------
 // v0.6.8 链路重写：html 捕获统一（paste 事件 = 手动可靠来源 / autoFill read = 自动尽力来源），
 // 类型徽章实时自证「✦ 将存为：格式文本」，消除历史补丁叠加。
-function openPasteModal(auto = false) {
+function openPasteModal(auto = false, pasteData = null) {
   if ($(".paste-modal")) return; // 已打开不重复弹（连续复制时用户在弹窗内自行粘贴）
   const root = $("#modal-root");
   const m = el("div", "mask");
@@ -1550,9 +1550,10 @@ function openPasteModal(auto = false) {
   m.append(modal); root.append(m);
   ta.focus();
 
-  // 打开时（点击手势内）自动填入剪贴板：文本优先，其次图片；文件读不到则按场景提示
+  // 打开时自动填入剪贴板：优先用 pasteData（Ctrl+V 捕获，clipboardData 免权限直接可用）；
+  // 无 pasteData（复制自动弹/点按钮打开）→ 走 Async Clipboard read 尽力读取
   // v0.4.3：抽独立函数 autoFillPasteModal（openPasteModal CC 46→拆）
-  autoFillPasteModal(ta, typeBadge, pick, auto, () => updateBadge()).then(() => {
+  autoFillPasteModal(ta, typeBadge, pick, auto, () => updateBadge(), pasteData).then(() => {
     checkDuplicate(); // v0.6.6:自动填入(直接赋值不触发 input)后立即补一次重复检测
   });
 }
@@ -1598,10 +1599,24 @@ async function savePasteContent({ content, pickedFile, adv, m, force = false }) 
 
 // ---------- 自动填入剪贴板（v0.4.3：从 openPasteModal 拆出——文本优先，其次图片） ----------
 // v0.6.8 重写：read() 只调一次；html → 文本 → 图片 顺序清晰；read 权限失败时提示手动粘贴（走查 R-1/R-2 闭环）
-async function autoFillPasteModal(ta, typeBadge, pick, auto, updateBadge) {
+// v0.6.18：新增 pasteData 分支——手动 Ctrl+V 走 paste 捕获（clipboardData 免权限直接可用），
+//          不再依赖 navigator.clipboard.readText()（iframe/平台挂载未授权时读回空 → 弹窗内容空白）
+async function autoFillPasteModal(ta, typeBadge, pick, auto, updateBadge, pasteData = null) {
   try {
     pendingHtml = ""; // 每次打开重置，避免残留上次的富文本
-    // 一次 read() 拿全部剪贴板项（权限允许时；iframe/未授权会 catch 为空数组）
+    // ① 手动 Ctrl+V 路径：paste 事件 clipboardData 直接提供，无需 read 权限
+    if (pasteData) {
+      if (pasteData.html) pendingHtml = pasteData.html; // 富文本来源（Word/网页复制）
+      if (pasteData.file) { // 图片/文件优先（截图、资源管理器复制文件）
+        pick(pasteData.file);
+        flash(pasteData.file.type.startsWith("image/") ? "已接收图片，点存入即可" : "已接收文件，点存入即可");
+        return;
+      }
+      const t = String(pasteData.text || "").trim();
+      if (t && !ta.value) { ta.value = t; updateBadge(); flash("已填入剪贴板内容"); return; }
+      return; // 剪贴板既无文本也无文件 → 留空窗，用户自行输入/拖入
+    }
+    // ◆ 无 pasteData（复制自动弹 / 点按钮打开）：一次 read() 拿全部剪贴板项（权限允许时；iframe/未授权会 catch 为空数组）
     let items = [];
     let readDenied = false;
     if (navigator.clipboard && navigator.clipboard.read) {
@@ -2102,22 +2117,29 @@ document.addEventListener("keydown", (e) => {
   const last = masks[masks.length - 1];
   if (last) last.remove();
 });
-// v0.6.17 快捷键调整（对齐桌面 exe 版）：
-//  - Ctrl+V：主页面无弹窗、焦点不在输入区时 → 打开「存入」弹窗并自动填入剪贴板（手动补充自动弹窗未触发的情况）
+// v0.6.18 快捷键调整（Ctrl+V 改走 paste 捕获——clipboardData 在手势内直接可用，无需 Async Clipboard read 权限；
+// 原 keydown + readText 方案在 iframe/平台挂载等未授权 clipboard-read 的环境下读回空，导致弹窗开了但内容没自动填入）：
+//  - Ctrl+V：主页面无弹窗、焦点不在输入区时 → 打开「存入」弹窗，用 paste 事件数据直接填入（文本/富文本/图片/文件）
 //  - 空格：主页面无弹窗、焦点不在输入/交互元素时 → 光标快速定位到搜索框（打字即检索）；空格本身不落入搜索框
-// 守卫：已登录 / 无弹窗 / 焦点不在文本类或交互元素（避免吞掉搜索框/卡片上的空格与粘贴）/ 仅主页面
+// 守卫：已登录 / 无弹窗 / 焦点不在文本类或交互元素（避免吞掉搜索框/卡片上的粘贴与空格）/ 仅主页面
+document.addEventListener("paste", (e) => {
+  if (!state.current) return;                       // 未登录
+  if ($(".mask")) return;                            // 已有弹窗不覆盖
+  const t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // 输入场景保留原生粘贴
+  if (!$(".store-btn")) return;                      // 不在主页面
+  const cd = e.clipboardData;
+  if (!cd) return;
+  e.preventDefault();                                // 接管（焦点在不可编辑区域，默认粘贴本就无动作）
+  // 同步提取（DataTransfer 无需权限）：图片/文件优先，其次 html 与文本
+  let file = null;
+  if (cd.items) { for (const it of cd.items) { if (it.type && it.type.startsWith("image/")) { file = it.getAsFile(); break; } } }
+  if (!file && cd.files && cd.files.length) file = cd.files[0];
+  let html = "";
+  try { const h = cd.getData("text/html"); if (h && h.length < 512 * 1024) html = h; } catch {}
+  openPasteModal(false, { text: cd.getData("text/plain") || "", html, file });
+});
 document.addEventListener("keydown", (e) => {
-  // —— Ctrl+V → 打开「存入」弹窗（自动填入剪贴板内容）——
-  if ((e.ctrlKey || e.metaKey) && (e.key === "v" || e.key === "V")) {
-    if (!state.current) return;                       // 未登录
-    if ($(".mask")) return;                            // 已有弹窗不覆盖
-    const t = e.target;
-    if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return; // 输入场景保留原生粘贴
-    if (!$(".store-btn")) return;                      // 不在主页面
-    e.preventDefault();
-    openPasteModal();                                  // 打开即自动填入剪贴板内容
-    return;
-  }
   // —— 空格 → 快速定位光标到搜索框 ——
   if (e.code !== "Space") return;
   if (!state.current) return;                         // 未登录

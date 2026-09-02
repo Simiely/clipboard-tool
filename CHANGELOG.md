@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## v0.6.18 (2026-09-02) — 平台版 / 本地服务版（bat）发布
+
+### 修复：手动 Ctrl+V 打开存入弹窗时内容未自动填入
+
+- 🐛 **问题**：主页面空白处已登录按 Ctrl+V → 存入弹窗弹出但内容空白（用户反馈）。
+- 🔍 **根因**：v0.6.17 的 Ctrl+V 由 keydown 拦截 + `e.preventDefault()` 后走 `navigator.clipboard.readText()`（Async Clipboard API）。该 API 在 **iframe / 平台挂载等未授权 `clipboard-read`**（Permissions-Policy）环境静默返回空；且失败提示仅复制自动弹窗路径（`auto=true`）显示，手动路径无任何提示 → "弹窗开、内容空"。
+- ✅ **修复**（`public/app.js`）：Ctrl+V 改走 **document 级 `paste` 事件捕获**——`e.clipboardData` 在粘贴手势内**免权限**直接可用。守卫（已登录/无弹窗/焦点不在输入类/主页面）→ `preventDefault` → 同步提取 `text/html`/图片/文件 → `openPasteModal(false, {text, html, file})` 直接填入。
+- 🧩 `openPasteModal(auto, pasteData=null)` / `autoFillPasteModal(..., pasteData)` 新增 pasteData 分支（文件优先→pick；文本→直接填 textarea 并 flash「已填入剪贴板内容」）；无 pasteData（复制自动弹/点按钮）仍走原 Async read 尽力路径，行为不变。
+- ✍️ 输入框内 Ctrl+V 依旧保留原生粘贴（弹窗 textarea 内图片/html 由原 paste handler 处理）；空格定位搜索框逻辑不变。
+
 ## v0.7.0 (2026-09-01, exe 版开发中)
 
 ### exe 桌面版启动（C# WPF 原生重写，含置顶按钮）
