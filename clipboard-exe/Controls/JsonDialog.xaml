@@ -1,4 +1,4 @@
-<!-- Controls/JsonDialog.xaml - JSON 格式化预览（对齐 app.js openJsonPreview；M3a 只读：复制 + 关闭；覆盖保存 M3b） -->
+<!-- Controls/JsonDialog.xaml - JSON 格式化预览（对齐 app.js openJsonPreview；M3a 只读；M4c 加覆盖保存） -->
 <UserControl x:Class="ClipboardExe.Controls.JsonDialog"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -17,7 +17,8 @@
                      Background="{StaticResource InsetBrush}"/>
 
             <StackPanel Style="{StaticResource ModalActions}">
-                <Button Content="复制美化结果" Style="{StaticResource BtnPrimary}" MinWidth="130" Margin="0,0,10,0" Click="Copy_Click"/>
+                <Button Content="覆盖保存" Style="{StaticResource BtnPrimary}" MinWidth="130" Margin="0,0,10,0" Click="Save_Click"/>
+                <Button Content="复制美化结果" Style="{StaticResource BtnGhost}" MinWidth="130" Margin="0,0,10,0" Click="Copy_Click"/>
                 <Button Content="关闭" Style="{StaticResource BtnClose}" MinWidth="130" Click="Cancel_Click"/>
             </StackPanel>
         </StackPanel>

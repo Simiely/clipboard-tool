@@ -399,6 +399,39 @@ public static class SelfTest
             Check("BuildWordDoc body 文档级属性保留(x='1')", wd2.Contains("<body x='1'>"), Line);
             Check("BuildWordDoc 已是完整文档原样返回",
                 RichText.BuildWordDoc("<html xmlns:w='x'><body>q</body></html>") == "<html xmlns:w='x'><body>q</body></html>", Line);
+
+            // —— M4c JSON 覆盖保存：textToHtml 重建 html（对齐 app.js textToHtml） ——
+            Check("TextToHtml 空串生成 <div><p></p></div>", RichText.TextToHtml("") == "<div><p></p></div>", Line);
+            Check("TextToHtml 转义 <>&", RichText.TextToHtml("a<b>&c") == "<div><p>a&lt;b&gt;&amp;c</p></div>", Line);
+            Check("TextToHtml 双换行分两段", RichText.TextToHtml("p1\n\np2") == "<div><p>p1</p><p>p2</p></div>", Line);
+            Check("TextToHtml 单换行转 br", RichText.TextToHtml("a\nb") == "<div><p>a<br>b</p></div>", Line);
+            Check("TextToHtml URL 转链接", RichText.TextToHtml("see https://a.com ok") == "<div><p>see <a href=\"https://a.com\">https://a.com</a> ok</p></div>", Line);
+
+            // ---- M4c 覆盖保存契约：复刻 MainWindow.OpenJsonRequested 的 SaveRequested 处理 ----
+            //   newHtml = !string.IsNullOrEmpty(c.Html) && newContent != c.Content ? RichText.TextToHtml(newContent) : null;
+            //   _svc.Update(c.Id, c.Title, c.Tags, null, newContent, null, newHtml)
+            // 关键不变量：标题/标签原样保留；带 html 的条目 content 更新后 html 同步重建。
+            var jClip = svc.Create("text", "json-test", "{\"b\":2,\"a\":1}", "<p>old html</p>", null, new List<string> { "json" }, null);
+            var jOrigHtml = jClip.Html;
+            var jUgly = jClip.Content;                 // {"b":2,"a":1}
+            var jPretty = Format.PrettyJson(jUgly);    // 美化后（缩进 + LF）
+            var jNewHtml = !string.IsNullOrEmpty(jClip.Html) && jPretty != (jClip.Content ?? "")
+                ? RichText.TextToHtml(jPretty) : null;
+            var jSaved = svc.Update(jClip.Id, jClip.Title, jClip.Tags, null, jPretty, null, jNewHtml);
+            Check("M4c 覆盖保存：返回非空", jSaved != null, Line);
+            Check("M4c 覆盖保存：标题原样保留", jSaved!.Title == "json-test", Line);
+            Check("M4c 覆盖保存：标签原样保留", string.Join(",", jSaved.Tags) == "json", Line);
+            Check("M4c 覆盖保存：content 更新为美化结果", jSaved.Content == jPretty, Line);
+            Check("M4c 覆盖保存：带 html 条目 html 已重建（异于旧值且含 <p>）",
+                jSaved.Html != jOrigHtml && jSaved.Html.Contains("<p>") && jSaved.Html.Contains("\"b\": 2"), Line);
+            // 无 html 的条目：newHtml 应为 null，Update 不应凭空生成 html
+            var jClip2 = svc.Create("text", "plain-title", "{\"x\":1}", null, null, new List<string> { "t2" }, null);
+            var jNewHtml2 = !string.IsNullOrEmpty(jClip2.Html) && "{\"x\":1}" != jClip2.Content ? RichText.TextToHtml("{\"x\":1}") : null;
+            Check("M4c 覆盖保存：无 html 条目 newHtml 短路为 null", jNewHtml2 == null, Line);
+            var jSaved2 = svc.Update(jClip2.Id, jClip2.Title, jClip2.Tags, null, "{\"x\":1}", null, jNewHtml2);
+            Check("M4c 覆盖保存：无 html 条目 html 保持空", jSaved2 != null && string.IsNullOrEmpty(jSaved2.Html), Line);
+            Check("M4c 覆盖保存：无 html 条目标题/标签仍保留",
+                jSaved2 != null && jSaved2.Title == "plain-title" && string.Join(",", jSaved2.Tags) == "t2", Line);
         }
         catch (Exception ex)
         {

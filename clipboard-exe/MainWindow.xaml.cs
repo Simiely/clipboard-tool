@@ -221,6 +221,23 @@ public partial class MainWindow : Window
         card.OpenJsonRequested += cc =>
         {
             var dlg = new JsonDialog(cc);
+            dlg.SaveRequested += (c, newContent) =>
+            {
+                try
+                {
+                    // v0.6.11：带 html 的条目覆盖保存同步重建 html，防 content/html 不一致；标题/标签原样保留
+                    var newHtml = !string.IsNullOrEmpty(c.Html) && newContent != (c.Content ?? "")
+                        ? RichText.TextToHtml(newContent) : null;
+                    if (_svc.Update(c.Id, c.Title, c.Tags, null, newContent, null, newHtml) != null)
+                    {
+                        ToastService.Flash("已覆盖保存");
+                        RefreshWall();
+                        ModalHost.Close();
+                    }
+                    else ToastService.Error("条目不存在");
+                }
+                catch (Exception ex) { ToastService.Error(ex.Message); }
+            };
             ModalHost.Show(dlg);
         };
         card.OpenLinkRequested += cc =>

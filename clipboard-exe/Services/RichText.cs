@@ -76,4 +76,23 @@ public static class RichText
         }
         catch { return false; }
     }
+
+    private static readonly Regex UrlRe = new(@"(https?:\/\/\S+)", RegexOptions.Compiled);
+    private static readonly Regex ParaSplitRe = new(@"\n{2,}", RegexOptions.Compiled);
+
+    /// <summary>纯文本 → 简单富文本 HTML（换行转段落，URL 转可点链接；对齐 app.js textToHtml）。</summary>
+    public static string TextToHtml(string? text)
+    {
+        var esc = (text ?? "").Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+        var paras = ParaSplitRe.Split(esc);
+        var sb = new StringBuilder("<div>");
+        foreach (var p in paras)
+        {
+            var withBr = p.Replace("\n", "<br>");
+            var withLinks = UrlRe.Replace(withBr, "<a href=\"$1\">$1</a>");
+            sb.Append("<p>").Append(withLinks).Append("</p>");
+        }
+        sb.Append("</div>");
+        return sb.ToString();
+    }
 }
