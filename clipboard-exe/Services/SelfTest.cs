@@ -432,6 +432,98 @@ public static class SelfTest
             Check("M4c 覆盖保存：无 html 条目 html 保持空", jSaved2 != null && string.IsNullOrEmpty(jSaved2.Html), Line);
             Check("M4c 覆盖保存：无 html 条目标题/标签仍保留",
                 jSaved2 != null && jSaved2.Title == "plain-title" && string.Join(",", jSaved2.Tags) == "t2", Line);
+
+            // ===== M5a WebDAV 合并算法（对齐 webdav.js mergeSnapshots / scripts/test-merge-snapshot.mjs，8 用例对拍） =====
+            ClipItem Mk(string id, long upd, bool archived = false)
+                => new ClipItem { Id = id, Content = "c-" + id, UpdatedAt = upd, Archived = archived };
+            Tombstone Tmb(string id, long del) => new Tombstone { Id = id, DeletedAt = del };
+
+            // ① 双端合并：同 id 按 updatedAt 取新
+            {
+                var local = new List<ClipItem> { Mk("a", 100), Mk("b", 200) };
+                var remote = new Snapshot { Clips = new() { Mk("a", 300), Mk("c", 150) }, Tombstones = new() };
+                var r = WebDavSync.MergeSnapshots(local, new(), remote);
+                Check("M5 ① 远端新 → 取远端(a updatedAt=300)", r.Clips.FirstOrDefault(c => c.Id == "a")?.UpdatedAt == 300, Line);
+                Check("M5 ① 本地新 → 保留本地(b updatedAt=200)", r.Clips.FirstOrDefault(c => c.Id == "b")?.UpdatedAt == 200, Line);
+                Check("M5 ① 远端独有 → 并入(c)", r.Clips.Any(c => c.Id == "c"), Line);
+                Check("M5 ① 合并计数 3", r.Clips.Count == 3, Line);
+            }
+            // ② 墓碑裁决：deletedAt > updatedAt → 删除
+            {
+                var local = new List<ClipItem> { Mk("a", 100) };
+                var r = WebDavSync.MergeSnapshots(local, new() { Tmb("a", 500) }, null);
+                Check("M5 ② 墓碑后删除 → 条目移除", !r.Clips.Any(c => c.Id == "a"), Line);
+                Check("M5 ② 墓碑保留在输出", r.Tombstones.Any(t => t.Id == "a" && t.DeletedAt == 500), Line);
+            }
+            // ③ 删后又编辑：updatedAt > deletedAt → 保留（防误删核心）
+            {
+                var local = new List<ClipItem> { Mk("a", 600) };
+                var remote = new Snapshot { Clips = new(), Tombstones = new() { Tmb("a", 500) } };
+                var r = WebDavSync.MergeSnapshots(local, new(), remote);
+                Check("M5 ③ 删后又编辑 → 保留条目", r.Clips.Any(c => c.Id == "a"), Line);
+                Check("M5 ③ 对应墓碑仍随输出", r.Tombstones.Count == 1, Line);
+            }
+            // ④ 两侧墓碑取最新 deletedAt
+            {
+                var local = new List<ClipItem> { Mk("a", 50), Mk("b", 50) };
+                var remote = new Snapshot { Clips = new() { Mk("b", 900) }, Tombstones = new() { Tmb("a", 300) } };
+                var r = WebDavSync.MergeSnapshots(local, new() { Tmb("a", 700), Tmb("b", 800) }, remote);
+                Check("M5 ④ 墓碑取最新(a deletedAt=700)", r.Tombstones.FirstOrDefault(t => t.Id == "a")?.DeletedAt == 700, Line);
+                Check("M5 ④ 远端墓碑并入(a 在远端也有墓碑)", r.Tombstones.Any(t => t.Id == "a"), Line);
+                Check("M5 ④ b 远端新编辑 → 胜过本地墓碑", r.Clips.Any(c => c.Id == "b") && r.Clips.First(c => c.Id == "b").UpdatedAt == 900, Line);
+                Check("M5 ④ a 被墓碑删除", !r.Clips.Any(c => c.Id == "a"), Line);
+            }
+            // ⑤ 远端 null → 本地原样
+            {
+                var local = new List<ClipItem> { Mk("a", 100), Mk("b", 200) };
+                var r = WebDavSync.MergeSnapshots(local, new(), null);
+                Check("M5 ⑤ 远端 null → 本地原样", r.Clips.Count == 2 && r.Tombstones.Count == 0, Line);
+            }
+            // ⑥ 归档条目带 archived 标记不被误伤
+            {
+                var local = new List<ClipItem> { Mk("a", 100, true), Mk("b", 200) };
+                var remote = new Snapshot { Clips = new() { Mk("a", 150, true) }, Tombstones = new() };
+                var r = WebDavSync.MergeSnapshots(local, new(), remote);
+                Check("M5 ⑥ 归档标记保留", r.Clips.FirstOrDefault(c => c.Id == "a")?.Archived == true, Line);
+                Check("M5 ⑥ 归档条目参与取新(updatedAt=150)", r.Clips.FirstOrDefault(c => c.Id == "a")?.UpdatedAt == 150, Line);
+            }
+            // ⑦ 远端空快照不覆盖本地
+            {
+                var local = new List<ClipItem> { Mk("a", 100) };
+                var r = WebDavSync.MergeSnapshots(local, new(), new Snapshot { Clips = new(), Tombstones = new() });
+                Check("M5 ⑦ 远端空数组 → 本地保留", r.Clips.Count == 1, Line);
+            }
+            // ⑧ localTomb 为空数组容错
+            {
+                var r = WebDavSync.MergeSnapshots(new() { Mk("a", 100) }, new(), new Snapshot { Clips = new(), Tombstones = new() });
+                Check("M5 ⑧ localTomb=[] 容错", r.Clips.Count == 1 && r.Tombstones.Count == 0, Line);
+            }
+
+            // ===== M5a WebDav 配置 IO（对齐 webdav.js getSyncConfig/saveSyncConfig） =====
+            Check("M5 配置：空 url 抛错", Throws(() => WebDavSync.ValidateAndBuild("", "u", "p", false, false, 720, null)), Line);
+            Check("M5 配置：非 http(s) 抛错", Throws(() => WebDavSync.ValidateAndBuild("ftp://x", "u", "p", false, false, 720, null)), Line);
+            Check("M5 配置：首次空密码抛错", Throws(() => WebDavSync.ValidateAndBuild("https://x", "u", "", false, false, 720, null)), Line);
+            {
+                var old = new SyncConfig { Url = "https://x", User = "u", Pass = "old", IntervalMin = 720 };
+                var reuse = WebDavSync.ValidateAndBuild("https://x", "u", "", false, false, 720, old); // 留空密码 → 复用旧
+                Check("M5 配置：留空密码复用旧密码", reuse.Pass == "old", Line);
+                Check("M5 配置：interval 越界回退默认 720", WebDavSync.ValidateAndBuild("https://x", "u", "p", false, false, 99999, null).IntervalMin == 720, Line);
+                Check("M5 配置：interval 边界 30 保留", WebDavSync.ValidateAndBuild("https://x", "u", "p", false, false, 30, null).IntervalMin == 30, Line);
+            }
+            {
+                var cfg = new SyncConfig
+                {
+                    Url = "https://dav.example.com", User = "me", Pass = "secret",
+                    SyncFiles = true, AutoSync = true, IntervalMin = 120, AccountName = "laptop",
+                };
+                WebDavSync.SaveConfig(dir, cfg);
+                var loadedCfg = WebDavSync.LoadConfig(dir);
+                Check("M5 配置：保存后读取非空", loadedCfg != null, Line);
+                Check("M5 配置：round-trip Url/User/Pass", loadedCfg is { Url: "https://dav.example.com", User: "me", Pass: "secret" }, Line);
+                Check("M5 配置：round-trip SyncFiles/AutoSync/Interval/Account",
+                    loadedCfg is { SyncFiles: true, AutoSync: true, IntervalMin: 120, AccountName: "laptop" }, Line);
+                Check("M5 配置：无配置文件返回 null", WebDavSync.LoadConfig(Path.Combine(dir, "nope")) == null, Line);
+            }
         }
         catch (Exception ex)
         {
