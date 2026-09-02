@@ -388,6 +388,17 @@ public static class SelfTest
             Check("ClearAll 活跃区清空", storage.LoadClips().Count == 0, Line);
             Check("ClearAll 归档清空", storage.LoadArchive().Count == 0, Line);
             Check("ClearAll 墓碑清空（清空不传播删除）", storage.LoadTombstones().Count == 0, Line);
+
+            // —— M4b 富文本分栏：buildWordDoc 片段包装（对齐 app.js buildWordDoc） ——
+            Check("BuildWordDoc 空串原样空", RichText.BuildWordDoc("") == "", Line);
+            var wd1 = RichText.BuildWordDoc("<p>hi</p>");
+            Check("BuildWordDoc 片段包 Word 命名空间(xlsx:w)", wd1.Contains("xmlns:w="), Line);
+            Check("BuildWordDoc 含 StartFragment 标记", wd1.Contains("<!--StartFragment -->"), Line);
+            Check("BuildWordDoc 含 EndFragment 标记", wd1.Contains("<!--EndFragment -->"), Line);
+            var wd2 = RichText.BuildWordDoc("<body x='1'><p>a</p></body>");
+            Check("BuildWordDoc body 文档级属性保留(x='1')", wd2.Contains("<body x='1'>"), Line);
+            Check("BuildWordDoc 已是完整文档原样返回",
+                RichText.BuildWordDoc("<html xmlns:w='x'><body>q</body></html>") == "<html xmlns:w='x'><body>q</body></html>", Line);
         }
         catch (Exception ex)
         {

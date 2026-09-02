@@ -231,6 +231,24 @@ public partial class MainWindow : Window
             }
             catch { ToastService.Error("无法打开链接"); }
         };
+        card.CopyPlainRequested += (cc, x, y) =>
+        {
+            try { Clipboard.SetText(cc.Content ?? ""); }
+            catch { ToastService.Error("复制失败，请手动选择复制"); return; }
+            if (_watcher != null) _watcher.Suppress(800); // 来源抑制：本次复制不触发自动弹窗
+            try { _svc.BumpCopyCount(cc.Id); } catch { /* 计数失败不影响 */ }
+            ToastService.Flash("已复制", x, y);
+        };
+        card.CopyRichRequested += (cc, x, y) =>
+        {
+            if (RichText.CopyRich(cc.Html, cc.Content))
+            {
+                if (_watcher != null) _watcher.Suppress(800);
+                try { _svc.BumpCopyCount(cc.Id); } catch { /* 计数失败不影响 */ }
+                ToastService.Flash("富文本已复制（含格式）", x, y);
+            }
+            else ToastService.Error("富文本复制失败，请用独立窗口重试");
+        };
         card.TagFilterRequested += tag =>
         {
             _tagFilter = (_tagFilter == tag) ? "" : tag; // 同一标签再点 → 清除（对齐 Web .tagchip toggle）

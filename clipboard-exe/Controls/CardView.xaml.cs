@@ -41,6 +41,10 @@ public partial class CardView : UserControl
     public event Action<string>? TagFilterRequested;
     /// <summary>归档卡 ↺ 恢复（M3b-1：归档只读但可恢复到活跃区）。</summary>
     public event Action<ClipItem>? RestoreRequested;
+    /// <summary>富文本分栏左栏：复制纯文本（对齐 Web makeRichSplit 左 half：copyText(content)）。</summary>
+    public event Action<ClipItem, double, double>? CopyPlainRequested;
+    /// <summary>富文本分栏右栏：复制带格式（对齐 Web makeRichSplit 右 half：copyRich(html, content)）。</summary>
+    public event Action<ClipItem, double, double>? CopyRichRequested;
 
     /// <summary>批量模式：进入/退出时由 MainWindow 设置；控制 .sel-chk 覆盖层显隐与单击行为。</summary>
     public bool BatchMode { get; set; }
@@ -111,7 +115,10 @@ public partial class CardView : UserControl
             if (body != null) BodyHost.Content = body;
             else BodyHost.Content = BuildFileBody(c); // 图片字节读取/解码失败 → 降级为文件卡
         }
-        else BodyHost.Content = c.Type == "file" ? BuildFileBody(c) : c.Type == "link" ? BuildLinkBody(c) : BuildTextBody(c);
+        // 文本卡：有 html → 富文本分栏（左纯文本/右富文本）；否则普通摘要
+        else BodyHost.Content = c.Type == "file" ? BuildFileBody(c)
+            : c.Type == "link" ? BuildLinkBody(c)
+            : (string.IsNullOrEmpty(c.Html) ? BuildTextBody(c) : BuildRichSplit(c));
 
         // —— foot：meta（复制 N 次 / #tag / 时间）+ ops ——
         MetaPanel.Children.Clear();
@@ -199,6 +206,75 @@ public partial class CardView : UserControl
             Style = (Style)FindResource("InsetPanel"),
             Padding = new Thickness(11, 9, 6, 9),
         };
+    }
+
+    /// <summary>富文本分栏（对齐 app.js makeRichSplit v0.6.12：左右都显示文本，顶部一行提示区分；
+    /// 左栏单击复制纯文本 / 右栏单击复制富文本。stopPropagation 后由事件转发给 MainWindow 做剪贴板 I/O）。</summary>
+    private FrameworkElement BuildRichSplit(ClipItem c)
+    {
+        var split = new StackPanel { Orientation = Orientation.Vertical, Margin = new Thickness(0, 2, 0, 0) };
+
+        // 顶部提示行：T 普通文本 | ✦ 富文本
+        var tip = new Grid { Margin = new Thickness(0, 0, 0, 6) };
+        tip.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        tip.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var tipL = new TextBlock { Text = "T 普通文本", FontSize = 11, Foreground = MutedBrush, HorizontalAlignment = HorizontalAlignment.Center };
+        var tipR = new TextBlock { Text = "✦ 富文本", FontSize = 11, Foreground = AmberBrush, HorizontalAlignment = HorizontalAlignment.Center };
+        Grid.SetColumn(tipL, 0); Grid.SetColumn(tipR, 1);
+        tip.Children.Add(tipL); tip.Children.Add(tipR);
+        split.Children.Add(tip);
+
+        // 左右两栏 + 中间分隔线
+        var cols = new Grid();
+        cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        var divider = new Border { Width = 1, Background = FileBoxBorderBrush, Margin = new Thickness(4, 0, 4, 0), IsHitTestVisible = false };
+        cols.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        cols.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+
+        var left = MakeRichHalf(c.Content ?? "", "单击复制纯文本");
+        left.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true; // 阻止冒泡到卡片单击（避免重复复制 / 触发默认文本复制）
+            var p = e.GetPosition(null);
+            CopyPlainRequested?.Invoke(c, p.X, p.Y);
+        };
+        var right = MakeRichHalf(c.Content ?? "", "单击复制带格式（粘贴到 Word/飞书保留样式）");
+        right.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            var p = e.GetPosition(null);
+            CopyRichRequested?.Invoke(c, p.X, p.Y);
+        };
+
+        Grid.SetColumn(left, 0); Grid.SetColumn(divider, 1); Grid.SetColumn(right, 2);
+        cols.Children.Add(left); cols.Children.Add(divider); cols.Children.Add(right);
+        split.Children.Add(cols);
+        split.Name = "RichSplit"; // 守卫标记：双击/单击排除分栏区
+        return split;
+    }
+
+    /// <summary>分栏单栏（.half + .plain-pv：InsetPanel 内嵌文本，hover 高亮，hand 光标）。</summary>
+    private Border MakeRichHalf(string text, string tip)
+    {
+        var pv = new TextBlock
+        {
+            Text = text,
+            FontSize = 12,
+            Foreground = MutedBrush,
+            TextWrapping = TextWrapping.Wrap,
+            LineHeight = 19.2,
+        };
+        var border = new Border
+        {
+            Child = pv,
+            Style = (Style)FindResource("InsetPanel"),
+            Padding = new Thickness(8, 6, 8, 6),
+            Cursor = Cursors.Hand,
+            ToolTip = tip,
+        };
+        border.MouseEnter += (_, _) => border.Background = HoverBrush;
+        border.MouseLeave += (_, _) => border.Background = InsetBrush;
+        return border;
     }
 
     /// <summary>图片卡 body（M3b-2b：imgwrap cover 撑满对齐 app.js makeCardBody 图片分支；图片字节读取/解码失败返回 null 由调用方降级为文件卡）。</summary>
@@ -535,14 +611,16 @@ public partial class CardView : UserControl
     private void Card_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (_clip == null) return;
+        var src = e.OriginalSource as DependencyObject;
         if (BatchMode)
         {
-            if (e.OriginalSource is DependencyObject src && IsInsideInteractive(src)) return; // ops/标签/主按钮自己处理（如 ✕ 删除）
+            if (src != null && IsInsideInteractive(src)) return; // ops/标签/主按钮自己处理（如 ✕ 删除）
             e.Handled = true;
             SelectionToggled?.Invoke(_clip.Id); // 批量模式：单击整卡切换选择（对齐 Web 勾选）
             return;
         }
-        if (e.OriginalSource is DependencyObject src2 && IsInsideInteractive(src2)) return; // ops/标签/主按钮自己处理
+        if (src != null && IsInsideInteractive(src)) return; // ops/标签/主按钮自己处理
+        if (IsInsideRichSplit(src)) return; // 富文本分栏自己处理复制（左/右栏 stopPropagation）
         var pos = e.GetPosition(null); // 屏幕坐标（对齐 e.clientX/Y）
         Copy(_clip, pos.X, pos.Y);
     }
@@ -551,7 +629,9 @@ public partial class CardView : UserControl
     {
         if (BatchMode) return; // 批量模式禁用双击编辑（避免与选择切换冲突）
         if (_clip == null || _clip.Archived) return; // 归档只读（对齐 ondblclick 守卫）
-        if (e.OriginalSource is DependencyObject src && IsInsideInteractive(src)) return;
+        var src = e.OriginalSource as DependencyObject;
+        if (src != null && IsInsideInteractive(src)) return;
+        if (IsInsideRichSplit(src)) return; // 分栏点击不触发编辑（对齐 Web '.rich-split' 守卫）
         EditRequested?.Invoke(_clip);
     }
 
@@ -582,6 +662,17 @@ public partial class CardView : UserControl
     {
         if (MetaPanel.Children.Count == 0) return;
         if (MetaPanel.Children[0] is TextBlock t) t.Text = "复制 " + _copyCount + " 次";
+    }
+
+    /// <summary>是否点在富文本分栏内（.rich-split）——分栏左右栏自己处理复制，排除卡片默认复制/编辑（对齐 Web e.target.closest(".rich-split")）。</summary>
+    private static bool IsInsideRichSplit(DependencyObject? src)
+    {
+        while (src != null)
+        {
+            if (src is FrameworkElement fe && fe.Name == "RichSplit") return true;
+            src = VisualTreeHelper.GetParent(src);
+        }
+        return false;
     }
 
     /// <summary>是否点在内层交互件上（Button / 内容可点击区）——卡片单击/双击守卫（对齐 e.target.closest(".ops")）。</summary>
@@ -631,6 +722,8 @@ public partial class CardView : UserControl
     private static readonly Brush AmberBrush = BrushFrom(0xD4AF37);
     private static readonly Brush RedBrush = BrushFrom(0xE08A7A);
     private static readonly Brush InsetBrush = BrushFrom(0x141414);
+    /// <summary>分栏 hover 高亮（比 InsetPanel 略亮）。</summary>
+    private static readonly Brush HoverBrush = BrushFrom(0x1E1E1E);
     private static readonly Brush ElevHiBrush = BrushFrom(0x2A2A2A);
     private static readonly Brush FileBoxBorderBrush = BrushFrom(0x3D3D3D);
     /// <summary>rgba(red,.35) 文件卡 PDF 边。</summary>
