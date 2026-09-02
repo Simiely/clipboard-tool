@@ -77,6 +77,21 @@ public sealed class FileStore
 
     public byte[] ReadAllBytes(string fileId) => File.ReadAllBytes(GetPath(fileId));
 
+    /// <summary>扩展名推导（对齐 webdav.js extFor：mime 优先，其次文件名后缀，兜底 bin）。供 WebDAV 实体同步命名远端/本地文件。</summary>
+    public static string ExtFor(string? mime, string? fileName)
+    {
+        if (!string.IsNullOrEmpty(mime) && ExtByMime.TryGetValue(mime!, out var e)) return e;
+        var m = Regex.Match(fileName ?? "", @"\.([a-z0-9]{1,8})$", RegexOptions.IgnoreCase);
+        return m.Success ? m.Groups[1].Value.ToLowerInvariant() : "bin";
+    }
+
+    /// <summary>写回文件实体（WebDAV 恢复场景：远端 → 本地 files/&lt;fileId&gt;.&lt;ext&gt;）。</summary>
+    public void WriteRaw(string fileId, string ext, byte[] data)
+    {
+        Directory.CreateDirectory(_filesDir);
+        File.WriteAllBytes(Path.Combine(_filesDir, fileId + "." + ext), data);
+    }
+
     /// <summary>物理删除文件实体（不存在/无效静默，对齐 deleteFile）。</summary>
     public void Delete(string fileId)
     {

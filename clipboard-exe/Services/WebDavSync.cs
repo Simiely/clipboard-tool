@@ -13,6 +13,7 @@ namespace ClipboardExe.Services;
 public static class WebDavSync
 {
     public const int DefaultIntervalMin = 720; // 自动同步默认间隔：12 小时
+    public const string DefaultUrl = "http://192.168.2.1:6086"; // 未配置过时的默认 WebDAV 地址
     public const int AutoMin = 30, AutoMax = 24 * 60; // 间隔范围 30 分钟 ~ 24 小时
     private const string ConfigFile = "webdav.json";
 

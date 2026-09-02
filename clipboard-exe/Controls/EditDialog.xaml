@@ -42,7 +42,7 @@
                                    Foreground="{StaticResource DimBrush}" VerticalAlignment="Center"/>
                     </DockPanel>
                     <TextBox x:Name="ContentBox" MinHeight="110" AcceptsReturn="True" TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto" FontSize="13"/>
+                             VerticalScrollBarVisibility="Auto" FontSize="13" Style="{StaticResource EditInput}"/>
                 </StackPanel>
             </Border>
 
@@ -63,10 +63,11 @@
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="126"/><!-- Web .edit-row select{flex:0 0 126px} -->
                         </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TitleBox" Grid.Column="0" Tag="别名" FontSize="12.5"/>
-                        <!-- Web .edit-sec select：background elev(#1F1F1F) / r-9 / padding 10px 12px -->
+                        <TextBox x:Name="TitleBox" Grid.Column="0" Tag="别名" FontSize="12.5" Style="{StaticResource EditInput}"/>
+                        <!-- Web .edit-sec select：background elev(#1F1F1F) / r-9 / padding 10px 12px；此处用 Bg 填充 + 1px 边框拉开与分区卡对比 -->
                         <ComboBox x:Name="ExpireBox" Grid.Column="1" Style="{StaticResource DarkCombo}"
-                                  Background="{StaticResource ElevBrush}" Padding="12,10"
+                                  Background="{StaticResource BgBrush}" Padding="12,10"
+                                  BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                   ctl:Combo.Radius="{StaticResource RadiusCombo}"
                                   Margin="10,0,0,0" VerticalAlignment="Center">
                             <ComboBox.ItemTemplate>

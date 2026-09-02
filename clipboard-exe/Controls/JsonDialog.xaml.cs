@@ -32,10 +32,10 @@ public partial class JsonDialog : UserControl
     {
         try
         {
-            Clipboard.SetText(JsonBox.Text);
+            ClipboardHelper.SetText(JsonBox.Text);
             ToastService.Flash("已复制美化 JSON");
         }
-        catch { ToastService.Error("复制失败"); }
+        catch (Exception ex) { AppLog.Info("json copy failed: " + ex); ToastService.Error("复制失败"); }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

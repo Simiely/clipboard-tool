@@ -1,7 +1,9 @@
 // Services/ToastService.cs - 轻提示（对齐 Web 版 #flash .copied-flash 与 .toast-err）
-//  - Flash(msg)：金色胶囊（accent 底 + 深字 600），默认底部居中；Flash(msg, x, y) 跟随鼠标上方（at-pos 语义 translate(-50%,-130%)），1400ms
+//  - Flash(msg) / Flash(msg, x, y)：金色胶囊（accent 底 + 深字 600），跟随鼠标上方（Placement=Mouse 锚定），1400ms
+//  - FlashAtMouse(msg)：显式跟随鼠标（图片复制等无需调用方传坐标）
 //  - Error(msg)：红底白字，顶部居中，2600ms
-// 实现：Popup（无窗口句柄，Absolute 屏幕坐标），内容先 Measure 再精确定位；复用单个 Popup + DispatcherTimer。
+// 实现：Popup（独立 Win32 窗口）。at-pos 用 Placement=Mouse 由 WPF 按当前光标+所在显示器 DPI 内部锚定，
+//      规避 GetPosition+Absolute 在高分屏缩放/多显示器下坐标错配导致不跟随鼠标的问题；其余用 Absolute + WorkArea（均 DIU，一致）。
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -29,7 +31,7 @@ public static class ToastService
         {
             Child = _text,
             Padding = new Thickness(18, 8, 18, 8),
-            CornerRadius = (CornerRadius)Application.Current.Resources["RadiusPill"],
+            CornerRadius = (CornerRadius)Application.Current.Resources["RadiusBtn"],
             Effect = CreateShadow(),
         };
         _popup = new Popup
@@ -43,19 +45,23 @@ public static class ToastService
         Timer.Tick += (_, _) => Close();
     }
 
-    /// <summary>金色提示：默认底部居中；x/y 提供时跟随鼠标上方（at-pos）。1400ms 自动关闭。</summary>
+    /// <summary>金色提示（跟随鼠标上方，WPF Placement=Mouse 锚定，规避高分屏/多屏坐标错配）。1400ms 自动关闭。</summary>
     public static void Flash(string msg, double? x = null, double? y = null)
     {
-        Show(msg, x, y, isError: false, 1400);
+        Show(msg, x, y, isError: false, 1400, atMouse: true);
     }
+
+    /// <summary>金色提示：显式跟随鼠标（无需调用方传坐标，如图片复制）。</summary>
+    public static void FlashAtMouse(string msg) => Show(msg, null, null, isError: false, 1400, atMouse: true);
 
     /// <summary>红色错误提示：顶部居中。2600ms 自动关闭。</summary>
     public static void Error(string msg) => Show(msg, null, null, isError: true, 2600);
 
-    private static void Show(string msg, double? x, double? y, bool isError, int ms)
+    private static void Show(string msg, double? x, double? y, bool isError, int ms, bool atMouse = false)
     {
         if (_popup == null || _body == null || _text == null) return;
         _isError = isError;
+        _popup.IsOpen = false; // 强制干净重开，确保 Placement 切换生效（避免上次淡出中残留旧坐标）
         _text.Text = msg;
         _body.Background = isError ? new SolidColorBrush(Color.FromRgb(0xE0, 0x8A, 0x7A)) // --red
                                    : new SolidColorBrush(Color.FromRgb(0xC9, 0xA9, 0x6E)); // --accent 金
@@ -67,30 +73,28 @@ public static class ToastService
         var h = _body.DesiredSize.Height;
         var wa = SystemParameters.WorkArea;
 
-        double ox, oy;
-        if (x.HasValue && y.HasValue)
+        if (atMouse)
         {
-            // at-pos：鼠标上方（translate(-50%,-130%)），钳制在屏幕内
-            ox = x.Value - w / 2;
-            oy = y.Value - h * 1.3;
-            ox = Math.Max(8, Math.Min(ox, wa.Width - w - 8));
-            oy = Math.Max(8, oy);
+            // 跟随鼠标：Placement=Mouse 由 WPF 按当前光标 + 所在显示器 DPI 内部锚定，
+            // 规避 GetPosition+Absolute 在高分屏缩放 / 多显示器下坐标错配导致不跟随鼠标的问题。
+            _popup.Placement = PlacementMode.Mouse;
+            _popup.HorizontalOffset = -w / 2;   // 水平居中对齐光标
+            _popup.VerticalOffset = -(h + 10);  // 光标上方 10px
         }
         else if (isError)
         {
-            // toast-err：顶部居中
-            ox = (wa.Width - w) / 2;
-            oy = 16;
+            // toast-err：顶部居中（Absolute + WorkArea 均为 DIU，坐标一致）
+            _popup.Placement = PlacementMode.Absolute;
+            _popup.HorizontalOffset = (wa.Width - w) / 2;
+            _popup.VerticalOffset = 16;
         }
         else
         {
             // copied-flash 默认：底部居中（bottom 32px）
-            ox = (wa.Width - w) / 2;
-            oy = wa.Height - h - 32;
+            _popup.Placement = PlacementMode.Absolute;
+            _popup.HorizontalOffset = (wa.Width - w) / 2;
+            _popup.VerticalOffset = wa.Height - h - 32;
         }
-
-        _popup.HorizontalOffset = ox;
-        _popup.VerticalOffset = oy;
         _body.Opacity = 0;
         _popup.IsOpen = true;
         // 淡入（对齐 .copied-flash transition opacity .25s；软件渲染下动画仍安全）

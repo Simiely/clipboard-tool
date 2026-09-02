@@ -30,8 +30,9 @@ public partial class CardView : UserControl
     private double _imgPreviewScale = 1.0; // M3b-2b：当前缩放（默认 100%，每次开重置）
     private double _imgPreviewStep = 0.15; // M3b-2b：滚轮缩放步长（对齐 Web LS.get("zoomStep", 0.15)；未来从 Settings 读取）
 
-    public event Action<ClipItem>? CopyBumped;
     public event Action<ClipItem>? EditRequested;
+    /// <summary>统一复制请求（文本/链接）：卡只发请求，由 MainWindow 经 ClipboardHelper 写入并反馈（审计：单一写入入口）。</summary>
+    public event Action<ClipItem, double, double>? CopyRequested;
     public event Action<ClipItem>? TogglePinRequested;
     public event Action<ClipItem>? DeleteRequested;
     public event Action<ClipItem>? OpenJsonRequested;
@@ -649,13 +650,8 @@ public partial class CardView : UserControl
             DownloadRequested?.Invoke(c); // 对齐 handleCardClick：文件（非图片）单击 = 下载
             return;
         }
-        var text = c.Type == "link" ? c.Url : c.Content;
-        try { Clipboard.SetText(text); }
-        catch { ToastService.Error("复制失败，请手动选择复制"); return; }
-        ToastService.Flash("已复制", x, y);
-        _copyCount++;
-        UpdateCopyLabel();
-        CopyBumped?.Invoke(c); // MainWindow: watcher.Suppress(800) + BumpCopyCount
+        // 文本/链接：卡只发复制请求，写入与反馈统一由 MainWindow 处理（审计：单一入口，避免双路径）
+        CopyRequested?.Invoke(c, x, y);
     }
 
     private void UpdateCopyLabel()
@@ -663,6 +659,9 @@ public partial class CardView : UserControl
         if (MetaPanel.Children.Count == 0) return;
         if (MetaPanel.Children[0] is TextBlock t) t.Text = "复制 " + _copyCount + " 次";
     }
+
+    /// <summary>复制成功后由 MainWindow 回调，更新本卡「复制 N 次」本地计数（对齐 Web bumpCopyCount 的本地 +1）。</summary>
+    public void MarkCopied() { _copyCount++; UpdateCopyLabel(); }
 
     /// <summary>是否点在富文本分栏内（.rich-split）——分栏左右栏自己处理复制，排除卡片默认复制/编辑（对齐 Web e.target.closest(".rich-split")）。</summary>
     private static bool IsInsideRichSplit(DependencyObject? src)

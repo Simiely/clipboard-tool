@@ -250,6 +250,82 @@
     <!-- ================================================================
          层1 · 标签 / 徽章 / 开关
          ================================================================ -->
+    <!-- 编辑弹窗输入框（内容 / 别名）：分区卡为 Inset(#141414)，默认 TextBox 同为 Inset 导致无对比、看不见。
+         改用 Bg(#1A1A1A) 填充 + 1px BorderBrush 常驻描边，与卡片底拉开层次；聚焦金边；Tag 作占位符。 -->
+    <Style x:Key="EditInput" TargetType="TextBox">
+        <Setter Property="Background" Value="{StaticResource BgBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="12,9"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource RadiusBtn}" ClipToBounds="True">
+                        <Grid>
+                            <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                            <TextBlock x:Name="PH" Text="{TemplateBinding Tag}" Visibility="Collapsed"
+                                       Foreground="{StaticResource DimBrush}" FontSize="{TemplateBinding FontSize}"
+                                       Margin="{TemplateBinding Padding}" IsHitTestVisible="False" VerticalAlignment="Center"/>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="PH" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="Text" Value="{x:Null}">
+                            <Setter TargetName="PH" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="Text" Value=""/>
+                                <Condition Property="IsKeyboardFocused" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="PH" Property="Visibility" Value="Visible"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="PH" Property="Visibility" Value="Hidden"/>
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="bd" Property="BorderThickness" Value="1.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 密码输入框（与 EditInput 同视觉：Bg 底 / 1px 边框 / r-btn / 聚焦金边） -->
+    <Style x:Key="EditPassword" TargetType="PasswordBox">
+        <Setter Property="Background" Value="{StaticResource BgBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+        <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="12,9"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource RadiusBtn}" ClipToBounds="True">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="bd" Property="BorderThickness" Value="1.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- 标签 chip（.tag：胶囊 elev/raised-sm；Tag="on"=金底深字600；Tag="off"=半透明） -->
     <Style x:Key="TagChip" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource ElevBrush}"/>
@@ -481,6 +557,7 @@
         <Setter Property="Background" Value="{StaticResource InsetBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="FontSize" Value="12.5"/>
         <Setter Property="MinHeight" Value="32"/>
         <Setter Property="Padding" Value="13,10"/><!-- .paste-adv .adv-row select padding:10px 13px -->
@@ -492,6 +569,7 @@
                 <ControlTemplate TargetType="ComboBox">
                     <Grid>
                         <Border x:Name="bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="{Binding Path=(local:Combo.Radius), RelativeSource={RelativeSource TemplatedParent}}"
                                 Padding="{TemplateBinding Padding}">
                             <Grid>
@@ -525,6 +603,10 @@
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource ElevHiBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="bd" Property="BorderThickness" Value="1.5"/>
                         </Trigger>
                         <Trigger Property="IsDropDownOpen" Value="True">
                             <Setter TargetName="bd" Property="Background" Value="{StaticResource ElevHiBrush}"/>
@@ -800,7 +882,7 @@
         </Setter>
     </Style>
 
-    <!-- 标签选择器 chip（.tag-pick .tag：inset 底；选中金底深字） -->
+    <!-- 标签选择器 chip（.tag-pick .tag：inset 底；选中金底深字）。圆角用 RadiusBtn 与其他输入框/按钮一致（非胶囊） -->
     <Style x:Key="TagPickChip" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource InsetBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
@@ -810,7 +892,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusPill}" Padding="{TemplateBinding Padding}" ClipToBounds="True">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusBtn}" Padding="{TemplateBinding Padding}" ClipToBounds="True">
                         <ContentPresenter/>
                     </Border>
                     <ControlTemplate.Triggers>

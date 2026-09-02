@@ -1,7 +1,9 @@
 // Services/ModalHost.cs - 弹窗宿主（对齐 Web #modal-root：遮罩 + 居中弹窗卡片，一次只挂一个）
-//  - Attach(Grid)：MainWindow 构造时绑定全窗口遮罩层（ModalLayer）
-//  - Show(content)：清掉旧弹窗后挂新弹窗 + 显示遮罩；Close()：收遮罩
-//  - Confirm(msg, onOk, okText, onCancel)：确认框（对齐 askConfirm：h3 确认操作 + msg + 确认/取消）
+//  实现：独立顶层 Window（全屏半透明遮罩 + 居中卡片）。挂到 MainWindow.Owner 之上，
+//  因此弹窗尺寸由内容决定、可超出主窗口边界完整显示在屏幕上（主窗口很小时不再被裁剪）。
+//  - Attach(owner)：MainWindow 构造时绑定主窗口
+//  - Show(content)：清旧弹窗 → 包 ScrollViewer → 显示遮罩 Window（模态 ShowDialog）；Close()：收 Window
+//  - Confirm(msg, onOk, ...) ：确认框（对齐 askConfirm）
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -10,43 +12,65 @@ namespace ClipboardExe.Services;
 
 public static class ModalHost
 {
-    private static Grid? _layer;
-    private static FrameworkElement? _current;
+    private static Window? _owner;
+    private static Window? _current;
 
-    /// <summary>绑定遮罩层（MainWindow 构造时调用一次）。</summary>
-    public static void Attach(Grid layer) => _layer = layer;
+    /// <summary>绑定主窗口（MainWindow 构造时调用一次）。</summary>
+    public static void Attach(Window owner) => _owner = owner;
 
     /// <summary>当前是否有弹窗（对齐 $(".mask") 判断——已有弹窗时不叠加）。</summary>
     public static bool IsOpen => _current != null;
 
-    /// <summary>挂载弹窗（居中）。</summary>
+    /// <summary>挂载弹窗：独立顶层 Window + 全屏半透明遮罩 + 居中内容（可超出主窗口边界）。</summary>
     public static void Show(FrameworkElement content)
     {
-        if (_layer == null) return;
+        if (_owner == null) return;
         if (_current != null) Close();
-        _current = content;
+
+        var wa = SystemParameters.WorkArea;
+        var win = new Window
+        {
+            Owner = _owner,
+            WindowStyle = WindowStyle.None,
+            AllowsTransparency = true,
+            Background = new SolidColorBrush(Color.FromArgb(0xA8, 0x0A, 0x0C, 0x10)), // 对齐 .mask rgba(10,12,16,.66)
+            ResizeMode = ResizeMode.NoResize,
+            ShowInTaskbar = false,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Width = wa.Width,
+            Height = wa.Height,
+            Left = wa.Left,
+            Top = wa.Top,
+        };
+
+        // 内容居中；包 ScrollViewer 以防内容超出屏幕时可滚动
         content.HorizontalAlignment = HorizontalAlignment.Center;
         content.VerticalAlignment = VerticalAlignment.Center;
-        _layer.Children.Add(content);
-        _layer.Visibility = Visibility.Visible;
-        KeyboardFocus(content);
+        win.Content = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = content,
+        };
+
+        _current = win;
+        win.Loaded += (_, _) => KeyboardFocus(content);
+        win.ShowDialog();
     }
 
     public static void Close()
     {
-        if (_layer == null) return;
         if (_current != null)
         {
-            _layer.Children.Remove(_current);
+            _current.Close();
             _current = null;
         }
-        _layer.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>确认框（对齐 askConfirm：标题"确认操作" + 消息 + 确认/取消等宽按钮）。</summary>
     public static void Confirm(string msg, Action onOk, string okText = "确认", Action? onCancel = null)
     {
-        if (_layer == null) return;
+        if (_owner == null) return;
 
         var title = new TextBlock { Text = "确认操作", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
         var body = new TextBlock
@@ -59,18 +83,18 @@ public static class ModalHost
         };
         var ok = new Button
         {
-            Style = (Style)_layer.FindResource("BtnPrimary"),
+            Style = (Style)Application.Current.FindResource("BtnPrimary"),
             Content = okText,
             MinWidth = 130,
             Margin = new Thickness(0, 0, 10, 0),
         };
         var cancel = new Button
         {
-            Style = (Style)_layer.FindResource("BtnClose"),
+            Style = (Style)Application.Current.FindResource("BtnClose"),
             Content = "取消",
             MinWidth = 130,
         };
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 0) };
+        var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         Grid.SetColumn(ok, 0);
@@ -82,7 +106,7 @@ public static class ModalHost
         var sp = new StackPanel { Children = { title, body, row } };
         var card = new Border
         {
-            Style = (Style)_layer.FindResource("ModalCard"),
+            Style = (Style)Application.Current.FindResource("ModalCard"),
             Width = 360,
             Child = sp,
         };

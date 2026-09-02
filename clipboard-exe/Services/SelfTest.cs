@@ -523,6 +523,13 @@ public static class SelfTest
                 Check("M5 配置：round-trip SyncFiles/AutoSync/Interval/Account",
                     loadedCfg is { SyncFiles: true, AutoSync: true, IntervalMin: 120, AccountName: "laptop" }, Line);
                 Check("M5 配置：无配置文件返回 null", WebDavSync.LoadConfig(Path.Combine(dir, "nope")) == null, Line);
+                Check("M5 配置：未配置时默认地址 = http://192.168.2.1:6086", WebDavSync.DefaultUrl == "http://192.168.2.1:6086", Line);
+
+                // M5 引擎：IsDue 定时判定（对齐 runAutoSync 的 due 逻辑）
+                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                Check("M5 IsDue：到点应触发", SyncEngine.IsDue(new SyncConfig { AutoSync = true, IntervalMin = 30, LastSyncAt = nowMs - 31 * 60_000L }), Line);
+                Check("M5 IsDue：未到点不触发", !SyncEngine.IsDue(new SyncConfig { AutoSync = true, IntervalMin = 720, LastSyncAt = nowMs - 60_000L }), Line);
+                Check("M5 IsDue：autoSync 关闭不触发", !SyncEngine.IsDue(new SyncConfig { AutoSync = false, IntervalMin = 1, LastSyncAt = 0 }), Line);
             }
         }
         catch (Exception ex)

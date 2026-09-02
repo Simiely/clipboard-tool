@@ -71,7 +71,7 @@ public static class RichText
             var data = new DataObject();
             data.SetData(DataFormats.Text, plain ?? "");
             data.SetData(DataFormats.Html, EncodeCfHtml(rich));
-            Clipboard.SetDataObject(data);
+            ClipboardHelper.SetDataObject(data);
             return true;
         }
         catch { return false; }

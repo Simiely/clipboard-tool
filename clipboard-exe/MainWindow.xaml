@@ -107,8 +107,8 @@
                                 <Button x:Name="ColsBtn" Style="{StaticResource BtnGhostSm}"
                                         Click="ColsBtn_Click"
                                         ToolTip="点击循环切换列数：自动 → 1 → 2 → 3 → 4 → 自动（M3b-1 接入）"/>
-                                <Button Style="{StaticResource BtnGhostSm}" Content="同步"
-                                        IsEnabled="False" ToolTip="WebDAV 一键同步（M5 接入）"/>
+                                <Button x:Name="SyncBtn" Style="{StaticResource BtnGhostSm}" Content="同步"
+                                        Click="SyncBtn_Click" ToolTip="立即同步（配置在「数据管理」中）"/>
                             </StackPanel>
                         </Grid>
                     </StackPanel>
@@ -152,8 +152,5 @@
                 </StackPanel>
             </ctl:NeuBorder>
         </Grid>
-
-        <!-- 弹窗遮罩层（对齐 #modal-root：全窗口覆盖 + 半透明遮罩；ModalHost 挂载弹窗） -->
-        <Grid x:Name="ModalLayer" Style="{StaticResource ModalMask}" Visibility="Collapsed"/>
     </Grid>
 </Window>

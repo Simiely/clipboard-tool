@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media.Imaging;
@@ -44,6 +45,9 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, CardView> _cards = new(StringComparer.Ordinal);
     private List<string> _visibleIds = new();
 
+    private readonly SyncController _sync; // M5c：WebDAV 同步编排（从 UI 层下沉，降低耦合）
+    private readonly DispatcherTimer _autoTimer = new() { Interval = TimeSpan.FromMinutes(1) }; // M5c：定时自动同步
+
     public MainWindow(Settings settings, TrayIconService? tray)
     {
         InitializeComponent();
@@ -56,8 +60,13 @@ public partial class MainWindow : Window
         _fileStore = new FileStore(App.DataDir);
         _svc = new ClipService(_storage, _fileStore);
 
-        // 弹窗宿主 + Toast 初始化
-        ModalHost.Attach(ModalLayer);
+        // M5：启动定时自动同步（1 分钟轮询，到点才跑；编排逻辑在 SyncController）
+        _sync = new SyncController(_storage, _fileStore, App.DataDir);
+        _autoTimer.Tick += (_, _) => _ = _sync.Tick();
+        _autoTimer.Start();
+
+        // 弹窗宿主 + Toast 初始化（独立顶层 Window，可超出主窗口边界）
+        ModalHost.Attach(this);
         ToastService.Init();
 
         // 搜索防抖（对齐 Web 100ms 微防抖：只防极速输入时的 DOM 重建）
@@ -173,12 +182,6 @@ public partial class MainWindow : Window
         // ItemWidth 已在 UpdateColumnWidth 里减掉一个 Gap，此处补上对应的右/下 Margin，
         // 否则每张卡紧贴排列（左侧视觉连成一片），Gap 只变成行尾空白。
         card.Margin = new Thickness(0, 0, Gap, Gap);
-        card.CopyBumped += _ =>
-        {
-            if (_watcher != null) _watcher.Suppress(800); // 来源抑制：本次复制不触发自动弹窗
-            try { _svc.BumpCopyCount(c.Id); } catch { /* 计数失败不影响 */ }
-            // 不重排（对齐 Web bumpCopyCount 仅本地 +1，卡片已更新显示）
-        };
         card.EditRequested += cc => OpenEditDialog(cc, dup: false);
         card.TogglePinRequested += cc =>
         {
@@ -217,7 +220,18 @@ public partial class MainWindow : Window
             }
             catch (Exception ex) { ToastService.Error("下载失败: " + ex.Message); }
         };
-        card.CopyImageRequested += cc => CopyImageToClipboard(cc, _watcher); // M3b-2b：图片卡单击复制到系统剪贴板
+        card.CopyImageRequested += cc => CopyImageToClipboard(cc); // M3b-2b：图片卡单击复制到系统剪贴板
+        card.CopyRequested += (cc, x, y) =>
+        {
+            var text = (cc.Type == "link" ? cc.Url : cc.Content) ?? "";
+            if (string.IsNullOrEmpty(text)) { ToastService.Error("没有可复制的内容"); return; }
+            if (TryCopy(() => ClipboardHelper.SetText(text)))
+            {
+                card.MarkCopied();
+                SuppressAndBump(cc);
+                ToastService.Flash("已复制", x, y);
+            }
+        };
         card.OpenJsonRequested += cc =>
         {
             var dlg = new JsonDialog(cc);
@@ -250,18 +264,22 @@ public partial class MainWindow : Window
         };
         card.CopyPlainRequested += (cc, x, y) =>
         {
-            try { Clipboard.SetText(cc.Content ?? ""); }
-            catch { ToastService.Error("复制失败，请手动选择复制"); return; }
-            if (_watcher != null) _watcher.Suppress(800); // 来源抑制：本次复制不触发自动弹窗
-            try { _svc.BumpCopyCount(cc.Id); } catch { /* 计数失败不影响 */ }
-            ToastService.Flash("已复制", x, y);
+            if (TryCopy(() => ClipboardHelper.SetText(cc.Content ?? "")))
+            {
+                card.MarkCopied();
+                SuppressAndBump(cc);
+                ToastService.Flash("已复制", x, y);
+            }
         };
         card.CopyRichRequested += (cc, x, y) =>
         {
-            if (RichText.CopyRich(cc.Html, cc.Content))
+            bool ok;
+            try { ok = RichText.CopyRich(cc.Html, cc.Content); }
+            catch (Exception ex) { AppLog.Info("rich copy failed: " + ex); ok = false; }
+            if (ok)
             {
-                if (_watcher != null) _watcher.Suppress(800);
-                try { _svc.BumpCopyCount(cc.Id); } catch { /* 计数失败不影响 */ }
+                card.MarkCopied();
+                SuppressAndBump(cc);
                 ToastService.Flash("富文本已复制（含格式）", x, y);
             }
             else ToastService.Error("富文本复制失败，请用独立窗口重试");
@@ -286,32 +304,46 @@ public partial class MainWindow : Window
         return card;
     }
 
-    /// <summary>复制图片到系统剪贴板（M3b-2b，对齐 Web copyImageToClipboard：直接 System.Windows.Clipboard.SetImage(BitmapSource)，
+    /// <summary>复制图片到系统剪贴板（M3b-2b，对齐 Web copyImageToClipboard：解码文件为 BitmapSource 后走 ClipboardHelper；
     /// 成功 flash + 计数 + 来源抑制；失败降级 errToast，不打开预览（WPF 已有 toast 反馈）。</summary>
-    private void CopyImageToClipboard(ClipItem c, ClipboardWatcher? watcher)
+    private void CopyImageToClipboard(ClipItem c)
     {
         if (string.IsNullOrEmpty(c.FileId)) { ToastService.Error("图片缺失"); return; }
+        var bytes = _fileStore.ReadAllBytes(c.FileId);
+        if (bytes == null || bytes.Length == 0) { ToastService.Error("图片为空"); return; }
+        BitmapSource? bmp = null;
         try
         {
-            var bytes = _fileStore.ReadAllBytes(c.FileId);
-            if (bytes == null || bytes.Length == 0) { ToastService.Error("图片为空"); return; }
             using var ms = new MemoryStream(bytes);
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.StreamSource = ms;
-            bmp.EndInit();
-            bmp.Freeze();
-            Clipboard.SetImage(bmp);
-            if (watcher != null) watcher.Suppress(800); // 来源抑制：避免本程序写剪贴板触发自动弹窗
-            try { _svc.BumpCopyCount(c.Id); } catch { /* 计数失败不影响 */ }
-            ToastService.Flash("图片已复制，可直接粘贴");
+            var bi = new BitmapImage();
+            bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.StreamSource = ms; bi.EndInit(); bi.Freeze();
+            bmp = bi;
         }
+        catch (Exception ex) { AppLog.Info("decode image failed: " + ex.Message); ToastService.Error("图片解码失败"); return; }
+        if (bmp != null && TryCopy(() => ClipboardHelper.SetImage(bmp)))
+        {
+            SuppressAndBump(c);
+            ToastService.FlashAtMouse("图片已复制，可直接粘贴");
+        }
+    }
+
+    /// <summary>统一复制写入：成功返回 true；失败记录异常（含剪贴板占用方诊断）并弹错误 toast（消除 5 处重复处理）。</summary>
+    private static bool TryCopy(Action write, string? context = null)
+    {
+        try { write(); return true; }
         catch (Exception ex)
         {
-            AppLog.Info("copy image failed: " + ex.Message);
-            ToastService.Error("复制图片失败: " + ex.Message);
+            AppLog.Info($"copy failed{(context != null ? " (" + context + ")" : "")}: {ex.GetType().Name}(0x{unchecked((uint)ex.HResult):X8}): {ex.Message}");
+            ToastService.Error("复制失败，请手动选择复制");
+            return false;
         }
+    }
+
+    /// <summary>复制成功后：来源抑制（避免本程序写剪贴板触发自动弹窗）+ 持久化复制计数（对齐 Web bumpCopyCount）。</summary>
+    private void SuppressAndBump(ClipItem c)
+    {
+        if (_watcher != null) _watcher.Suppress(800);
+        try { _svc.BumpCopyCount(c.Id); } catch { /* 计数失败不影响 */ }
     }
 
     /// <summary>列宽自适应（对齐 CSS auto-fill minmax(280px,1fr)；仅改 ItemWidth 不重建卡片——拖动窗口不闪烁）。
@@ -467,9 +499,9 @@ public partial class MainWindow : Window
 
     private void EditBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(true);
 
-    /// <summary>数据管理弹窗：导入 / 导出 / 清空（对齐 Web 版 openDataModal 备份区）。</summary>
+    /// <summary>数据管理弹窗：本地备份（导入/导出/清空）+ WebDAV 同步设置（同步配置入口在此，工具栏「同步」只负责同步）。</summary>
     private void DataBtn_Click(object sender, RoutedEventArgs e)
-        => ModalHost.Show(new DataDialog(_svc, RefreshWall));
+        => ModalHost.Show(new DataDialog(_svc, RefreshWall, _sync));
     private void BatchDoneBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(false);
 
     /// <summary>卡片 SelectionToggled → 切换选择集 → 同步该卡视觉 + 计数。</summary>
@@ -637,5 +669,25 @@ public partial class MainWindow : Window
         Show();
         WindowState = WindowState.Normal;
         Activate();
+    }
+
+    // ---------- M5c：WebDAV 同步（编排下沉 SyncController；工具栏「同步」只负责触发同步） ----------
+
+    /// <summary>工具栏「同步」按钮：用已保存配置立即同步；未配置则提示去「数据管理」设置（不打开配置 UI）。</summary>
+    private async void SyncBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_sync.Config == null)
+        {
+            ToastService.Error("尚未配置 WebDAV 同步，请到「数据管理」设置");
+            return;
+        }
+        try
+        {
+            ToastService.Flash("同步中…");
+            var r = await _sync.RunNow(_sync.Config);
+            if (r.Ok) ToastService.Flash($"同步完成 · 共 {r.Clips} 条");
+            else ToastService.Error("同步失败：" + (r.Error ?? "未知错误"));
+        }
+        catch (Exception ex) { ToastService.Error("同步失败：" + ex.Message); }
     }
 }

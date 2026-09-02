@@ -143,4 +143,52 @@ public static class WebDavClient
         if (!new[] { 201, 204, 200 }.Contains(r.Status))
             throw new WebDavException(502, "上传远端备份失败（HTTP " + r.Status + "）");
     }
+
+    // ---------- 文件实体同步（对齐 webdav.js syncFileEntities：files/ 与 files/<账号名>/ 集合 + PUT/GET/DELETE） ----------
+
+    /// <summary>实体根目录 URL（files/）。</summary>
+    public static string FilesRootUrlFor(SyncConfig c) => DataDirUrl(c) + "files/";
+
+    /// <summary>账号实体目录 URL（files/&lt;账号名&gt;/，对齐 webdav.js syncFileEntities 的 fBase）。</summary>
+    public static string FilesDirUrlFor(SyncConfig c, string name) => DataDirUrl(c) + "files/" + SafeName(name) + "/";
+
+    /// <summary>确保单个集合（目录）存在（MKCOL，容忍已存在/不支持）。</summary>
+    public static async Task EnsureOneDir(SyncConfig c, string url)
+    {
+        var r = await DavFetch(c, url, new HttpMethod("MKCOL"));
+        if (r.Status == 401 || r.Status == 403) throw new WebDavException(401, "WebDAV 认证失败（检查用户名/密码）");
+        if (!new[] { 201, 204, 200, 301, 405 }.Contains(r.Status))
+            throw new WebDavException(502, "WebDAV 目录不可用（HTTP " + r.Status + "）");
+    }
+
+    /// <summary>上传文件实体（PUT 二进制；对齐 syncFileEntities 的 PUT 分支）。</summary>
+    public static async Task UploadFile(SyncConfig c, string url, byte[] data, string? mime)
+    {
+        using var content = new ByteArrayContent(data);
+        content.Headers.ContentType = new MediaTypeHeaderValue(mime ?? "application/octet-stream");
+        using var cts = new CancellationTokenSource(REQ_TIMEOUT_MS);
+        using var req = new HttpRequestMessage(HttpMethod.Put, url)
+        {
+            Headers = { Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(c.User + ":" + c.Pass))) },
+            Content = content,
+        };
+        using var resp = await Http.SendAsync(req, cts.Token);
+        if (!new[] { 201, 204, 200 }.Contains((int)resp.StatusCode))
+            throw new WebDavException(502, "文件实体上传失败（HTTP " + (int)resp.StatusCode + "）");
+    }
+
+    /// <summary>下载文件实体；404 → null（对齐 syncFileEntities 的 GET 分支）。</summary>
+    public static async Task<byte[]?> DownloadFile(SyncConfig c, string url)
+    {
+        var r = await DavFetch(c, url, HttpMethod.Get);
+        if (r.Status == 404) return null;
+        if (r.Status != 200) throw new WebDavException(502, "文件实体下载失败（HTTP " + r.Status + "）");
+        return r.Buf;
+    }
+
+    /// <summary>删除远端文件/快照（迁移清理用，忽略错误）。</summary>
+    public static async Task DeleteFile(SyncConfig c, string url)
+    {
+        try { await DavFetch(c, url, HttpMethod.Delete); } catch { /* 忽略 */ }
+    }
 }
