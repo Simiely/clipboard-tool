@@ -53,7 +53,10 @@ public partial class DataDialog : UserControl
             DefaultExt = ".json",
             AddExtension = true,
         };
-        if (dlg.ShowDialog() != true) return;
+        ModalHost.SuppressDismiss = true; // 子对话框期间屏蔽失焦自动关闭
+        var okSave = dlg.ShowDialog() == true;
+        ModalHost.SuppressDismiss = false;
+        if (!okSave) return;
         try
         {
             var doc = _svc.BuildExport();
@@ -72,7 +75,10 @@ public partial class DataDialog : UserControl
             Filter = "JSON 文件|*.json|所有文件|*.*",
             Multiselect = false,
         };
-        if (dlg.ShowDialog() != true) return;
+        ModalHost.SuppressDismiss = true; // 子对话框期间屏蔽失焦自动关闭
+        var okOpen = dlg.ShowDialog() == true;
+        ModalHost.SuppressDismiss = false;
+        if (!okOpen) return;
         try
         {
             var doc = Storage.Deserialize<ExportDoc>(File.ReadAllText(dlg.FileName));

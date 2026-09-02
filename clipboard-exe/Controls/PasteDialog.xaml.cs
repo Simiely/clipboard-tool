@@ -276,7 +276,10 @@ public partial class PasteDialog : UserControl
     private void PickFileBtn_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog { Title = "选择文件", Filter = "所有文件 (*.*)|*.*" };
-        if (dlg.ShowDialog() == true) PickFile(dlg.FileName);
+        ModalHost.SuppressDismiss = true; // 子对话框期间屏蔽失焦自动关闭，避免误关本弹窗
+        var ok = dlg.ShowDialog() == true;
+        ModalHost.SuppressDismiss = false;
+        if (ok) PickFile(dlg.FileName);
     }
 
     // ---- 输入：徽章刷新 + 300ms 重复检测（对齐 checkDuplicate：命中切编辑窗，一次只触发一次） ----

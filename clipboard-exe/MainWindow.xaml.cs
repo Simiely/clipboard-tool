@@ -30,6 +30,8 @@ public partial class MainWindow : Window
     private ClipboardWatcher? _watcher; // OnSourceInitialized 后创建（需窗口句柄就绪）
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private bool _reallyExit;
+    private bool _everActivated;        // 首次激活（启动）不自动弹窗，仅后续切回才检测
+    private string? _lastPrompted;      // 已就此剪贴板内容弹过窗，避免重复弹出（激活/剪贴板事件共用）
 
     // 过滤状态（对齐 state.filter）
     private string _q = "";
@@ -97,11 +99,33 @@ public partial class MainWindow : Window
     private void OnClipboardChanged()
     {
         if (_watcher == null) return;
-        if (ModalHost.IsOpen) return; // 对齐 $(".mask") 已开不弹
         string text;
         try { text = (Clipboard.GetText() ?? "").Trim(); }
         catch { return; }
         if (text.Length == 0) return;
+        if (ModalHost.IsOpen) return; // 已开弹窗不覆盖
+        // 比对（对齐 findDuplicateClip：link 比 url / 其他比 content）
+        var dup = ClipService.FindDuplicate(text, _svc.Search(""));
+        if (dup != null)
+        {
+            if (!dup.Archived) OpenEditDialog(dup, dup: true);
+            else ToastService.Flash("已有相同内容");
+            return;
+        }
+        OpenPasteDialog();
+    }
+
+    // ---- 激活窗口时检测剪贴板（用户诉求）：有内容 → 存卡；已有内容 → 编辑弹窗（dup） ----
+    //  仅激活路径用 _lastPrompted 防同一内容重复弹（反复切回窗口不刷屏）；剪贴板事件路径保持原行为（每次变更都弹）。
+    private void PromptFromActivation()
+    {
+        if (ModalHost.IsOpen) return; // 已开弹窗不覆盖
+        string text;
+        try { text = (Clipboard.GetText() ?? "").Trim(); }
+        catch { return; }
+        if (text.Length == 0) return;
+        if (text == _lastPrompted) return; // 同一内容不重复弹（反复切回窗口不刷屏）
+        _lastPrompted = text;
         // 比对（对齐 findDuplicateClip：link 比 url / 其他比 content）
         var dup = ClipService.FindDuplicate(text, _svc.Search(""));
         if (dup != null)
@@ -212,7 +236,10 @@ public partial class MainWindow : Window
             try
             {
                 var dlg = new Microsoft.Win32.SaveFileDialog { FileName = cc.FileName ?? "file", Filter = "所有文件 (*.*)|*.*" };
-                if (dlg.ShowDialog(this) == true)
+                ModalHost.SuppressDismiss = true; // 子对话框期间屏蔽失焦自动关闭
+                var ok = dlg.ShowDialog(this) == true;
+                ModalHost.SuppressDismiss = false;
+                if (ok)
                 {
                     File.WriteAllBytes(dlg.FileName, _fileStore.ReadAllBytes(cc.FileId)); // 对齐 downloadFile：attachment 原名落盘
                     ToastService.Flash("已下载");
@@ -424,6 +451,8 @@ public partial class MainWindow : Window
     {
         base.OnActivated(e);
         if (_watcher != null) _watcher.Paused = false; // 前台激活恢复捕获
+        if (!_everActivated) { _everActivated = true; return; } // 首次启动不自动弹窗
+        PromptFromActivation(); // 切回窗口时：剪贴板有内容则弹存卡/编辑窗
     }
 
     protected override void OnDeactivated(EventArgs e)

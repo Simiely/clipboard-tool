@@ -1,8 +1,9 @@
 // Services/ModalHost.cs - 弹窗宿主（对齐 Web #modal-root：居中弹窗卡片，一次只挂一个）
 //  实现：独立顶层 Window（透明背景、无全屏压暗遮罩），卡片自带阴影、尺寸由内容决定，
 //  因此可超出主窗口边界完整显示；位置相对主窗口居中，并夹在屏幕工作区内保证完整可见。
+//  非模态：主窗口保持可点击；弹窗失焦（点击空白/主窗口/其它程序）即自动关闭（SuppressDismiss 期间不关，保护内部子对话框）。
 //  - Attach(owner)：MainWindow 构造时绑定主窗口
-//  - Show(content)：清旧弹窗 → 包 ScrollViewer（限制最大尺寸避免超出屏幕）→ 居中于主窗口的模态 Window；Close()：收 Window
+//  - Show(content)：清旧弹窗 → 包 ScrollViewer（限制最大尺寸避免超出屏幕）→ 居中于主窗口的非模态 Window；Close()：收 Window
 //  - Confirm(msg, onOk, ...) ：确认框（对齐 askConfirm）
 using System.Windows;
 using System.Windows.Controls;
@@ -15,13 +16,16 @@ public static class ModalHost
     private static Window? _owner;
     private static Window? _current;
 
+    /// <summary>内部子对话框（文件选择等）打开期间置 true，屏蔽失焦自动关闭，避免误关弹窗。</summary>
+    public static bool SuppressDismiss { get; set; }
+
     /// <summary>绑定主窗口（MainWindow 构造时调用一次）。</summary>
     public static void Attach(Window owner) => _owner = owner;
 
     /// <summary>当前是否有弹窗（对齐 $(".mask") 判断——已有弹窗时不叠加）。</summary>
     public static bool IsOpen => _current != null;
 
-    /// <summary>挂载弹窗：独立顶层 Window（透明背景、不压暗界面）+ 相对主窗口居中。</summary>
+    /// <summary>挂载弹窗：独立顶层 Window（透明背景、不压暗界面）+ 相对主窗口居中 + 非模态（点击空白关闭）。</summary>
     public static void Show(FrameworkElement content)
     {
         if (_owner == null) return;
@@ -34,6 +38,7 @@ public static class ModalHost
             WindowStyle = WindowStyle.None,
             AllowsTransparency = true,
             Background = null, // 透明：不压暗整个界面
+            Foreground = (Brush)Application.Current.FindResource("TextBrush"), // 弹窗独立窗口默认前景为黑，强制浅色，避免黑底黑字
             ResizeMode = ResizeMode.NoResize,
             ShowInTaskbar = false,
             WindowStartupLocation = WindowStartupLocation.Manual,
@@ -52,7 +57,7 @@ public static class ModalHost
             Content = content,
         };
 
-        // 先把窗口摆到主窗口附近（用估算尺寸），避免 ShowDialog 瞬间的 0,0 闪烁；Loaded 再用真实尺寸精修
+        // 先把窗口摆到主窗口附近（用估算尺寸），避免 Show 瞬间的 0,0 闪烁；Loaded 再用真实尺寸精修
         content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var est = content.DesiredSize;
         (win.Left, win.Top) = PositionFor(est.Width, est.Height);
@@ -64,7 +69,9 @@ public static class ModalHost
             (win.Left, win.Top) = PositionFor(win.ActualWidth, win.ActualHeight);
             KeyboardFocus(content);
         };
-        win.ShowDialog();
+        // 非模态：主窗口保持可点击；失焦（点空白/主窗口/其它程序）即关闭。内部子对话框期间(SuppressDismiss)不关。
+        win.Deactivated += (_, _) => { if (!SuppressDismiss) Close(); };
+        win.Show();
     }
 
     /// <summary>计算相对主窗口居中、并夹在屏幕工作区内的左上角坐标。</summary>
