@@ -95,36 +95,28 @@ public partial class MainWindow : Window
         _watcher.Attach();
     }
 
-    // ---- 剪贴板监听触发（对齐 Web clipboardchange：已开弹窗不覆盖 / 来源抑制由 watcher 处理） ----
+    // ---- 剪贴板自动提示（对齐 Web clipboardchange + 激活检测）：有内容→存卡；已有内容→编辑弹窗 ----
+    //  剪贴板事件(watcher)与窗口激活(OnActivated)都会触发，统一走 TryAutoPrompt 并用 _lastPrompted 去重，
+    //  避免"一次复制 + 切回窗口/关弹窗再激活"被两条路径各弹一次（连续弹两次窗）。
     private void OnClipboardChanged()
     {
         if (_watcher == null) return;
-        string text;
-        try { text = (Clipboard.GetText() ?? "").Trim(); }
-        catch { return; }
-        if (text.Length == 0) return;
-        if (ModalHost.IsOpen) return; // 已开弹窗不覆盖
-        // 比对（对齐 findDuplicateClip：link 比 url / 其他比 content）
-        var dup = ClipService.FindDuplicate(text, _svc.Search(""));
-        if (dup != null)
-        {
-            if (!dup.Archived) OpenEditDialog(dup, dup: true);
-            else ToastService.Flash("已有相同内容");
-            return;
-        }
-        OpenPasteDialog();
+        TryAutoPrompt();
     }
 
-    // ---- 激活窗口时检测剪贴板（用户诉求）：有内容 → 存卡；已有内容 → 编辑弹窗（dup） ----
-    //  仅激活路径用 _lastPrompted 防同一内容重复弹（反复切回窗口不刷屏）；剪贴板事件路径保持原行为（每次变更都弹）。
     private void PromptFromActivation()
+    {
+        TryAutoPrompt();
+    }
+
+    private void TryAutoPrompt()
     {
         if (ModalHost.IsOpen) return; // 已开弹窗不覆盖
         string text;
         try { text = (Clipboard.GetText() ?? "").Trim(); }
         catch { return; }
         if (text.Length == 0) return;
-        if (text == _lastPrompted) return; // 同一内容不重复弹（反复切回窗口不刷屏）
+        if (text == _lastPrompted) return; // 同一剪贴板内容不重复弹（剪贴板事件/激活/反复切回窗口都走这里去重）
         _lastPrompted = text;
         // 比对（对齐 findDuplicateClip：link 比 url / 其他比 content）
         var dup = ClipService.FindDuplicate(text, _svc.Search(""));
