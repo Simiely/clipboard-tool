@@ -67,8 +67,13 @@ public partial class App : Application
         AppLog.Init(DataDir, $"clipboard v{AppVersion} ({GitCommit})");
         AppLog.Info("startup");
 
-        // 全局异常兜底：记录不退出（数据全落盘 JSON 原子写，进程存活比崩溃重启更友好）
-        DispatcherUnhandledException += (_, ex) => AppLog.Info("DispatcherUnhandledException: " + ex.Exception);
+        // 全局异常兜底：记录且不让进程退出（数据全落盘 JSON 原子写，进程存活比崩溃重启更友好）。
+        // 必须设置 e.Handled=true，否则 WPF 仍视异常为未处理而关闭整个应用（"闪退"）。
+        DispatcherUnhandledException += (_, ex) =>
+        {
+            AppLog.Info("DispatcherUnhandledException: " + ex.Exception);
+            ex.Handled = true;
+        };
         AppDomain.CurrentDomain.UnhandledException += (_, ex) => AppLog.Info("UnhandledException: " + ex.ExceptionObject);
 
         // 装配主窗体 + 托盘

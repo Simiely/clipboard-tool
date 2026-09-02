@@ -15,6 +15,8 @@ public static class ModalHost
 {
     private static Window? _owner;
     private static Window? _current;
+    private static bool _closing;   // 防 Deactivated 重入 Close 触发 VerifyNotClosing（窗口关闭中再次 Close 会抛异常）
+    private static bool _armed;      // Show 后短暂屏蔽 Deactivated 自动关闭，避开打开瞬间的激活抖动（Owner 切换导致的瞬时 Deactivated）
 
     /// <summary>内部子对话框（文件选择等）打开期间置 true，屏蔽失焦自动关闭，避免误关弹窗。</summary>
     public static bool SuppressDismiss { get; set; }
@@ -63,14 +65,23 @@ public static class ModalHost
         (win.Left, win.Top) = PositionFor(est.Width, est.Height);
 
         _current = win;
+        _closing = false;
+        _armed = false;
         win.Loaded += (_, _) =>
         {
             // 用真实渲染尺寸再夹一次，确保完整可见
             (win.Left, win.Top) = PositionFor(win.ActualWidth, win.ActualHeight);
             KeyboardFocus(content);
+            _armed = true; // 装载完成后再允许「点击空白关闭」，避开打开瞬间的激活抖动（一开就关）
         };
-        // 非模态：主窗口保持可点击；失焦（点空白/主窗口/其它程序）即关闭。内部子对话框期间(SuppressDismiss)不关。
-        win.Deactivated += (_, _) => { if (!SuppressDismiss) Close(); };
+        // 非模态：主窗口保持可点击；失焦（点空白/主窗口/其它程序）即关闭。
+        //  仅当本窗口仍是当前弹窗(_current==win)、已就绪(_armed)、非关闭中(_closing)、非子对话框期间(SuppressDismiss)才关，
+        //  以防打开瞬间 Owner 切换产生的瞬时 Deactivated 把刚开的弹窗立刻关掉，以及关闭过程 WmActivate 重入导致 VerifyNotClosing 崩溃。
+        win.Deactivated += (_, _) =>
+        {
+            if (SuppressDismiss || !_armed || _closing) return;
+            if (_current == win) Close();
+        };
         win.Show();
     }
 
@@ -92,11 +103,12 @@ public static class ModalHost
 
     public static void Close()
     {
-        if (_current != null)
-        {
-            _current.Close();
-            _current = null;
-        }
+        var w = _current;
+        if (w == null || _closing) return;       // 已无弹窗 / 正在关闭中：不重入，避免 VerifyNotClosing
+        _closing = true;                          // 标记关闭中（关闭过程 WmActivate 重入 Deactivated 时不再重复 Close）
+        _current = null;
+        try { w.Close(); }
+        finally { _closing = false; }
     }
 
     /// <summary>确认框（对齐 askConfirm：标题"确认操作" + 消息 + 确认/取消等宽按钮）。</summary>
