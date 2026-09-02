@@ -1,5 +1,7 @@
-﻿using System.IO;
+﻿using System.Diagnostics;
+using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -50,10 +52,14 @@ public partial class App : Application
             return;
         }
 
-        // 单实例：已有实例则直接退出（不走 WPF 生命周期，避免 OnExit 释放未拥有 mutex 崩溃）
+        // 单实例：已有实例 → 把它的主窗口拉到前台后退出（不静默退出——静默会让用户
+        // 双击 exe 毫无反应，误判为"打不开/崩溃"。参考微软 Technet《Create a single
+        // instance desktop application》：遍历同名进程对 MainWindowHandle 做
+        // ShowWindowAsync(SW_RESTORE) + SetForegroundWindow）。
         _mutex = new Mutex(true, MutexName, out var createdNew);
         if (!createdNew)
         {
+            ActivateExistingInstance();
             Environment.Exit(0);
             return;
         }
@@ -76,13 +82,34 @@ public partial class App : Application
         };
         AppDomain.CurrentDomain.UnhandledException += (_, ex) => AppLog.Info("UnhandledException: " + ex.ExceptionObject);
 
-        // 装配主窗体 + 托盘
-        var settings = Settings.Load(DataDir);
-        MainWindow? main = null;
-        _tray = new TrayIconService("剪贴板", () => { main?.ReallyExit(); return true; });
-        main = new MainWindow(settings, _tray);
-        main.Closed += (_, _) => _tray?.Dispose();
-        main.Show();
+        // 装配主窗体 + 托盘。启动期同步异常必须在装配段就地兜住并显式弹错：
+        // DispatcherUnhandledException 只对消息循环内的异常生效，OnStartup 里抛出的
+        // 异常会直接走 AppDomain 未处理路径——不弹错的话用户只看到进程消失，
+        // 再次误判"打不开/闪退"。
+        try
+        {
+            var settings = Settings.Load(DataDir);
+            MainWindow? main = null;
+            _tray = new TrayIconService("剪贴板", () => { main?.ReallyExit(); return true; });
+            main = new MainWindow(settings, _tray);
+            main.Closed += (_, _) => _tray?.Dispose();
+            main.Show();
+        }
+        catch (Exception startupEx)
+        {
+            AppLog.Info("startup-failed: " + startupEx);
+            try { _tray?.Dispose(); } catch { /* 托盘释放失败不掩盖主错误 */ }
+            try
+            {
+                MessageBox.Show(
+                    "clipboard-tool 启动失败：\n\n" + startupEx.Message +
+                    "\n\n详细信息已写入 " + Path.Combine(DataDir, "clipboard-exe.log"),
+                    "clipboard-tool", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            catch { /* 弹窗失败也不能再抛 */ }
+            Shutdown(-1);
+            return;
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -92,6 +119,33 @@ public partial class App : Application
             try { _mutex?.ReleaseMutex(); } catch { /* 释放失败不影响退出 */ }
         }
         base.OnExit(e);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    private const int SwRestore = 9;
+
+    /// <summary>已有实例在跑：把它的主窗口恢复并置前（若主窗收进托盘则无可见句柄，尽力而为）。</summary>
+    private static void ActivateExistingInstance()
+    {
+        try
+        {
+            var me = Environment.ProcessId;
+            foreach (var p in Process.GetProcessesByName("Clipboard"))
+            {
+                if (p.Id == me) continue;
+                var h = p.MainWindowHandle;
+                if (h == IntPtr.Zero) continue; // 窗口已 Hide 到托盘，无法从外部 Show
+                ShowWindowAsync(h, SwRestore);
+                SetForegroundWindow(h);
+                break;
+            }
+        }
+        catch { /* 激活失败不影响退出 */ }
     }
 
     private static string ReadVersion()

@@ -19,6 +19,9 @@ clipboard-exe/bin/
 clipboard-exe/obj/
 clipboard-exe/data/
 
+# WPF exe 本地发布目录（framework-dependent 手测产物，不进库）
+clipboard-exe/publish/
+
 # 截图工具构建产物与临时验证截图
 clipboard-exe/tools/shot/bin/
 clipboard-exe/tools/shot/obj/

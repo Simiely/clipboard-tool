@@ -31,27 +31,4 @@
     <ApplicationDefinition Remove="tools/**" />
   </ItemGroup>
 
-  <!-- 显式定义主程序集 assembly attributes（替代 SDK 自动生成） -->
-  <ItemGroup>
-    <AssemblyAttribute Include="System.Reflection.AssemblyTitleAttribute">
-      <_Parameter1>Clipboard</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Reflection.AssemblyProductAttribute">
-      <_Parameter1>Clipboard</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Reflection.AssemblyInformationalVersionAttribute">
-      <_Parameter1>0.7.0</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Reflection.AssemblyFileVersionAttribute">
-      <_Parameter1>0.7.0.0</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Runtime.Versioning.TargetPlatformAttribute">
-      <_Parameter1>Windows</_Parameter1>
-    </AssemblyAttribute>
-    <AssemblyAttribute Include="System.Windows.ThemeInfoAttribute">
-      <_Parameter1>None</_Parameter1>
-      <_Parameter2>SourceAssembly</_Parameter2>
-    </AssemblyAttribute>
-  </ItemGroup>
-
 </Project>
