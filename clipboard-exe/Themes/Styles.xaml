@@ -224,6 +224,7 @@
         <Setter Property="Background" Value="{StaticResource InsetBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
         <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}"/>
+        <Setter Property="Cursor" Value="IBeam"/> <!-- 弹窗根已设 SizeAll（整卡可拖提示），输入框必须覆盖回 IBeam，防光标误导 -->
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding" Value="12,9"/>
         <Setter Property="FontSize" Value="14"/>
@@ -690,7 +691,8 @@
         </Setter>
     </Style>
 
-    <!-- 弹窗标题行（图标 + 标题 + 右侧徽章）；Cursor=SizeAll：整行是可拖拽手柄（无边框窗由 ModalHost 手动拖动） -->
+    <!-- 弹窗标题行（图标 + 标题）；Cursor=SizeAll：整行可拖提示。实际拖动区 = 整卡非交互区（ModalHost 系统级拖动，
+         光标由 ModalHost.Show 设 content.Cursor=SizeAll 覆盖全卡；交互控件各自覆盖：TextBox IBeam / 按钮 Hand） -->
     <Style x:Key="ModalHead" TargetType="DockPanel">
         <Setter Property="Margin" Value="0,0,0,14"/>
         <Setter Property="Cursor" Value="SizeAll"/>

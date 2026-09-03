@@ -5,14 +5,24 @@
 //  - Attach(owner)：MainWindow 构造时绑定主窗口
 //  - Show(content)：清旧弹窗 → 包 ScrollViewer（限制最大尺寸避免超出屏幕）→ 居中于主窗口的非模态 Window；Close()：收 Window
 //  - Confirm(msg, onOk, ...) ：确认框（对齐 askConfirm）
-// 拖动：无边框窗口默认不可拖（WPF 无标题栏即无系统拖动）。方案 = PreviewMouseLeftButtonDown(隧道，
-//  Window 最先收到，子元素 Handled 无法吞噬) + 手动 Left/Top 跟随 + CaptureMouse —— 不依赖
-//  DragMove(透明窗口下曾实测无效)，纯坐标数学移动 100% 可控。命中交互控件（按钮/输入框/下拉/滚动条等）
-//  时不拖——拖动只作用于卡片空白/标题区；标题行已配 Cursor=SizeAll 提示可拖。
+// 拖动：无边框窗口默认不可拖（WPF 无标题栏即无系统拖动）。方案 = 系统级拖动：
+//   PreviewMouseLeftButtonDown(隧道，Window 最先收到，子元素 Handled 无法吞噬) 命中非交互区时
+//   ReleaseCapture + SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) —— 让系统按"标题栏被按下"进入原生拖动循环。
+//   为何不用手动 Left/Top 跟随（v0.7.0 15:52 曾用，用户实测"狂闪"）：
+//     ① AllowsTransparency(layered window) + SizeToContent 下逐 MouseMove SetWindowPos 无系统移动合成，
+//       每帧全量重绘，渲染跟不上鼠标消息 → 抽搐闪烁（社区共识：MouseMove 里做位置更新 = 卡顿元凶）；
+//     ② 双屏混合 DPI：GetPosition(null) 按鼠标所在屏 DPI 换算，Left/Top 按窗口所在屏 DPI 解释，
+//       跨屏瞬间基准跳变 → 位置跳动。
+//   系统拖动由内核/DWM 合成：内容不逐帧重绘（不闪）、跨 DPI/多屏无坐标换算（不跳）、天然支持 Aero Snap。
+//   为何不用 DragMove()：透明窗口下曾实测无效，且受"仅可在 MouseLeftButtonDown 中调用"的 WPF 生命周期限制。
+//   命中交互控件（按钮/输入框/下拉/滚动条等）时不拖——放行正常交互；拖动区 = 全部非交互区（整卡空白/标题/文字），
+//   光标由 content 根 Cursor=SizeAll 提示（TextBox 隐式样式已设 IBeam，按钮家族已设 Hand）。
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 
 namespace ClipboardExe.Controls;
@@ -23,8 +33,18 @@ public static class ModalHost
     private static Window? _current;
     private static bool _closing;   // 防 Deactivated 重入 Close 触发 VerifyNotClosing（窗口关闭中再次 Close 会抛异常）
     private static bool _armed;      // Show 后短暂屏蔽 Deactivated 自动关闭，避开打开瞬间的激活抖动（Owner 切换导致的瞬时 Deactivated）
-    private static Window? _dragWin; // 手动拖动状态（Preview 隧道 + Left/Top 跟随；null = 未在拖动）
-    private static Point _dragStart; // 按下瞬间鼠标相对窗口左上角的偏移（DIP，与 Left/Top 同坐标系）
+
+    // ---- 系统级拖动（ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION）常量与 P/Invoke ----
+    // WM_NCLBUTTONDOWN = 在非客户区按下左键；HTCAPTION = 命中区域视为标题栏 → 系统进入原生移动循环。
+    // 依据：SO 33139478 高赞（AllowsTransparency 无边框窗拖动标准做法）；SO 3274097 高赞（无边框可拖 = HTCAPTION）。
+    private const int WM_NCLBUTTONDOWN = 0xA1;
+    private const int HTCAPTION = 2;
+
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, int msg, IntPtr wParam, IntPtr lParam);
 
     /// <summary>拖动排除的交互控件基类（点在这些控件上不拖动窗口：按钮/输入框/下拉/滚动条/列表项/滑块…）。</summary>
     private static readonly Type[] DragExcludeTypes =
@@ -71,6 +91,9 @@ public static class ModalHost
         // 内容居中；包 ScrollViewer 限制最大尺寸，避免内容过大时超出屏幕（仅弹窗自身可滚动）
         content.HorizontalAlignment = HorizontalAlignment.Center;
         content.VerticalAlignment = VerticalAlignment.Center;
+        // 全卡非交互区可拖（系统拖动在 PreviewMouseLeftButtonDown 触发）——SizeAll 光标提示可拖范围；
+        // 交互控件自带光标覆盖（TextBox 隐式样式 IBeam、按钮家族 Hand），不会误显示。
+        content.Cursor = Cursors.SizeAll;
         win.Content = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -105,30 +128,17 @@ public static class ModalHost
         };
         // 拖动：无边框窗口无系统拖动（WindowStyle.None）。Preview 隧道阶段拦截（子元素 Handled 无法吞噬），
         //   命中交互控件（按钮/输入框/下拉/滚动条等）不拖 → return 放行，控件交互正常；
-        //   命中非交互区（标题行/卡片边缘/空白）→ CaptureMouse + MouseMove 手动改 Left/Top 跟随。
-        //   不用 DragMove()：透明窗(AllowsTransparency)下曾实测无法拖动；手动坐标移动无系统模式依赖，必然生效。
+        //   命中非交互区（标题行/卡片空白/文字等，即"激活区域"= 整卡非交互区）→ e.Handled 阻断冒泡 +
+        //   ReleaseCapture + SendMessage(WM_NCLBUTTONDOWN, HTCAPTION) 交给系统原生拖动循环。
+        //   SendMessage 同步阻塞至 MouseUp（拖动结束）才返回；期间由内核/DWM 合成移动 = 无闪烁、跨 DPI 无跳变。
         win.PreviewMouseLeftButtonDown += (_, e) =>
         {
             if (e.ChangedButton != MouseButton.Left || e.ClickCount != 1) return;
-            if (IsInteractiveHit(e.OriginalSource)) return;
-            _dragWin = win;
-            _dragStart = e.GetPosition(win); // 鼠标相对窗口左上（DIP）
-            win.CaptureMouse();              // 捕获后移出窗口仍持续收到 MouseMove
-            e.Handled = true;                // 本区域无交互语义（标题/留白），阻断后续冒泡，防重复处理
-        };
-        win.PreviewMouseMove += (_, e) =>
-        {
-            if (_dragWin != win) return;
-            var p = e.GetPosition(null);     // 屏幕坐标（DIP，虚拟屏空间）
-            win.Left = p.X - _dragStart.X;
-            win.Top = p.Y - _dragStart.Y;
-        };
-        win.PreviewMouseLeftButtonUp += (_, e) =>
-        {
-            if (_dragWin != win) return;
-            _dragWin = null;
-            win.ReleaseMouseCapture();
-            e.Handled = true;
+            if (IsInteractiveHit(e.OriginalSource)) return; // 交互控件：放行（按钮点击/文本框选择文本/滚动…正常）
+            e.Handled = true; // 本区域无交互语义（标题/留白/文字），阻断后续冒泡与子元素 Down，防与系统拖动叠加
+            var hwnd = new WindowInteropHelper(win).Handle;
+            ReleaseCapture(); // 先释放可能存在的鼠标捕获，否则系统收不到 NC 命中后的移动消息
+            SendMessage(hwnd, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero); // 系统原生移动循环
         };
         win.Show();
     }
@@ -155,7 +165,6 @@ public static class ModalHost
         if (w == null || _closing) return;       // 已无弹窗 / 正在关闭中：不重入，避免 VerifyNotClosing
         _closing = true;                          // 标记关闭中（关闭过程 WmActivate 重入 Deactivated 时不再重复 Close）
         _current = null;
-        if (_dragWin == w) _dragWin = null;       // 拖动中窗口被关：清拖动状态（鼠标捕获随窗口关闭自动释放）
         try { w.Close(); }
         finally { _closing = false; }
     }
