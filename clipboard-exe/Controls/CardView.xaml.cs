@@ -538,21 +538,22 @@ public partial class CardView : UserControl
         _imgPreviewPopup.IsOpen = true;
     }
 
-    /// <summary>浮层定位（对齐 Web reposition：跟随卡片正中上方 4px，顶部空间不够时落底部；视口钳制 8px）。</summary>
+    /// <summary>浮层定位（对齐 Web reposition：跟随卡片正中上方 4px，顶部空间不够时落底部；视口钳制 8px）。
+    /// 视口取卡片所在屏工作区（双屏：卡片在副屏时按副屏钳制，不落出屏外）。</summary>
     private CustomPopupPlacement[] RepositionPreview(Size popupSize, Size targetSize)
     {
-        var cardRect = CardBorder.PointToScreen(new Point(0, 0)); // 卡片屏幕坐标
-        var screenW = SystemParameters.PrimaryScreenWidth;
-        var screenH = SystemParameters.PrimaryScreenHeight;
+        var cardRect = CardBorder.PointToScreen(new Point(0, 0)); // 卡片屏幕坐标（DIP，虚拟屏空间）
+        var win = Window.GetWindow(CardBorder);
+        var wa = win != null ? win.GetScreenWorkAreaDip() : SystemParameters.WorkArea; // 卡片所在屏工作区
         var bw = popupSize.Width;
         var bh = popupSize.Height;
-        // 水平：卡片居中，钳制 [8, screenW - bw - 8]
+        // 水平：卡片居中，钳制 [wa.Left+8, wa.Right - bw - 8]
         var left = cardRect.X + (targetSize.Width - bw) / 2;
-        left = Math.Max(8, Math.Min(left, screenW - bw - 8));
+        left = Math.Max(wa.Left + 8, Math.Min(left, wa.Right - bw - 8));
         // 垂直：优先卡片顶部 - 4px - bh（间隙 4px 贴卡片防"飘远"）；上方空间不够则卡片底部 + 4px
         var topAbove = cardRect.Y - bh - 4;
         var topBelow = cardRect.Y + targetSize.Height + 4;
-        var top = (topAbove >= 8) ? topAbove : Math.Min(topBelow, screenH - bh - 8);
+        var top = (topAbove >= wa.Top + 8) ? topAbove : Math.Min(topBelow, wa.Bottom - bh - 8);
         // Popup 的 CustomPopupPlacement 返回相对 PlacementTarget 的偏移（Point(0,0) = PlacementTarget 左上）
         var relX = left - cardRect.X;
         var relY = top - cardRect.Y;

@@ -112,14 +112,7 @@ public partial class MainWindow : Window
         catch { return; }
         if (text.Length == 0) return;
         if (!TryTakeClipboardSeq()) return; // 剪贴板未再变化（激活/事件/反复切回窗口都在这里收敛）
-        // 比对（对齐 findDuplicateClip：link 比 url / 其他比 content）
-        var dup = ClipService.FindDuplicate(text, _svc.Search(""));
-        if (dup != null)
-        {
-            if (!dup.Archived) OpenEditDialog(dup, dup: true);
-            else ToastService.Flash("已有相同内容");
-            return;
-        }
+        // 去重预查统一收敛到 OpenPasteDialog：剪贴板文本已存在 → 只弹编辑窗；否则开存卡窗（autoFill）
         OpenPasteDialog();
     }
 
@@ -127,6 +120,24 @@ public partial class MainWindow : Window
 
     private void OpenPasteDialog()
     {
+        // 预查（对齐 Web findDuplicateClip 语义 + 用户期望"先检索再弹，只出一扇"）：
+        //   剪贴板文本已存在 → 直接弹编辑窗（不再"存卡窗 → autoFill → 300ms 检测 → 跳编辑窗"两扇窗连续出现）。
+        //   剪贴板为空/非文本（手动输入、拖文件/图片）→ 不预查，正常开存卡窗；用户在窗内改文本撞重仍由
+        //   PasteDialog 输入级兜底跳转（单扇窗内过渡，可接受且合理）。
+        string pre;
+        try { pre = (Clipboard.GetText() ?? "").Trim(); }
+        catch { pre = ""; }
+        if (pre.Length > 0)
+        {
+            var dup = ClipService.FindDuplicate(pre, _svc.Search(""));
+            if (dup != null)
+            {
+                if (!dup.Archived) { OpenEditDialog(dup, dup: true); return; }
+                ToastService.Flash("已有相同内容");
+                return;
+            }
+        }
+
         var dlg = new PasteDialog(_svc, _fileStore, () => _svc.Search(""), GetAllTags);
         dlg.DuplicateFound += c =>
         {

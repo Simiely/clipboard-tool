@@ -5,8 +5,13 @@
 //  - Attach(owner)：MainWindow 构造时绑定主窗口
 //  - Show(content)：清旧弹窗 → 包 ScrollViewer（限制最大尺寸避免超出屏幕）→ 居中于主窗口的非模态 Window；Close()：收 Window
 //  - Confirm(msg, onOk, ...) ：确认框（对齐 askConfirm）
+// 拖动：无边框窗口默认不可拖（WPF 无标题栏即无系统拖动）。按 SO 3274097 约束（仅左键按下时 DragMove，
+//  否则 InvalidOperationException），在内容区 MouseLeftButtonDown 挂起，命中交互控件（按钮/输入框/下拉/
+//  滚动条等）时不拖——拖动只作用于卡片空白/标题区。
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 
 namespace ClipboardExe.Controls;
@@ -17,6 +22,19 @@ public static class ModalHost
     private static Window? _current;
     private static bool _closing;   // 防 Deactivated 重入 Close 触发 VerifyNotClosing（窗口关闭中再次 Close 会抛异常）
     private static bool _armed;      // Show 后短暂屏蔽 Deactivated 自动关闭，避开打开瞬间的激活抖动（Owner 切换导致的瞬时 Deactivated）
+
+    /// <summary>拖动排除的交互控件基类（点在这些控件上不拖动窗口：按钮/输入框/下拉/滚动条/列表项/滑块…）。</summary>
+    private static readonly Type[] DragExcludeTypes =
+    {
+        typeof(ButtonBase),   // Button/ToggleButton/RepeatButton（CheckBox/RadioButton 亦属 ToggleButton）
+        typeof(TextBoxBase),  // TextBox/RichTextBox
+        typeof(ComboBox),
+        typeof(ScrollBar),
+        typeof(PasswordBox),
+        typeof(ListBoxItem),
+        typeof(DatePicker),
+        typeof(Slider),
+    };
 
     /// <summary>内部子对话框（文件选择等）打开期间置 true，屏蔽失焦自动关闭，避免误关弹窗。</summary>
     public static bool SuppressDismiss { get; set; }
@@ -33,7 +51,7 @@ public static class ModalHost
         if (_owner == null) return;
         if (_current != null) Close();
 
-        var wa = SystemParameters.WorkArea;
+        var wa = _owner.GetScreenWorkAreaDip(); // owner 所在屏工作区（双屏：主窗在副屏时按副屏钳制，不拽回主屏）
         var win = new Window
         {
             Owner = _owner,
@@ -82,14 +100,25 @@ public static class ModalHost
             if (SuppressDismiss || !_armed || _closing) return;
             if (_current == win) Close();
         };
+        // 拖动：无边框窗口无系统拖动（WindowStyle.None）。左键单点按在非交互控件区 → DragMove。
+        //   DragMove 仅限左键按下时调用（SO 3274097：否则抛 InvalidOperationException"Can only call
+        //   DragMove when the primary mouse button is down"）；双击/交互控件上不拖（按钮点击、文本框
+        //   选字、下拉选择、滚动条拖拽不受干扰）。
+        win.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.ChangedButton != MouseButton.Left || e.ClickCount != 1) return;
+            if (IsInteractiveHit(e.OriginalSource)) return;
+            try { win.DragMove(); }
+            catch (InvalidOperationException) { /* 竞态：非左键按下状态，忽略 */ }
+        };
         win.Show();
     }
 
-    /// <summary>计算相对主窗口居中、并夹在屏幕工作区内的左上角坐标。</summary>
+    /// <summary>计算相对主窗口居中、并夹在屏幕工作区内的左上角坐标（工作区取 owner 所在屏，非主屏）。</summary>
     private static (double left, double top) PositionFor(double w, double h)
     {
         var ow = _owner!;
-        var wa = SystemParameters.WorkArea;
+        var wa = ow.GetScreenWorkAreaDip(); // owner 所在屏工作区（DIP）——副屏主窗时不再被 Clamp 拽回主屏
         var owW = ow.ActualWidth > 0 ? ow.ActualWidth : ow.Width;
         var owH = ow.ActualHeight > 0 ? ow.ActualHeight : ow.Height;
 
@@ -178,4 +207,19 @@ public static class ModalHost
         }
         return null;
     }
+
+    /// <summary>命中点是否落在交互控件上（沿 visual/logical 树向上找，见 DragExcludeTypes）。返回 true = 不拖动。</summary>
+    private static bool IsInteractiveHit(object? original)
+    {
+        for (DependencyObject? d = original as DependencyObject; d != null; d = NextParent(d))
+        {
+            foreach (var t in DragExcludeTypes)
+                if (t.IsInstanceOfType(d)) return true;
+            if (d is Window) break; // 树顶（拖动作用于窗口自身）
+        }
+        return false;
+    }
+
+    private static DependencyObject? NextParent(DependencyObject d)
+        => d is FrameworkContentElement fce ? fce.Parent : VisualTreeHelper.GetParent(d);
 }
