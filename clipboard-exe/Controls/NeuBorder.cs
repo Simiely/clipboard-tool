@@ -73,6 +73,9 @@ public class NeuBorder : ContentControl
     {
         base.OnApplyTemplate();
         ApplyKind();
+        // Body 是圆角 Border，Clip=RectangleGeometry 裁剪 ContentPresenter 子元素到圆角矩形内，
+        // 防止子元素（如其他 Border/Button）撑出 Body 圆角外显方形。
+        if (GetTemplateChild("Body") is Border body) BorderClip.SetClipToRadius(body, true);
     }
 
     private void ApplyKind()

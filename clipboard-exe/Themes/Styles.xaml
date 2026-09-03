@@ -681,11 +681,14 @@
         <Setter Property="Background" Value="#A80A0C10"/>
     </Style>
 
-    <!-- 弹窗卡片（对齐 .modal：elev + r-lg + raised-lg 阴影；内容 padding 24） -->
+    <!-- 弹窗卡片（对齐 .modal：elev + r-lg + raised-lg 阴影；内容 padding 24）
+         BorderClip.ClipToRadius=True：WPF DropShadowEffect 永远按元素矩形 bbox 渲染阴影，圆角 Border 的阴影外缘呈方形（深色主题下肉眼可见"圆角处见方形"）。
+         Clip=RectangleGeometry(RadiusX/Y) 把 Effect 阴影一并裁到圆角矩形内，彻底消除方形外缘（阴影贴边换圆角干净）。 -->
     <Style x:Key="ModalCard" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource ElevBrush}"/>
         <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}"/>
         <Setter Property="Padding" Value="24"/>
+        <Setter Property="local:BorderClip.ClipToRadius" Value="True"/>
         <Setter Property="Effect">
             <Setter.Value>
                 <DropShadowEffect Color="Black" BlurRadius="22" ShadowDepth="4" Opacity="0.6" Direction="270"/>
