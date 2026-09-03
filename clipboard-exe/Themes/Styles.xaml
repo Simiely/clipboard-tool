@@ -147,7 +147,8 @@
         </Setter>
     </Style>
 
-    <!-- 置顶切换按钮（who 区小号；开=金色，唯一新增） -->
+    <!-- 置顶切换按钮（who 区小号；开=金色，唯一新增）
+         ClipToBounds=True：IsChecked 时 AccentBrush 金底沿矩形 bbox 渲染会溢出圆角，裁剪到圆角内才不出现"圆角见方" -->
     <Style x:Key="BtnPin" TargetType="ToggleButton">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
@@ -157,7 +158,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusBtnSm}">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusBtnSm}" ClipToBounds="True">
                         <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Padding}"/>
                     </Border>
                     <ControlTemplate.Triggers>
@@ -364,14 +365,15 @@
     </Style>
 
     <!-- 徽章（.badge：胶囊小徽章；变体 BadgeLink/File/Text/Exp 只换前景色）
-         用 ContentControl 封装（TextBlock 无 Template），用法：<ContentControl Style="{StaticResource BadgeLink}" Content="链接"/> -->
+         用 ContentControl 封装（TextBlock 无 Template），用法：<ContentControl Style="{StaticResource BadgeLink}" Content="链接"/>
+         ⚠️ 不用 RadiusPill(99): 16px 高元素上 WPF 把 99 clamp 到 h/2 ≈ 8,左右两端近半圆 + 顶底直线 → 视觉呈"叶子/梭形",不是用户期望的圆角矩形。改用 RadiusSt=6 -->
     <Style x:Key="Badge" TargetType="ContentControl">
         <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
         <Setter Property="FontSize" Value="11"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <Border Background="{StaticResource ElevBrush}" CornerRadius="{StaticResource RadiusPill}" Padding="9,2" ClipToBounds="True">
+                    <Border Background="{StaticResource ElevBrush}" CornerRadius="{StaticResource RadiusSt}" Padding="9,2" ClipToBounds="True">
                         <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"
                                           TextElement.FontSize="{TemplateBinding FontSize}"
                                           TextElement.FontWeight="{TemplateBinding FontWeight}"/>
@@ -683,9 +685,12 @@
 
     <!-- 弹窗卡片（对齐 .modal：elev + r-lg + raised-lg 阴影；内容 padding 24）
          BorderClip.ClipToRadius=True：WPF DropShadowEffect 永远按元素矩形 bbox 渲染阴影，圆角 Border 的阴影外缘呈方形（深色主题下肉眼可见"圆角处见方形"）。
-         Clip=RectangleGeometry(RadiusX/Y) 把 Effect 阴影一并裁到圆角矩形内，彻底消除方形外缘（阴影贴边换圆角干净）。 -->
+         Clip=RectangleGeometry(RadiusX/Y) 把 Effect 阴影一并裁到圆角矩形内，彻底消除方形外缘（阴影贴边换圆角干净）。
+         BorderBrush=CardEdgeBrush（1px rgba(white,.2)）：弹窗卡片在深色主题下 ElevBrush 与窗口 BgBrush 边界发糊,1px 半透明白描边兜底边界 -->
     <Style x:Key="ModalCard" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource ElevBrush}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource CardEdgeBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{StaticResource RadiusLg}"/>
         <Setter Property="Padding" Value="24"/>
         <Setter Property="local:BorderClip.ClipToRadius" Value="True"/>
@@ -811,7 +816,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ContentControl">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusPill}" Padding="8,2" ClipToBounds="True">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusSt}" Padding="8,2" ClipToBounds="True">
                         <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"
                                           TextElement.FontSize="{TemplateBinding FontSize}"
                                           TextElement.FontWeight="{TemplateBinding FontWeight}"/>
@@ -867,7 +872,8 @@
         </Style.Triggers>
     </Style>
 
-    <!-- meta 区 #tag 小胶囊（点击过滤） -->
+    <!-- meta 区 #tag 小胶囊（点击过滤）
+         ⚠️ 不用 RadiusPill(99): 16px 高元素 + Pill 在 WPF clamp 到 h/2 ≈ 8 后呈"叶子/梭形"。改用 RadiusSt=6 与 StatusSt/Badge 徽章家族视觉统一 -->
     <Style x:Key="MetaTag" TargetType="Button">
         <Setter Property="Background" Value="{StaticResource ElevBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource DimBrush}"/>
@@ -877,7 +883,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
-                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusPill}" Padding="{TemplateBinding Padding}" ClipToBounds="True">
+                    <Border Background="{TemplateBinding Background}" CornerRadius="{StaticResource RadiusSt}" Padding="{TemplateBinding Padding}" ClipToBounds="True">
                         <ContentPresenter/>
                     </Border>
                     <ControlTemplate.Triggers>

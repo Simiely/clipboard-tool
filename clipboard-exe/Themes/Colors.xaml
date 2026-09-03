@@ -29,14 +29,15 @@
 
     <!-- 圆角（对齐 Web 各控件实际圆角；统一令牌避免硬编码散落） -->
     <CornerRadius x:Key="RadiusFold">3,3,0,0</CornerRadius><!-- .fic .fold 折叠角 顶 3 / 底 0 -->
-    <CornerRadius x:Key="RadiusIconSm">6</CornerRadius>   <!-- .edit-sec 20x20 序号块 r-6 -->
-    <CornerRadius x:Key="RadiusIcon">8</CornerRadius>     <!-- .ops .b 图标钮 -->
+    <CornerRadius x:Key="RadiusIconSm">8</CornerRadius>   <!-- .edit-sec 20x20 序号块 / TypeBadge r-8 -->
+    <CornerRadius x:Key="RadiusIcon">10</CornerRadius>    <!-- .ops .b 26x26 图标钮 r-10(38% 比例,深色底上肉眼可辨的圆角;原 8 太接近方形) -->
     <CornerRadius x:Key="RadiusCombo">9</CornerRadius>    <!-- .edit-sec select：编辑弹窗「过期」下拉 r-9（比存入弹窗 r-10 略收） -->
     <CornerRadius x:Key="RadiusBtnSm">10</CornerRadius>   <!-- .btn.sm / .typetab .tt / who 区小按钮 / .paste-adv select r-10 -->
     <CornerRadius x:Key="RadiusBtn">12</CornerRadius>     <!-- .btn / input / 通用按钮 -->
     <CornerRadius x:Key="RadiusIconLg">11</CornerRadius>  <!-- 36x36 弹窗头图标块 / 46x56 .fic r-11 -->
     <CornerRadius x:Key="RadiusMd">14</CornerRadius>        <!-- r-md 容器/typetab 轨道 -->
     <CornerRadius x:Key="RadiusLg">18</CornerRadius>        <!-- r-lg 卡片/顶栏 -->
+    <CornerRadius x:Key="RadiusSt">6</CornerRadius>         <!-- .st 状态徽章 r-6 圆角矩形（不用 r-pill 99 在 16px 高度元素上会被 clamp 到 h/2 ≈ 8,左右两端近半圆 + 顶底直线 → 视觉呈"叶子/梭形",不是用户期望的圆角矩形） -->
     <CornerRadius x:Key="RadiusPill">99</CornerRadius>      <!-- r-pill 胶囊（搜索框/存入/标签/开关） -->
     <CornerRadius x:Key="RadiusScroll">3</CornerRadius>     <!-- 细滚动条 thumb 小圆角（对齐 Web ::-webkit-scrollbar-thumb 9px 圆角缩比；非胶囊） -->
 
@@ -67,6 +68,9 @@
     <SolidColorBrush x:Key="GoldRingBrush" Color="#47C9A96E"/>
     <SolidColorBrush x:Key="GoldRingHiBrush" Color="#66C9A96E"/>
     <SolidColorBrush x:Key="GoldRingStrongBrush" Color="#A6C9A96E"/>
+    <!-- 卡片常驻描边 rgba(white,.2)：BorderClip 把 Effect 阴影裁到圆角内后,卡片 ElevBrush 与
+         背景 #1A1A1A 色差极小边界发糊 → 1px 半透明白细描边兜底边界（hover/pin 金环优先覆盖） -->
+    <SolidColorBrush x:Key="CardEdgeBrush" Color="#33FFFFFF"/>
     <!-- 亮色文字：链接/过期徽章 #D98A8A；toast 错误白字 -->
     <SolidColorBrush x:Key="Accent2BrightBrush" Color="#D98A8A"/>
     <SolidColorBrush x:Key="WhiteBrush" Color="#FFFFFF"/>
