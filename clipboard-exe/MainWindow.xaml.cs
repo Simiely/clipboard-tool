@@ -34,22 +34,7 @@ public partial class MainWindow : Window
     private bool _everActivated;        // 首次激活（启动）不自动弹窗，仅后续切回才检测
     private uint? _lastHandledSeq;      // 已处理过的剪贴板序列号（激活/剪贴板事件共用；null = 尚未处理过任何内容）
 
-    // 过滤状态（对齐 state.filter）
-    private string _q = "";
-    private string _tagFilter = "";
-    private string _typeFilter = "all";
-    private bool _includeArchived; // M3b-1：归档按钮 toggle 状态（默认 false）
-
-    private const double Gap = 16; // .list gap:16px
-
-    // 批量编辑状态（M3b-3b：进入批量模式后维护；_batchSel 跨刷新持久，卡片按 id 重渲染选中态）
-    private bool _batchMode;
-    private readonly HashSet<string> _batchSel = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, CardView> _cards = new(StringComparer.Ordinal);
-    private List<string> _visibleIds = new();
-
-    private readonly SyncController _sync; // M5c：WebDAV 同步编排（从 UI 层下沉，降低耦合）
-    private readonly DispatcherTimer _autoTimer = new() { Interval = TimeSpan.FromMinutes(1) }; // M5c：定时自动同步
+    private const double Gap = 16; // .list gap:16px（卡片右/下外边距，MakeCard 使用）
 
     public MainWindow(Settings settings, TrayIconService? tray)
     {
@@ -63,10 +48,9 @@ public partial class MainWindow : Window
         _fileStore = new FileStore(App.DataDir);
         _svc = new ClipService(_storage, _fileStore);
 
-        // M5：启动定时自动同步（1 分钟轮询，到点才跑；编排逻辑在 SyncController）
+        // M5c：启动定时自动同步（1 分钟轮询，到点才跑；编排逻辑在 SyncController；接线见 MainWindow.SyncOps.InitAutoSync）
         _sync = new SyncController(_storage, _fileStore, App.DataDir);
-        _autoTimer.Tick += (_, _) => _ = _sync.Tick();
-        _autoTimer.Start();
+        InitAutoSync();
 
         // 弹窗宿主 + Toast 初始化（独立顶层 Window，可超出主窗口边界）
         ModalHost.Attach(this);
@@ -399,62 +383,6 @@ public partial class MainWindow : Window
 
     private void WallPanel_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateColumnWidth();
 
-    // ---- 搜索 / 类型过滤 / 标签栏 ----
-
-    private void Search_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        _q = (SearchBox.Text ?? "").Trim();
-        _searchTimer.Stop();
-        _searchTimer.Start();
-    }
-
-    private void TypeRadio_Checked(object sender, RoutedEventArgs e)
-    {
-        if (sender is not RadioButton rb || rb.IsChecked != true) return;
-        _typeFilter = rb.Tag as string ?? "all";
-        if (_svc == null) return; // InitializeComponent 期间首个 RadioButton 初始 Checked（服务尚未装配）
-        RefreshWall();
-    }
-
-    /// <summary>完整标签栏 chips（M3b-1：聚合全部条目标签去重 + 当前选中金底 + 点击 toggle 过滤）。
-    /// chips 用 ItemsControl/WrapPanel 风格横排，过多可水平滚动（外层 TagBar StackPanel → 改 ScrollViewer）。</summary>
-    private void RenderTagBar()
-    {
-        TagBar.Children.Clear();
-        // 全部（永远在最左）
-        var all = new Button
-        {
-            Content = "全部",
-            Tag = string.IsNullOrEmpty(_tagFilter) ? "on" : null,
-            Style = (Style)FindResource("TagChip"),
-        };
-        all.Click += (_, _) => { _tagFilter = ""; RenderTagBar(); RefreshWall(); };
-        TagBar.Children.Add(all);
-
-        // 聚合标签（活跃区 + 归档——恢复条目带标签也要能筛，Search("",includeArchived=true)）
-        var allTags = _svc.Search("", includeArchived: true)
-            .SelectMany(c => c.Tags ?? new List<string>())
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(x => x, StringComparer.Ordinal);
-        foreach (var tag in allTags)
-        {
-            var chip = new Button
-            {
-                Content = tag,
-                Tag = (_tagFilter == tag) ? "on" : null,
-                Style = (Style)FindResource("TagChip"),
-            };
-            var captured = tag;
-            chip.Click += (_, _) =>
-            {
-                _tagFilter = (_tagFilter == captured) ? "" : captured;
-                RenderTagBar();
-                RefreshWall();
-            };
-            TagBar.Children.Add(chip);
-        }
-    }
-
     // ---- 窗口生命周期：置顶 / 前台语义 / 退出 ----
 
     protected override void OnActivated(EventArgs e)
@@ -527,185 +455,6 @@ public partial class MainWindow : Window
 
     private void ExitBtn_Click(object sender, RoutedEventArgs e) => ReallyExit();
 
-    /// <summary>列数偏好切换：0(自动) → 1 → 2 → 3 → 4 → 0 循环；立即持久化 + 刷新列宽。
-    /// 按钮文案显示当前选择（"列数·自动" / "列数·2"）便于查看。</summary>
-    private void ColsBtn_Click(object sender, RoutedEventArgs e)
-    {
-        _settings.MaxColumns = (_settings.MaxColumns + 1) % 5; // 0~4 循环
-        _settings.Save();
-        UpdateColsBtnText();
-        UpdateColumnWidth();
-    }
-
-    private void UpdateColsBtnText()
-        => ColsBtn.Content = _settings.MaxColumns == 0 ? "列数·自动" : "列数·" + _settings.MaxColumns;
-
-    /// <summary>含归档 toggle：默认 false 只看活跃区；点开后看到归档卡（可 ↺ 恢复 + ✕ 删除）。
-    /// 按钮文案 + 颜色双反馈："归档·关"暗色 / "归档·开"金色（与置顶选中态一致）。</summary>
-    private void ArchBtn_Click(object sender, RoutedEventArgs e)
-    {
-        _includeArchived = !_includeArchived;
-        ArchBtn.Content = _includeArchived ? "归档·开" : "归档·关";
-        ArchBtn.Foreground = _includeArchived
-            ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xD4, 0xAF, 0x37)) // 选中金（与 PinBtn 一致）
-            : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x84, 0x84, 0x84)); // 暗灰（与 MutedBrush 视觉一致）
-        RefreshWall();
-    }
-
-    // ---- 批量编辑（M3b-3b：对齐 Web 版 .batch-bar + batchDeleteClips / batchSetTags） ----
-
-    /// <summary>进入/退出批量模式（编辑按钮 / 完成按钮）。进入时清空选择；重建卡片墙应用 BatchMode。</summary>
-    private void SetBatchMode(bool on)
-    {
-        _batchMode = on;
-        if (!on) _batchSel.Clear();
-        BatchBar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-        RefreshWall(); // 重建以应用 BatchMode 覆盖层 + 恢复选中态
-    }
-
-    private void EditBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(true);
-
-    /// <summary>数据管理弹窗：本地备份（导入/导出/清空）+ WebDAV 同步设置（同步配置入口在此，工具栏「同步」只负责同步）。</summary>
-    private void DataBtn_Click(object sender, RoutedEventArgs e)
-        => ModalHost.Show(new DataDialog(_svc, RefreshWall, _sync));
-    private void BatchDoneBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(false);
-
-    /// <summary>卡片 SelectionToggled → 切换选择集 → 同步该卡视觉 + 计数。</summary>
-    private void OnCardSelectionToggled(string id)
-    {
-        if (!_batchMode) return;
-        if (_batchSel.Contains(id)) _batchSel.Remove(id);
-        else _batchSel.Add(id);
-        if (_cards.TryGetValue(id, out var card)) card.SetSelected(_batchSel.Contains(id));
-        SyncBatchUI();
-    }
-
-    /// <summary>全选/取消全选当前页（基于当前 Search 可见集，对齐 getVisibleClips；非全库）。</summary>
-    private void BatchSelectAllBtn_Click(object sender, RoutedEventArgs e)
-    {
-        if (_visibleIds.Count == 0) return;
-        bool allSel = _visibleIds.All(id => _batchSel.Contains(id));
-        if (allSel) foreach (var id in _visibleIds) _batchSel.Remove(id);
-        else foreach (var id in _visibleIds) _batchSel.Add(id);
-        foreach (var id in _visibleIds)
-            if (_cards.TryGetValue(id, out var card)) card.SetSelected(_batchSel.Contains(id));
-        SyncBatchUI();
-    }
-
-    private void BatchAddTagBtn_Click(object sender, RoutedEventArgs e) => OpenBatchTagModal(isAdd: true);
-    private void BatchRemoveTagBtn_Click(object sender, RoutedEventArgs e) => OpenBatchTagModal(isAdd: false);
-
-    /// <summary>批量标签弹窗：复用 TagPicker；add=全局标签（可新建）/ remove=已选条目标签并集。确认后走 ClipService.BatchSetTags。</summary>
-    private void OpenBatchTagModal(bool isAdd)
-    {
-        if (_batchSel.Count == 0) { ToastService.Flash("请先选择内容"); return; }
-
-        var title = new TextBlock
-        {
-            Text = isAdd ? "批量添加标签" : "批量移除标签",
-            FontSize = 16,
-            FontWeight = FontWeights.SemiBold,
-            Margin = new Thickness(0, 0, 0, 4),
-        };
-        var hint = new TextBlock
-        {
-            Text = isAdd ? "选择要添加的标签（输入框回车可新建）" : "选择要移除的标签",
-            FontSize = 12,
-            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x84, 0x84, 0x84)),
-            Margin = new Thickness(0, 0, 0, 12),
-        };
-        var picker = new TagPicker();
-        if (isAdd)
-            picker.SetTags(new List<string>(), GetAllTagsIncludingArchive()); // 全局标签（可新建）
-        else
-            picker.SetTags(new List<string>(), UnionTagsOfSelection());       // 已选条目标签并集
-
-        var wrap = new StackPanel { Children = { title, hint, picker } };
-
-        var ok = new Button
-        {
-            Style = (Style)FindResource("BtnPrimary"),
-            Content = isAdd ? "添加" : "移除",
-            MinWidth = 130,
-            Margin = new Thickness(0, 16, 10, 0),
-        };
-        var cancel = new Button
-        {
-            Style = (Style)FindResource("BtnClose"),
-            Content = "取消",
-            MinWidth = 130,
-        };
-        var row = new Grid { Margin = new Thickness(0, 0, 0, 0) };
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        Grid.SetColumn(ok, 0);
-        Grid.SetColumn(cancel, 1);
-        ok.Margin = new Thickness(0, 0, 10, 0);
-        row.Children.Add(ok);
-        row.Children.Add(cancel);
-
-        var sp = new StackPanel { Children = { wrap, row } };
-        var card = new Border
-        {
-            Style = (Style)FindResource("ModalCard"),
-            Width = 420,
-            Child = sp,
-        };
-
-        ok.Click += (_, _) =>
-        {
-            ModalHost.Close();
-            try
-            {
-                var n = _svc.BatchSetTags(_batchSel, picker.Selected, isAdd);
-                ToastService.Flash(isAdd ? $"已为 {n} 条添加标签" : $"已从 {n} 条移除标签");
-                RefreshWall(); // 标签变化可能触发重排序；重建后保留批量选中态
-            }
-            catch (Exception ex) { ToastService.Error(ex.Message); }
-        };
-        cancel.Click += (_, _) => ModalHost.Close();
-        ModalHost.Show(card);
-    }
-
-    /// <summary>已选条目标签并集（跨活跃+归档读取），供批量移除弹窗展示可选标签。</summary>
-    private List<string> UnionTagsOfSelection()
-    {
-        var items = _storage.LoadClips().Concat(_storage.LoadArchive())
-            .Where(c => _batchSel.Contains(c.Id));
-        return items.SelectMany(c => c.Tags ?? new List<string>())
-            .Distinct(StringComparer.Ordinal)
-            .OrderBy(x => x, StringComparer.Ordinal)
-            .ToList();
-    }
-
-    /// <summary>系统已有标签（聚合全部条目去重，含归档；对齐 /api/tags 全量）。</summary>
-    private List<string> GetAllTagsIncludingArchive()
-        => _svc.Search("", includeArchived: true).SelectMany(c => c.Tags ?? new List<string>())
-            .Distinct(StringComparer.Ordinal).OrderBy(x => x, StringComparer.Ordinal).ToList();
-
-    /// <summary>批量删除：确认 → ClipService.BatchDelete（跨区+清文件+墓碑）→ 退出批量模式 → 刷新。</summary>
-    private void BatchDelBtn_Click(object sender, RoutedEventArgs e)
-    {
-        if (_batchSel.Count == 0) { ToastService.Flash("请先选择内容"); return; }
-        ModalHost.Confirm($"删除选中的 {_batchSel.Count} 条内容？此操作不可撤销", () =>
-        {
-            try
-            {
-                var n = _svc.BatchDelete(_batchSel);
-                ToastService.Flash($"已删除 {n} 条");
-                SetBatchMode(false); // 选择集已删除，退出批量模式
-            }
-            catch (Exception ex) { ToastService.Error(ex.Message); }
-        }, "删除");
-    }
-
-    /// <summary>同步批量条 UI：已选计数 + 全选按钮文案（全选→取消全选）。</summary>
-    private void SyncBatchUI()
-    {
-        BatchCountText.Text = $"已选 {_batchSel.Count}";
-        bool allSel = _visibleIds.Count > 0 && _visibleIds.All(id => _batchSel.Contains(id));
-        BatchSelectAllBtn.Content = allSel ? "取消全选" : "全选当前页";
-    }
     public void ReallyExit()
     {
         _reallyExit = true;
@@ -737,23 +486,5 @@ public partial class MainWindow : Window
         Activate();
     }
 
-    // ---------- M5c：WebDAV 同步（编排下沉 SyncController；工具栏「同步」只负责触发同步） ----------
-
-    /// <summary>工具栏「同步」按钮：用已保存配置立即同步；未配置则提示去「数据管理」设置（不打开配置 UI）。</summary>
-    private async void SyncBtn_Click(object sender, RoutedEventArgs e)
-    {
-        if (_sync.Config == null)
-        {
-            ToastService.Error("尚未配置 WebDAV 同步，请到「数据管理」设置");
-            return;
-        }
-        try
-        {
-            ToastService.Flash("同步中…");
-            var r = await _sync.RunNow(_sync.Config);
-            if (r.Ok) ToastService.Flash($"同步完成 · 共 {r.Clips} 条");
-            else ToastService.Error("同步失败：" + (r.Error ?? "未知错误"));
-        }
-        catch (Exception ex) { ToastService.Error("同步失败：" + ex.Message); }
-    }
+    // 同步逻辑已抽到 MainWindow.SyncOps.cs（partial class）
 }
