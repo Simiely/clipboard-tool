@@ -1,0 +1,159 @@
+{
+  "_comment": "双版本一致性差分 fixtures：Web(v0.6.18 app.js/lib) 与 exe(v0.7.0 clipboard-exe) 共用。规则=生产代码当前实现(去重=trim 后精确等值,key=link?url:content;排序=pinned→copyCount→updatedAt 降序)。clips 元素仅给规则所需字段,缺省字段两端按各自 default(JS !!x/||0, C# default(bool=0))处理——字段省略本身也是被测行为。改任何一端规则实现前,先加/改 fixture 再对拍。",
+  "dedup": [
+    {
+      "name": "text-exact-hit",
+      "probe": "hello world",
+      "clips": [
+        { "id": "t1", "type": "text", "content": "hello world" }
+      ]
+    },
+    {
+      "name": "text-case-sensitive",
+      "probe": "Hello",
+      "clips": [
+        { "id": "t1", "type": "text", "content": "hello" }
+      ]
+    },
+    {
+      "name": "text-whitespace-sensitive",
+      "probe": "hello ",
+      "clips": [
+        { "id": "t1", "type": "text", "content": "hello" }
+      ]
+    },
+    {
+      "name": "link-matches-url",
+      "probe": "https://a.com/x",
+      "clips": [
+        { "id": "l1", "type": "link", "url": "https://a.com/x", "content": "ignored-content" }
+      ]
+    },
+    {
+      "name": "link-compares-url-not-content",
+      "probe": "ignored-content",
+      "clips": [
+        { "id": "l1", "type": "link", "url": "https://a.com/x", "content": "ignored-content" }
+      ]
+    },
+    {
+      "name": "type-split-text-beats-link-with-same-content",
+      "probe": "same",
+      "clips": [
+        { "id": "l1", "type": "link", "url": "https://a.com", "content": "same" },
+        { "id": "t1", "type": "text", "content": "same" }
+      ]
+    },
+    {
+      "name": "file-uses-content-like-text",
+      "probe": "abc",
+      "clips": [
+        { "id": "f1", "type": "file", "content": "abc" }
+      ]
+    },
+    {
+      "name": "first-match-wins",
+      "probe": "dup",
+      "clips": [
+        { "id": "first", "type": "text", "content": "dup" },
+        { "id": "second", "type": "text", "content": "dup" }
+      ]
+    },
+    {
+      "name": "empty-probe",
+      "probe": "",
+      "clips": [
+        { "id": "t1", "type": "text", "content": "" }
+      ]
+    },
+    {
+      "name": "null-probe",
+      "probe": null,
+      "clips": [
+        { "id": "t1", "type": "text", "content": "x" }
+      ]
+    },
+    {
+      "name": "url-missing-fallback-empty",
+      "probe": "https://m.com",
+      "clips": [
+        { "id": "l1", "type": "link", "content": "https://m.com" }
+      ]
+    }
+  ],
+  "sort": [
+    {
+      "name": "pinned-first",
+      "clips": [
+        { "id": "a", "pinned": false, "copyCount": 99, "updatedAt": 300 },
+        { "id": "p", "pinned": true, "copyCount": 1, "updatedAt": 100 },
+        { "id": "b", "pinned": false, "copyCount": 50, "updatedAt": 200 }
+      ]
+    },
+    {
+      "name": "copy-count-desc",
+      "clips": [
+        { "id": "low", "copyCount": 1, "updatedAt": 999 },
+        { "id": "high", "copyCount": 10, "updatedAt": 0 },
+        { "id": "mid", "copyCount": 5, "updatedAt": 500 }
+      ]
+    },
+    {
+      "name": "copy-tie-keeps-input-order",
+      "clips": [
+        { "id": "z", "copyCount": 7, "updatedAt": 100 },
+        { "id": "a", "copyCount": 7, "updatedAt": 100 },
+        { "id": "m", "copyCount": 7, "updatedAt": 100 }
+      ]
+    },
+    {
+      "name": "updated-desc-secondary",
+      "clips": [
+        { "id": "old", "copyCount": 3, "updatedAt": 100 },
+        { "id": "new", "copyCount": 3, "updatedAt": 900 }
+      ]
+    },
+    {
+      "name": "all-keys-composite",
+      "clips": [
+        { "id": "pinnedOld", "pinned": true, "copyCount": 0, "updatedAt": 1 },
+        { "id": "hot", "copyCount": 50, "updatedAt": 2 },
+        { "id": "warm", "copyCount": 20, "updatedAt": 3 },
+        { "id": "cool", "copyCount": 20, "updatedAt": 4 }
+      ]
+    },
+    {
+      "name": "empty-list",
+      "clips": []
+    },
+    {
+      "name": "single-item",
+      "clips": [
+        { "id": "solo", "pinned": false, "copyCount": 0, "updatedAt": 0 }
+      ]
+    },
+    {
+      "name": "missing-fields-default-last-input-order",
+      "clips": [
+        { "id": "full", "copyCount": 1, "updatedAt": 1 },
+        { "id": "bare1" },
+        { "id": "bare2" }
+      ]
+    },
+    {
+      "name": "zero-vs-missing-copy-tie",
+      "clips": [
+        { "id": "zero", "copyCount": 0, "updatedAt": 5 },
+        { "id": "missing", "updatedAt": 5 }
+      ]
+    },
+    {
+      "name": "pinned-all-then-copy",
+      "clips": [
+        { "id": "p2", "pinned": true, "copyCount": 2, "updatedAt": 1 },
+        { "id": "p1", "pinned": true, "copyCount": 9, "updatedAt": 2 },
+        { "id": "n", "copyCount": 100, "updatedAt": 3 }
+      ]
+    }
+  ]
+}

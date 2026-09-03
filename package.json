@@ -12,7 +12,8 @@
     "smoke": "node scripts/smoke-test.mjs",
     "test:webdav": "node scripts/test-webdav-sync.mjs",
     "test:auto-sync": "node scripts/test-auto-sync.mjs",
-    "test": "npm run smoke && npm run test:webdav && npm run test:auto-sync"
+    "test:diff": "dotnet build clipboard-exe/tools/difftest/difftest.csproj -c Release && node tests/diff-rules.mjs",
+    "test": "npm run smoke && npm run test:webdav && npm run test:auto-sync && npm run test:diff"
   },
   "keywords": ["clipboard", "剪贴板", "tools-center"],
   "license": "UNLICENSED"

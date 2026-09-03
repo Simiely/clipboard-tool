@@ -1,5 +1,7 @@
 # AGENTS.md · 项目规则
 
+> 📌 **双版本规则差分门禁落地**(2026-09-03):去重/排序的"改一端必须同步另一端"从人工铁律升级为**机器检查**——`tests/fixtures/rules.json`(21 fixtures:dedup 11 + sort 10)同一份输入喂两端各自的生产代码(Web:`lib/core/clips-store.js sortClips` 直 import + `public/app.js findDuplicateClip` 用 vm 从源文本提取执行,零复制;exe:`clipboard-exe/tools/difftest` 控制台工程 **链接生产源文件**编译,`Program.cs` 调 `Storage.SortClips`/`ClipService.FindDuplicate`),输出逐 fixture 对拍,不一致 exit 1。已验证门禁灵敏度:给 exe 侧误加 `Trim()` 立即被抓出(`text-whitespace-sensitive`)。**改任一端去重/排序规则前,先在 fixtures 增补用例再对拍**;`difftest.csproj` 链入生产文件新增依赖时照 `tools/probe` 先例补 `Compile Include`/shim(现含 `AppShim.cs` 提供 `ClipboardExe.App.AppName/AppVersion`,因 `Storage.SaveClips` 引用 WPF 主类)。运行:`npm run test:diff`(自动先 build difftest)或 `npm test` 全量
+
 > 📌 **exe 版 M3b-2b 图片线落地**（2026-09-01，M3b-2 拆 2a/2b 后单轮交付；建于 M3b-2a 实体存储之上）：`Services/Format.cs` 增 `IsImageMime` 统一入口（`mime?.StartsWith("image/")` 供卡片/单击复制/弹窗分流对齐 Web 多处判定）+ `CardView` 图片卡体（`Image.Stretch=UniformToFill` cover 撑满 + `Border.ClipToBounds` + 解码失败自动降级文件卡 + `TypeBadge` 切紫徽章「图片」）+ 点击图片卡中部 → `CopyImageRequested` → `MainWindow.CopyImageToClipboard`（`FileStore.ReadAllBytes` → `BitmapImage Freeze` → `System.Windows.Clipboard.SetImage` + `watcher.Suppress(800)` 来源抑制 + BumpCopyCount + flash「图片已复制，可直接粘贴」+ 失败 toast） + hover 悬浮预览（`DispatcherTimer 260ms` 延迟 + Popup + `CustomPopupPlacementCallback` 视口钳制 8px + 优先顶部 4px 间隙 + 空间不够落底部 + 滚轮缩放 50%~300% 步进 15% + cap 显示 fname·fsize·百分比）对齐 Web `bindImageHoverPreview` L1199 + `PasteDialog` 图片 chip 接收（`DataFormats.Bitmap` 剪贴板截图优先 + `EncodePng` BitmapSource→PNG + `PickBytes` 直接接收字节 + Bitmap 拖放，去掉 2a 拒收占位） + `Colors.xaml` 增 `PurpleBrush`(#B39DDB)/`PurpleSoftBrush`(rgba purple .15) + `Styles.xaml` 增 `BadgeImage` 样式。`--selftest` **144 断言全过**（126 + 18 增量）。改 Web 版图片 hover/复制/弹窗逻辑时**必须**同步改 clipboard-exe `Format.IsImageMime`/`CardView.BuildImageBody`/`MainWindow.CopyImageToClipboard`/`PasteDialog.OnPasting` 对应实现
 
 > 📌 **exe 版 M3b-2a-1 UI 圆角规范修正**（2026-09-01，M3b-2a 内的二次修正）：全面排查并替换 **12 处硬编码 `CornerRadius`**（Styles.xaml 6 处 + EditDialog/PasteDialog 图标块 3 处 + CardView 折叠角/PasteDialog 文件 chip/Toast 3 处），全部改用 `Colors.xaml` 圆角令牌；`Colors.xaml` 增 3 令牌 `RadiusFold`(3,3,0,0 不对称折叠角) / `RadiusIconLg`(11, 36px 图标块) / `RadiusIconSm`(6, 20px 序号块)；`Styles.xaml` 增全局 `ToolTip` 样式（消除系统默认矩形白底）。构建 **0 错误 0 警告**（既有 CA1416/Settings 已消）；`--selftest` **126 断言仍全过**（零回归）；`grep CornerRadius="[0-9]"` 命中 0 处、`grep new CornerRadius(` 仅余 `PillBorder.cs:49`（控件内部封装动态半径，合规）。**原则确认**：圆角一律取令牌（不硬编码散落）、内容必须进圆角 Border + `ClipToBounds`、颜色/画刷一律取令牌、复用既有 UI 规范（NeuBorder/PillBorder/Styles/Colors），不为改而改
@@ -69,6 +71,8 @@ npm test                          # = smoke + test:webdav + test:auto-sync
 node scripts/test-html-field.mjs
 # 复杂度测量（圈复杂度/认知复杂度/LOC）
 node scripts/cc-measure.mjs public/app.js lib/core/*.js lib/routes/*.js
+# 双版本规则一致性差分（去重+排序；先 build difftest 再对拍，不一致 exit 1）
+npm run test:diff            # = dotnet build tools/difftest + node tests/diff-rules.mjs
 node --check server.mjs           # 语法检查
 ```
 
