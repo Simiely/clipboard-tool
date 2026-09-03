@@ -441,10 +441,11 @@ public sealed class ClipService
     }
 
     // ---- 过期（对齐 clips-store.js isExpired / resolveExpire）----
-    /// <summary>过期判断：expireAt 为 null/0 = 永久。</summary>
+    /// <summary>过期判断：expireAt 为 null/0 = 永久（0 守卫对齐 Web !!c.expireAt，2026-09-03 差分门禁抓出单边漂移）。</summary>
     public static bool IsExpired(ClipItem c)
     {
-        return c.ExpireAt.HasValue && c.ExpireAt.Value < DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        return c.ExpireAt.HasValue && c.ExpireAt.Value > 0
+            && c.ExpireAt.Value < DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
     }
 
     /// <summary>解析过期选项：'1h'|'1d'|'7d'|'30d'|''(永久) → 绝对时间戳；非法返回 null。</summary>

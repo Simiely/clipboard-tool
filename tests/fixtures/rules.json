@@ -155,5 +155,31 @@
         { "id": "n", "copyCount": 100, "updatedAt": 3 }
       ]
     }
+  ],
+  "_comment2": "cleanUrl: 两端仅保证『规范小写 host + 无特殊编码』一致域等价(Web=WHATWG URL 规范化,exe=字符串级近似,差异域:大写 host/空 path 补斜杠/%20→+/空格→+ —— exe 有意不做重编码,非规则漂移)。fixtures 只覆盖一致域,输入不含需编码字符。",
+  "cleanUrl": [
+    { "name": "no-query", "input": "https://example.com/path", "expect": "https://example.com/path" },
+    { "name": "no-tracking-param", "input": "https://example.com/path?a=1&b=2", "expect": "https://example.com/path?a=1&b=2" },
+    { "name": "single-utm-source", "input": "https://example.com/path?utm_source=x&a=1", "expect": "https://example.com/path?a=1" },
+    { "name": "all-utm-removed", "input": "https://example.com/path?utm_source=x&utm_medium=y&utm_campaign=z", "expect": "https://example.com/path" },
+    { "name": "mixed-utm-kept-params-order", "input": "https://example.com/path?a=1&utm_source=x&b=2", "expect": "https://example.com/path?a=1&b=2" },
+    { "name": "non-utm-query-preserved", "input": "https://example.com/path?utm_source=x&a=1&b=2&utm_term=t", "expect": "https://example.com/path?a=1&b=2" },
+    { "name": "uppercase-key-insensitive", "input": "https://example.com/path?UTM_SOURCE=x&a=1", "expect": "https://example.com/path?a=1" },
+    { "name": "ref-and-fbclid", "input": "https://example.com/path?ref=abc&fbclid=xyz&a=1", "expect": "https://example.com/path?a=1" },
+    { "name": "hash-preserved", "input": "https://example.com/path?utm_source=x&a=1#section", "expect": "https://example.com/path?a=1#section" },
+    { "name": "dup-key-preserved", "input": "https://example.com/path?a=1&a=2&utm_source=x", "expect": "https://example.com/path?a=1&a=2" },
+    { "name": "empty-tracking-value", "input": "https://example.com/path?utm_source=&a=1", "expect": "https://example.com/path?a=1" },
+    { "name": "non-http-scheme", "input": "ftp://example.com/path?utm_source=x", "expect": "ftp://example.com/path?utm_source=x" },
+    { "name": "scheme-only-no-query", "input": "https://", "expect": "https://" },
+    { "name": "plain-http-ok", "input": "http://example.com/path?utm_source=x&a=1", "expect": "http://example.com/path?a=1" },
+    { "name": "trailing-question-all-removed", "input": "https://example.com/path?utm_source=x", "expect": "https://example.com/path" }
+  ],
+  "_comment3": "expiry: isExpired 输入用远离时钟的定值(0/极小/极久远),避免 Date.now 竞态;expireAt=0 守卫是 2026-09-03 差分门禁抓出的 exe 单边 bug 回归用例(Web !!c.expireAt → 0=永久)。resolveExpire 本应差分,但两端内部取当前时钟(Date.now/UtcNow),逐值对拍会因毫秒级时差失败——故只测 IsExpired 判定(规则实体),resolveExpire 属解析器已有各自单测覆盖。",
+  "expiry": [
+    { "name": "null-permanent", "clip": { "id": "c1" }, "expect": false },
+    { "name": "zero-permanent", "clip": { "id": "c1", "expireAt": 0 }, "expect": false },
+    { "name": "tiny-past-expired", "clip": { "id": "c1", "expireAt": 1 }, "expect": true },
+    { "name": "far-future-active", "clip": { "id": "c1", "expireAt": 4102444800000 }, "expect": false },
+    { "name": "boundary-now-minus-large", "clip": { "id": "c1", "expireAt": 1000000000000 }, "expect": true }
   ]
 }
