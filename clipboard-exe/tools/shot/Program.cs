@@ -79,6 +79,10 @@ class Shot
         if (args.Length > 0 && args[0] == "list") return DoList(args);
         // 子命令: crop <procName> <outPath> <x> <y> <w> <h> [scale] — 截图后裁剪放大（小控件细节核对）
         if (args.Length > 0 && args[0] == "crop") return DoCrop(args);
+        // 子命令: wins <procName> — 枚举进程所有可见顶层窗口 rect（弹窗定位/拖动前后比对）
+        if (args.Length > 0 && args[0] == "wins") return DoWins(args);
+        // 子命令: drag <x1> <y1> <x2> <y2> [steps] — 屏幕坐标按住左键拖动(验证无边框弹窗系统拖动)
+        if (args.Length > 0 && args[0] == "drag") return DoDrag(args);
 
         // 默认: 截图。args: [procName] [outPath] [targetW?]
         var procName = args.Length > 0 ? args[0] : "Clipboard";
@@ -270,6 +274,68 @@ class Shot
             }
         }
         Console.WriteLine($"--- {count} buttons{(filter != null ? " (filter=" + filter + ")" : "")}");
+        return 0;
+    }
+
+    /// <summary>枚举进程所有可见顶层窗口 rect。用法: shot wins &lt;procName&gt;</summary>
+    static int DoWins(string[] args)
+    {
+        if (args.Length < 2) { Console.WriteLine("用法: shot wins <procName>"); return 1; }
+        DumpRects(args[1]);
+        return 0;
+    }
+
+    /// <summary>打印进程所有可见窗口 (class | title | rect)。</summary>
+    static void DumpRects(string procName)
+    {
+        var procs = System.Diagnostics.Process.GetProcessesByName(procName);
+        if (procs.Length == 0) { Console.WriteLine("ERR no proc"); return; }
+        int pid = procs[0].Id;
+        var sb = new StringBuilder(256);
+        EnumWindows((h, _) =>
+        {
+            GetWindowThreadProcessId(h, out int wp);
+            if (wp != pid || !IsWindowVisible(h)) return true;
+            GetClassName(h, sb, 256); var cls = sb.ToString();
+            var txt = new StringBuilder(256); GetWindowTextW(h, txt, 256);
+            GetWindowRect(h, out var r);
+            Console.WriteLine($"win hwnd={h:X} class={cls} title='{txt}' rect=({r.L},{r.T})-({r.R},{r.B}) {r.R - r.L}x{r.B - r.T}");
+            return true;
+        }, IntPtr.Zero);
+    }
+
+    /// <summary>屏幕坐标按住左键从 (x1,y1) 拖到 (x2,y2) 松开——验证无边框弹窗的系统级拖动(HTCAPTION)。
+    /// 先激活起点处的窗口(第一击仅激活不派发),拖动前/后打印进程全部窗口 rect 供客观比对位移。
+    /// 用法: shot drag &lt;x1&gt; &lt;y1&gt; &lt;x2&gt; &lt;y2&gt; [steps]</summary>
+    static int DoDrag(string[] args)
+    {
+        if (args.Length < 5) { Console.WriteLine("用法: shot drag <x1> <y1> <x2> <y2> [steps]"); return 1; }
+        if (!int.TryParse(args[1], out int x1) || !int.TryParse(args[2], out int y1) ||
+            !int.TryParse(args[3], out int x2) || !int.TryParse(args[4], out int y2))
+        { Console.WriteLine("ERR: coords must be int"); return 1; }
+        int steps = args.Length > 5 && int.TryParse(args[5], out var s) && s > 0 ? s : 20;
+
+        var hwnd = WindowFromPoint(new POINT { X = x1, Y = y1 });
+        Console.WriteLine($"drag from ({x1},{y1}) to ({x2},{y2}) steps={steps} downWin={hwnd:X}");
+        if (hwnd != IntPtr.Zero) { SetForegroundWindow(hwnd); Thread.Sleep(400); } // 激活后首击才不会被吞
+
+        DumpRects("Clipboard");
+        SetCursorPos(x1, y1);
+        Thread.Sleep(150);
+        mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, IntPtr.Zero);
+        Thread.Sleep(150);
+        for (int i = 1; i <= steps; i++)
+        {
+            int cx = x1 + (x2 - x1) * i / steps;
+            int cy = y1 + (y2 - y1) * i / steps;
+            SetCursorPos(cx, cy);
+            Thread.Sleep(15);
+        }
+        Thread.Sleep(150);
+        mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, IntPtr.Zero);
+        Thread.Sleep(400);
+        Console.WriteLine("--- after drag ---");
+        DumpRects("Clipboard");
         return 0;
     }
 }
