@@ -12,6 +12,7 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             <Setter Property="CaretBrush" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Cursor" Value="IBeam"/> <!-- 弹窗根 SizeAll 继承覆盖：输入框必须 IBeam -->
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="Padding" Value="4,2"/>
