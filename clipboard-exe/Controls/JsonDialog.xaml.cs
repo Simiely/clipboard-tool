@@ -18,6 +18,9 @@ public partial class JsonDialog : UserControl
     /// <summary>覆盖保存请求：参数（原条目, 新的格式化 content）。由 MainWindow 处理 ClipService.Update。</summary>
     public event Action<ClipItem, string>? SaveRequested;
 
+    /// <summary>复制成功：MainWindow 据此标记"本程序写入"，避免关闭本窗后激活主窗被误弹存入窗。</summary>
+    public event Action? Copied;
+
     public JsonDialog(ClipItem clip)
     {
         InitializeComponent();
@@ -34,6 +37,7 @@ public partial class JsonDialog : UserControl
         {
             ClipboardHelper.SetText(JsonBox.Text);
             ToastService.Flash("已复制美化 JSON");
+            Copied?.Invoke();
         }
         catch (Exception ex) { AppLog.Info("json copy failed: " + ex); ToastService.Error("复制失败"); }
     }

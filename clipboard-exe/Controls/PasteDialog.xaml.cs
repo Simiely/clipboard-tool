@@ -27,6 +27,7 @@ public partial class PasteDialog : UserControl
     private readonly Func<List<string>> _getTags;
     private readonly DispatcherTimer _dupTimer;
     private bool _dupJumped;
+    private bool _autoFilling; // autoFill 程序赋值期间置 true：不触发用户输入级重复检测（对齐 Web：程序 set value 不派发 input 事件）
 
     /// <summary>已选文件（含图片：图片在 M3b-2b 也走 file 通道）。</summary>
     private PickedFile? _pickedFile;
@@ -62,16 +63,26 @@ public partial class PasteDialog : UserControl
         _dupTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
         _dupTimer.Tick += (_, _) => CheckDuplicate();
 
+        // 生命周期契约：本控件离开视觉树（保存/取消/失焦自动关/被其它弹窗顶替）即取消迟到的重复检测——
+        // 否则用户 300ms 内保存后，定时器到点会拿"刚入库的文本"再查一次必然命中自身，
+        // 自动 DuplicateFound → MainWindow 再弹编辑窗 = "存完/取消完又蹦出第二扇窗"。
+        // （DispatcherTimer 在控件卸载后仍会持续触发，官方模式即 Unloaded 中 Stop。）
+        Unloaded += (_, _) => CancelPendingDuplicate();
+
         // 粘贴拦截：资源管理器复制文件 Ctrl+V → FileDrop → 选文件（对齐 ta paste ②图片/文件优先）
         InputBox.AddHandler(DataObject.PastingEvent, new DataObjectPastingEventHandler(OnPasting), true);
 
         // 打开即自动填入剪贴板文本（对齐 autoFillPasteModal：文本优先）
+        // 程序赋值不触发 Web input 事件 → 也不该启动重复检测；WPF 赋值会触发 TextChanged，
+        // 用 _autoFilling 抑制，仅保留徽章刷新（UpdateBadge 在赋值后显式调用）。
         try
         {
             var t = Clipboard.GetText();
             if (!string.IsNullOrEmpty(t) && string.IsNullOrEmpty(InputBox.Text))
             {
-                InputBox.Text = t;
+                _autoFilling = true;
+                try { InputBox.Text = t; }
+                finally { _autoFilling = false; }
                 UpdateBadge();
                 ToastService.Flash("已填入剪贴板内容");
             }
@@ -286,7 +297,7 @@ public partial class PasteDialog : UserControl
     private void Input_TextChanged(object sender, TextChangedEventArgs e)
     {
         UpdateBadge();
-        if (_dupJumped) return;
+        if (_autoFilling || _dupJumped) return; // autoFill 程序赋值不算用户输入；已跳转不再重复检测
         _dupTimer.Stop();
         _dupTimer.Start();
     }
@@ -302,7 +313,8 @@ public partial class PasteDialog : UserControl
 
     private void CheckDuplicate()
     {
-        if (_dupJumped) return;
+        // 已跳转 / 已不在台上（被关闭或被其它弹窗顶替）：迟到的 tick 一律不作数，避免关错窗/乱开窗。
+        if (_dupJumped || !IsVisible) return;
         var content = (InputBox.Text ?? "").Trim();
         if (content.Length == 0) return;
         var dup = ClipService.FindDuplicate(content, _getClips());
@@ -310,6 +322,13 @@ public partial class PasteDialog : UserControl
         _dupJumped = true;
         ModalHost.Close();
         DuplicateFound?.Invoke(dup);
+    }
+
+    /// <summary>取消一切"进行中/迟到"的重复检测。窗口生命周期出口（保存/取消/失焦自动关/被顶替）统一调用。</summary>
+    private void CancelPendingDuplicate()
+    {
+        _dupTimer.Stop();
+        _dupJumped = true;
     }
 
     private void Clear_Click(object sender, RoutedEventArgs e)

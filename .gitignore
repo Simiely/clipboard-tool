@@ -28,3 +28,7 @@ clipboard-exe/tools/shot/obj/
 clipboard-exe/tools/shot/*.png
 clipboard-exe/tools/shot/*.txt
 
+# 剪贴板行为探测器（验证用，源码进库、构建产物不进库）
+clipboard-exe/tools/probe/bin/
+clipboard-exe/tools/probe/obj/
+

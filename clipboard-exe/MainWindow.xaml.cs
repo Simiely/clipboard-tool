@@ -32,7 +32,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _searchTimer = new() { Interval = TimeSpan.FromMilliseconds(100) };
     private bool _reallyExit;
     private bool _everActivated;        // 首次激活（启动）不自动弹窗，仅后续切回才检测
-    private string? _lastPrompted;      // 已就此剪贴板内容弹过窗，避免重复弹出（激活/剪贴板事件共用）
+    private uint? _lastHandledSeq;      // 已处理过的剪贴板序列号（激活/剪贴板事件共用；null = 尚未处理过任何内容）
 
     // 过滤状态（对齐 state.filter）
     private string _q = "";
@@ -97,7 +97,7 @@ public partial class MainWindow : Window
     }
 
     // ---- 剪贴板自动提示（对齐 Web clipboardchange + 激活检测）：有内容→存卡；已有内容→编辑弹窗 ----
-    //  剪贴板事件(watcher)与窗口激活(OnActivated)都会触发，统一走 TryAutoPrompt 并用 _lastPrompted 去重，
+    //  两条触发路径（watcher 剪贴板事件 / OnActivated 窗口激活）统一走 TryAutoPrompt，用剪贴板序列号去重，
     //  避免"一次复制 + 切回窗口/关弹窗再激活"被两条路径各弹一次（连续弹两次窗）。
     private void OnClipboardChanged()
     {
@@ -110,6 +110,16 @@ public partial class MainWindow : Window
         TryAutoPrompt();
     }
 
+    /// <summary>自上次处理后剪贴板是否又变了一次（序列号判定）。返回 false = 同一份内容被重复触发，不重复弹窗。
+    /// 用序列号而非内容比对：实测相同内容再次复制，序列号照样递增——那是真实的新复制，不该被吞掉。</summary>
+    private bool TryTakeClipboardSeq()
+    {
+        var seq = ClipboardNative.SequenceNumber;
+        if (_lastHandledSeq == seq) return false;
+        _lastHandledSeq = seq;
+        return true;
+    }
+
     private void TryAutoPrompt()
     {
         if (ModalHost.IsOpen) return; // 已开弹窗不覆盖
@@ -117,8 +127,7 @@ public partial class MainWindow : Window
         try { text = (Clipboard.GetText() ?? "").Trim(); }
         catch { return; }
         if (text.Length == 0) return;
-        if (text == _lastPrompted) return; // 同一剪贴板内容不重复弹（剪贴板事件/激活/反复切回窗口都走这里去重）
-        _lastPrompted = text;
+        if (!TryTakeClipboardSeq()) return; // 剪贴板未再变化（激活/事件/反复切回窗口都在这里收敛）
         // 比对（对齐 findDuplicateClip：link 比 url / 其他比 content）
         var dup = ClipService.FindDuplicate(text, _svc.Search(""));
         if (dup != null)
@@ -248,13 +257,15 @@ public partial class MainWindow : Window
             if (TryCopy(() => ClipboardHelper.SetText(text)))
             {
                 card.MarkCopied();
-                SuppressAndBump(cc);
+                MarkSelfWriteAndBump(cc);
                 ToastService.Flash("已复制", x, y);
             }
         };
         card.OpenJsonRequested += cc =>
         {
             var dlg = new JsonDialog(cc);
+            // 复制 JSON 也属本程序写剪贴板：记下序列号，关窗后激活不再误弹存入窗
+            dlg.Copied += () => MarkSelfWrite();
             dlg.SaveRequested += (c, newContent) =>
             {
                 try
@@ -287,7 +298,7 @@ public partial class MainWindow : Window
             if (TryCopy(() => ClipboardHelper.SetText(cc.Content ?? "")))
             {
                 card.MarkCopied();
-                SuppressAndBump(cc);
+                MarkSelfWriteAndBump(cc);
                 ToastService.Flash("已复制", x, y);
             }
         };
@@ -299,7 +310,7 @@ public partial class MainWindow : Window
             if (ok)
             {
                 card.MarkCopied();
-                SuppressAndBump(cc);
+                MarkSelfWriteAndBump(cc);
                 ToastService.Flash("富文本已复制（含格式）", x, y);
             }
             else ToastService.Error("富文本复制失败，请用独立窗口重试");
@@ -342,7 +353,7 @@ public partial class MainWindow : Window
         catch (Exception ex) { AppLog.Info("decode image failed: " + ex.Message); ToastService.Error("图片解码失败"); return; }
         if (bmp != null && TryCopy(() => ClipboardHelper.SetImage(bmp)))
         {
-            SuppressAndBump(c);
+            MarkSelfWriteAndBump(c);
             ToastService.FlashAtMouse("图片已复制，可直接粘贴");
         }
     }
@@ -359,12 +370,18 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>复制成功后：来源抑制（避免本程序写剪贴板触发自动弹窗）+ 持久化复制计数（对齐 Web bumpCopyCount）。</summary>
-    private void SuppressAndBump(ClipItem c)
+    /// <summary>复制成功后：标记为"本程序自己写入"+ 持久化复制计数（对齐 Web bumpCopyCount）。
+    /// 两条自动弹窗路径各自用确定性判定收敛，都不依赖时间窗：
+    ///   - 剪贴板事件路径：watcher 在 WM 到达瞬间用属主 PID 判定属本进程 → 忽略；
+    ///   - 激活路径（OnActivated → TryAutoPrompt）：用剪贴板序列号判重，写入后记下新序列号 → 切回不再误弹。</summary>
+    private void MarkSelfWriteAndBump(ClipItem c)
     {
-        if (_watcher != null) _watcher.Suppress(800);
+        MarkSelfWrite();
         try { _svc.BumpCopyCount(c.Id); } catch { /* 计数失败不影响 */ }
     }
+
+    /// <summary>记录"本程序刚写入剪贴板"：把当前序列号记为已处理，激活路径据此不再弹窗（对齐 Web 语义）。</summary>
+    private void MarkSelfWrite() => _lastHandledSeq = ClipboardNative.SequenceNumber;
 
     /// <summary>列宽自适应（对齐 CSS auto-fill minmax(280px,1fr)；仅改 ItemWidth 不重建卡片——拖动窗口不闪烁）。
     /// maxColumns 来自 Settings：0 = 自动 4 上限，1~4 = 用户锁定（M3b-1 接入）。</summary>

@@ -1,6 +1,6 @@
 // Controls/CardView.xaml.cs - 卡片装配与交互（对齐 app.js clipCard / handleCardClick / makeCardBody / bindImageHoverPreview）
 // 只做「展示 + 用户手势 → 事件转发」，业务编排（ClipService 变更 / ClipboardWatcher 抑制 / 弹窗）全部抛给 MainWindow：
-//   CopyBumped        复制成功（MainWindow: watcher.Suppress(800) + BumpCopyCount 持久化；本卡仅本地 +1 显示，不重排——对齐 Web bumpCopyCount）
+//   CopyBumped        复制成功（MainWindow: MarkSelfWrite + BumpCopyCount 持久化；本卡仅本地 +1 显示，不重排——对齐 Web bumpCopyCount）
 //   EditRequested     双击编辑 / ✎（归档只读不触发）
 //   TogglePinRequested / DeleteRequested / OpenJsonRequested / OpenLinkRequested / TagFilterRequested
 //   DownloadRequested 文件卡：单击复制=下载（M3b-2a）
