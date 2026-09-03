@@ -83,6 +83,8 @@ class Shot
         if (args.Length > 0 && args[0] == "wins") return DoWins(args);
         // 子命令: drag <x1> <y1> <x2> <y2> [steps] — 屏幕坐标按住左键拖动(验证无边框弹窗系统拖动)
         if (args.Length > 0 && args[0] == "drag") return DoDrag(args);
+        // 子命令: region <outPath> <x> <y> <w> <h> [count] — 屏幕区域抓图连拍(不依赖 PrintWindow,透明窗口有效;拖动中连拍验闪烁)
+        if (args.Length > 0 && args[0] == "region") return DoRegion(args);
 
         // 默认: 截图。args: [procName] [outPath] [targetW?]
         var procName = args.Length > 0 ? args[0] : "Clipboard";
@@ -336,6 +338,35 @@ class Shot
         Thread.Sleep(400);
         Console.WriteLine("--- after drag ---");
         DumpRects("Clipboard");
+        return 0;
+    }
+
+    /// <summary>屏幕区域抓图(CopyFromScreen,不依赖 PrintWindow → 对 AllowsTransparency 的 layered 窗口同样有效)。
+    /// 拖动中连拍可客观检验"狂闪":闪烁 = 帧间出现空白/残影/错位,连续帧内容完整即无重绘滞后。
+    /// 用法: shot region &lt;outPath&gt; &lt;x&gt; &lt;y&gt; &lt;w&gt; &lt;h&gt; [count] — 连拍 count 张(默认1,间隔30ms),多张输出 outPath_1.png...</summary>
+    static int DoRegion(string[] args)
+    {
+        if (args.Length < 6) { Console.WriteLine("用法: shot region <outPath> <x> <y> <w> <h> [count]"); return 1; }
+        var outPath = args[1];
+        if (!int.TryParse(args[2], out int x) || !int.TryParse(args[3], out int y) ||
+            !int.TryParse(args[4], out int w) || !int.TryParse(args[5], out int h) ||
+            w <= 0 || h <= 0)
+        { Console.WriteLine("ERR: x/y/w/h must be positive int"); return 1; }
+        int count = args.Length > 6 && int.TryParse(args[6], out var c) && c > 0 ? Math.Min(c, 30) : 1;
+
+        for (int i = 0; i < count; i++)
+        {
+            using var bmp = new Bitmap(w, h, PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                try { g.CopyFromScreen(x, y, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy); }
+                catch (Exception ex) { Console.WriteLine($"ERR frame {i + 1}: {ex.Message}"); return 1; }
+            }
+            var p = count == 1 ? outPath : outPath.Replace(".png", $"_{i + 1}.png");
+            bmp.Save(p, ImageFormat.Png);
+            if (i < count - 1) Thread.Sleep(30);
+        }
+        Console.WriteLine($"region ({x},{y}) {w}x{h} x{count} -> {outPath.Replace(".png", "")}_*.png");
         return 0;
     }
 }
