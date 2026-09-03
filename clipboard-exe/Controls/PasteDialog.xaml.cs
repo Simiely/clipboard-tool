@@ -89,6 +89,14 @@ public partial class PasteDialog : UserControl
         }
         catch { /* 剪贴板不可读则留空 */ }
         UpdateBadge();
+
+        // 对齐 Web v0.6.6（app.js: autoFillPasteModal(...).then(() => checkDuplicate())——
+        // "自动填入(直接赋值不触发 input)后立即补一次重复检测"）：
+        // TextBox.Text 程序赋值会触发 TextChanged（MS Learn），但被 _autoFilling 抑制（不算用户输入、不启动检测）；
+        // 若此处不补查，则「打开存入窗即自动填入」的场景（Ctrl+V / ＋存入 等无预查入口）永远不做去重，
+        // 库里已有相同内容也会被存成多张卡。无文本/选文件时 CheckDuplicate 内部会自行跳过。
+        _dupTimer.Stop();
+        _dupTimer.Start();
     }
 
     // ---- 类型徽章实时识别（对齐 updateBadge：文件 > 链接 > 文本） ----
@@ -315,10 +323,18 @@ public partial class PasteDialog : UserControl
     {
         // 已跳转 / 已不在台上（被关闭或被其它弹窗顶替）：迟到的 tick 一律不作数，避免关错窗/乱开窗。
         if (_dupJumped || !IsVisible) return;
+        if (_pickedFile != null) return; // 已选文件（含图片）走文件线：不按文本查重复（对齐 Web checkDuplicate：pickedFile 不查）
         var content = (InputBox.Text ?? "").Trim();
         if (content.Length == 0) return;
         var dup = ClipService.FindDuplicate(content, _getClips());
         if (dup == null) return;
+        JumpToDuplicate(dup);
+    }
+
+    /// <summary>命中重复：标记已跳转、关闭本窗、通知 MainWindow 打开该条目编辑窗（dup=true，带「已有相同内容」提示）。
+    /// 输入级 CheckDuplicate 与保存兜底共用（对齐 Web：命中 → m.remove + openEditModal(dup, true)）。</summary>
+    private void JumpToDuplicate(ClipItem dup)
+    {
         _dupJumped = true;
         ModalHost.Close();
         DuplicateFound?.Invoke(dup);
@@ -350,6 +366,14 @@ public partial class PasteDialog : UserControl
         if (content.Length == 0 && _pickedFile == null)
         {
             ToastService.Error("先粘贴内容或选择文件");
+            return;
+        }
+        // 保存兜底去重（对齐 Web savePasteContent：v0.6.6 存入前 findDuplicateClip 拦截，命中关窗切编辑窗）——
+        // 覆盖输入级检测被绕过的路径：autoFill 后 300ms 内直接 Ctrl+Enter 存入、用户手动改回已有文本等。
+        // 文件线（_pickedFile != null）不查（对齐 Web：pickedFile 跳过；文件本就允许多份）。
+        if (_pickedFile == null && ClipService.FindDuplicate(content, _getClips()) is { } dup)
+        {
+            JumpToDuplicate(dup);
             return;
         }
         var title = TitleBox.Text ?? "";
