@@ -261,8 +261,9 @@ ClipboardWatcher → Storage/ClipService（捕获→确认弹窗→落库）
 4. **布局规则走 LayoutRules 纯函数**（M1 已抽）：`MaxWidthFor` 已就位；M2 卡片墙列数（Web `.list`
    auto-fill）在此加规则函数，不在事件里写内联计算。
 
-> 搬移产物记录（行为等价，已构建验证）：DWM 深色标题栏 → `Services/WindowExtensions.cs`（M2 弹窗复用）；
+> 搬移产物记录（行为等价，已构建验证）：DWM 深色标题栏 → `Controls/WindowExtensions.cs`（M2 弹窗复用，2026-09-03 由 Services/ 归位）；
 > 自适应三档 → `Services/LayoutRules.cs`；MainWindow 关注点由 5 → 3（生命周期/置顶/退出编排）。
+> 弹窗/提示宿主（ModalHost/ToastService）同为 UI 基础设施，2026-09-03 由 Services/ 归位到 `Controls/`。
 
 ## 6. 数据兼容与 WebDAV 移植要点
 

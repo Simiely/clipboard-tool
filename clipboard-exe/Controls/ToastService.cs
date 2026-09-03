@@ -1,4 +1,4 @@
-// Services/ToastService.cs - 轻提示（对齐 Web 版 #flash .copied-flash 与 .toast-err）
+// Controls/ToastService.cs - 轻提示（对齐 Web 版 #flash .copied-flash 与 .toast-err）
 //  - Flash(msg) / Flash(msg, x, y)：金色胶囊（accent 底 + 深字 600），跟随鼠标上方（Placement=Mouse 锚定），1400ms
 //  - FlashAtMouse(msg)：显式跟随鼠标（图片复制等无需调用方传坐标）
 //  - Error(msg)：红底白字，同样跟随鼠标上方（与成功提示一致），2600ms
@@ -12,7 +12,10 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
 
-namespace ClipboardExe.Services;
+// UI 基础设施（弹窗/提示宿主）归位到 Controls：展示层不是"服务"。AppLog 日志仍用 Services。
+using ClipboardExe.Services;
+
+namespace ClipboardExe.Controls;
 
 public static class ToastService
 {

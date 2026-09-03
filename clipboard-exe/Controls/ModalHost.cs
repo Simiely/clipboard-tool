@@ -1,4 +1,4 @@
-// Services/ModalHost.cs - 弹窗宿主（对齐 Web #modal-root：居中弹窗卡片，一次只挂一个）
+// Controls/ModalHost.cs - 弹窗宿主（对齐 Web #modal-root：居中弹窗卡片，一次只挂一个）
 //  实现：独立顶层 Window（透明背景、无全屏压暗遮罩），卡片自带阴影、尺寸由内容决定，
 //  因此可超出主窗口边界完整显示；位置相对主窗口居中，并夹在屏幕工作区内保证完整可见。
 //  非模态：主窗口保持可点击；弹窗失焦（点击空白/主窗口/其它程序）即自动关闭（SuppressDismiss 期间不关，保护内部子对话框）。
@@ -9,7 +9,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
-namespace ClipboardExe.Services;
+namespace ClipboardExe.Controls;
 
 public static class ModalHost
 {

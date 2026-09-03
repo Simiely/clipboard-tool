@@ -2,6 +2,7 @@
 // 职责：持有同步配置 + 定时自动同步 tick（仅调用 SyncEngine/WebDavSync，不碰 UI——对话框由 MainWindow 打开）。
 // 对齐审计建议：UI 层只编排，业务/编排逻辑下沉服务层（Separation of Concerns）。
 using System.Threading.Tasks;
+using ClipboardExe.Controls;
 using ClipboardExe.Models;
 
 namespace ClipboardExe.Services;
