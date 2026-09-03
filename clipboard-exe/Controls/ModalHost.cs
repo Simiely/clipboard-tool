@@ -5,9 +5,10 @@
 //  - Attach(owner)：MainWindow 构造时绑定主窗口
 //  - Show(content)：清旧弹窗 → 包 ScrollViewer（限制最大尺寸避免超出屏幕）→ 居中于主窗口的非模态 Window；Close()：收 Window
 //  - Confirm(msg, onOk, ...) ：确认框（对齐 askConfirm）
-// 拖动：无边框窗口默认不可拖（WPF 无标题栏即无系统拖动）。按 SO 3274097 约束（仅左键按下时 DragMove，
-//  否则 InvalidOperationException），在内容区 MouseLeftButtonDown 挂起，命中交互控件（按钮/输入框/下拉/
-//  滚动条等）时不拖——拖动只作用于卡片空白/标题区。
+// 拖动：无边框窗口默认不可拖（WPF 无标题栏即无系统拖动）。方案 = PreviewMouseLeftButtonDown(隧道，
+//  Window 最先收到，子元素 Handled 无法吞噬) + 手动 Left/Top 跟随 + CaptureMouse —— 不依赖
+//  DragMove(透明窗口下曾实测无效)，纯坐标数学移动 100% 可控。命中交互控件（按钮/输入框/下拉/滚动条等）
+//  时不拖——拖动只作用于卡片空白/标题区；标题行已配 Cursor=SizeAll 提示可拖。
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -22,6 +23,8 @@ public static class ModalHost
     private static Window? _current;
     private static bool _closing;   // 防 Deactivated 重入 Close 触发 VerifyNotClosing（窗口关闭中再次 Close 会抛异常）
     private static bool _armed;      // Show 后短暂屏蔽 Deactivated 自动关闭，避开打开瞬间的激活抖动（Owner 切换导致的瞬时 Deactivated）
+    private static Window? _dragWin; // 手动拖动状态（Preview 隧道 + Left/Top 跟随；null = 未在拖动）
+    private static Point _dragStart; // 按下瞬间鼠标相对窗口左上角的偏移（DIP，与 Left/Top 同坐标系）
 
     /// <summary>拖动排除的交互控件基类（点在这些控件上不拖动窗口：按钮/输入框/下拉/滚动条/列表项/滑块…）。</summary>
     private static readonly Type[] DragExcludeTypes =
@@ -100,16 +103,32 @@ public static class ModalHost
             if (SuppressDismiss || !_armed || _closing) return;
             if (_current == win) Close();
         };
-        // 拖动：无边框窗口无系统拖动（WindowStyle.None）。左键单点按在非交互控件区 → DragMove。
-        //   DragMove 仅限左键按下时调用（SO 3274097：否则抛 InvalidOperationException"Can only call
-        //   DragMove when the primary mouse button is down"）；双击/交互控件上不拖（按钮点击、文本框
-        //   选字、下拉选择、滚动条拖拽不受干扰）。
-        win.MouseLeftButtonDown += (_, e) =>
+        // 拖动：无边框窗口无系统拖动（WindowStyle.None）。Preview 隧道阶段拦截（子元素 Handled 无法吞噬），
+        //   命中交互控件（按钮/输入框/下拉/滚动条等）不拖 → return 放行，控件交互正常；
+        //   命中非交互区（标题行/卡片边缘/空白）→ CaptureMouse + MouseMove 手动改 Left/Top 跟随。
+        //   不用 DragMove()：透明窗(AllowsTransparency)下曾实测无法拖动；手动坐标移动无系统模式依赖，必然生效。
+        win.PreviewMouseLeftButtonDown += (_, e) =>
         {
             if (e.ChangedButton != MouseButton.Left || e.ClickCount != 1) return;
             if (IsInteractiveHit(e.OriginalSource)) return;
-            try { win.DragMove(); }
-            catch (InvalidOperationException) { /* 竞态：非左键按下状态，忽略 */ }
+            _dragWin = win;
+            _dragStart = e.GetPosition(win); // 鼠标相对窗口左上（DIP）
+            win.CaptureMouse();              // 捕获后移出窗口仍持续收到 MouseMove
+            e.Handled = true;                // 本区域无交互语义（标题/留白），阻断后续冒泡，防重复处理
+        };
+        win.PreviewMouseMove += (_, e) =>
+        {
+            if (_dragWin != win) return;
+            var p = e.GetPosition(null);     // 屏幕坐标（DIP，虚拟屏空间）
+            win.Left = p.X - _dragStart.X;
+            win.Top = p.Y - _dragStart.Y;
+        };
+        win.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            if (_dragWin != win) return;
+            _dragWin = null;
+            win.ReleaseMouseCapture();
+            e.Handled = true;
         };
         win.Show();
     }
@@ -136,6 +155,7 @@ public static class ModalHost
         if (w == null || _closing) return;       // 已无弹窗 / 正在关闭中：不重入，避免 VerifyNotClosing
         _closing = true;                          // 标记关闭中（关闭过程 WmActivate 重入 Deactivated 时不再重复 Close）
         _current = null;
+        if (_dragWin == w) _dragWin = null;       // 拖动中窗口被关：清拖动状态（鼠标捕获随窗口关闭自动释放）
         try { w.Close(); }
         finally { _closing = false; }
     }

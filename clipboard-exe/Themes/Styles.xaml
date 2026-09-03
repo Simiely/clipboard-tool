@@ -690,9 +690,10 @@
         </Setter>
     </Style>
 
-    <!-- 弹窗标题行（图标 + 标题 + 右侧徽章） -->
+    <!-- 弹窗标题行（图标 + 标题 + 右侧徽章）；Cursor=SizeAll：整行是可拖拽手柄（无边框窗由 ModalHost 手动拖动） -->
     <Style x:Key="ModalHead" TargetType="DockPanel">
         <Setter Property="Margin" Value="0,0,0,14"/>
+        <Setter Property="Cursor" Value="SizeAll"/>
     </Style>
 
     <!-- 弹窗操作行（.paste-actions：等宽按钮） -->
