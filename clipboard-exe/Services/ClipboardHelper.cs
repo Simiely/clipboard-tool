@@ -10,6 +10,7 @@
 //   （剪贴板工具需要：复制后即使本程序关闭也应可粘贴）。兜底仍尝试 WPF 路径（极少数 WinForms.Clipboard 不可用环境）。
 // 注：浏览器端无此问题（navigator.clipboard 走系统服务），桌面端必须处理。
 using System;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -71,6 +72,99 @@ public static class ClipboardHelper
     /// <summary>复制任意 DataObject（富文本 CopyRich 传入的 HTML+Text 包）。</summary>
     public static void SetDataObject(DataObject data)
         => SetViaWinForms(ToWinForms(data), copy: true);
+
+    // ---- 读取：纯图片剪贴板识别（截图 / 复制图片：剪贴板含图片格式但无文本） ----
+    // 对齐 Web paste ②「图片/文件优先」；但必须排除「富文本复制」——Word/网页带格式复制时剪贴板
+    // 常同时携带 CF_BITMAP/CF_DIB 位图预览（渲染选区用），若见位图就当图片，会把文本误存成一张图。
+    // 故判定 = 有可解码图片格式 && 无文本格式。Win+Shift+S 截图、右键复制图片（Chrome PNG/DIB）、
+    // 微信/QQ 复制图片均满足；纯文本 / 富文本复制不满足。
+    private static readonly string[] ImageFormats = { DataFormats.Bitmap, DataFormats.Dib, "PNG", "DeviceIndependentBitmap", "image/png" };
+
+    private static bool HasTextFormat(IDataObject d)
+    {
+        foreach (var f in new[] { DataFormats.UnicodeText, DataFormats.Text, DataFormats.OemText })
+        {
+            try { if (d.GetDataPresent(f, false)) return true; }
+            catch { /* 某些格式 GetDataPresent 抛异常则跳过 */ }
+        }
+        return false;
+    }
+
+    private static bool HasImageFormat(IDataObject d)
+    {
+        foreach (var f in ImageFormats)
+        {
+            try { if (d.GetDataPresent(f, false)) return true; }
+            catch { /* 同上 */ }
+        }
+        try { if (Clipboard.ContainsImage()) return true; }
+        catch { /* 剪贴板被占用则按无图处理 */ }
+        return false;
+    }
+
+    /// <summary>判定剪贴板内容是否为纯图片（有图片格式且无文本）。任意 IDataObject 均可（弹窗 Pasting 事件传入）。
+    /// 失败/被占用一律 false（宁可漏弹也不误劫持富文本）。</summary>
+    public static bool IsImageOnly(IDataObject? d)
+    {
+        if (d == null) return false;
+        try { return !HasTextFormat(d) && HasImageFormat(d); }
+        catch { return false; }
+    }
+
+    /// <summary>系统剪贴板当前是否为纯图片。</summary>
+    public static bool IsImageOnlyClipboard()
+    {
+        try { return IsImageOnly(Clipboard.GetDataObject()); }
+        catch { return false; }
+    }
+
+    /// <summary>纯图片剪贴板 → PNG 字节（对齐 Web blobToPng canvas.toBlob('image/png')）。非纯图片返回 null。
+    /// 供 watcher 弹窗自动收图 / 弹窗内 Ctrl+V 拦截共用。可传 Pasting 事件的 DataObject（默认读系统剪贴板）。</summary>
+    public static byte[]? ReadImageOnlyAsPng(IDataObject? d = null)
+    {
+        try
+        {
+            d ??= Clipboard.GetDataObject();
+            if (!IsImageOnly(d)) return null;
+            var bmp = GetBitmapFrom(d);
+            return bmp == null ? null : EncodePng(bmp);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>从 IDataObject 取 BitmapSource（Bitmap/Dib/PNG 均可）。</summary>
+    private static BitmapSource? GetBitmapFrom(IDataObject d)
+    {
+        try
+        {
+            foreach (var f in ImageFormats)
+            {
+                try
+                {
+                    if (d.GetDataPresent(f, true) && d.GetData(f, true) is BitmapSource bmp) return bmp;
+                }
+                catch { /* 该格式无法转换则试下一个 */ }
+            }
+        }
+        catch { }
+        try { return Clipboard.GetImage(); } // 兜底：WPF 自动转换 Dib→Bitmap
+        catch { return null; }
+    }
+
+    /// <summary>BitmapSource → PNG 字节（先走 BitmapImage 再编码，保证跨 DPI/格式一致）。</summary>
+    public static byte[]? EncodePng(BitmapSource? bmp)
+    {
+        if (bmp == null) return null;
+        try
+        {
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bmp));
+            using var ms = new MemoryStream();
+            encoder.Save(ms);
+            return ms.ToArray();
+        }
+        catch { return null; }
+    }
 
     // ---- 核心：WinForms.Clipboard（自带重试，绕开 WPF Flush） ----
     private static void SetViaWinForms(SWF.DataObject data, bool copy)

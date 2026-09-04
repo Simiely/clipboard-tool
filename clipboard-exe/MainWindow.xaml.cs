@@ -110,7 +110,9 @@ public partial class MainWindow : Window
         string text;
         try { text = (Clipboard.GetText() ?? "").Trim(); }
         catch { return; }
-        if (text.Length == 0) return;
+        // 纯图片剪贴板（截图 Win+Shift+S / 右键复制图片 / 微信QQ复制图片：无文本但有 Bitmap/DIB/PNG）
+        // 也应弹存卡窗——此前只认文本，图片复制永远走不到 OpenPasteDialog（图片识别断点①）。
+        if (text.Length == 0 && !ClipboardHelper.IsImageOnlyClipboard()) return;
         if (!TryTakeClipboardSeq()) return; // 剪贴板未再变化（激活/事件/反复切回窗口都在这里收敛）
         // 去重预查统一收敛到 OpenPasteDialog：剪贴板文本已存在 → 只弹编辑窗；否则开存卡窗（autoFill）
         OpenPasteDialog();

@@ -86,6 +86,14 @@ public partial class PasteDialog : UserControl
                 UpdateBadge();
                 ToastService.Flash("已填入剪贴板内容");
             }
+            // 纯图片剪贴板（截图 Win+Shift+S / 右键复制图片 / 微信QQ复制图片：无文本但有 Bitmap/DIB/PNG）
+            // → 打开即自动接收成图片 chip——此前只认文本，图片复制打开弹窗后是空窗（图片识别断点②）。
+            // 文本优先级不变：已有文本（富文本复制）不抢，仍可手动 Ctrl+V 覆盖。
+            else if (ClipboardHelper.IsImageOnlyClipboard())
+            {
+                var png = ClipboardHelper.ReadImageOnlyAsPng();
+                if (png != null) PickBytes(png, "clipboard-image.png", "image/png");
+            }
         }
         catch { /* 剪贴板不可读则留空 */ }
         UpdateBadge();
@@ -237,15 +245,14 @@ public partial class PasteDialog : UserControl
     private void OnPasting(object sender, DataObjectPastingEventArgs e)
     {
         var data = e.DataObject;
-        // M3b-2b：剪贴板截图（Bitmap）→ 转 PNG 字节 → 走 PickBytes（对齐 Web paste ②图片优先）
-        if (data.GetDataPresent(DataFormats.Bitmap))
+        // M3b-2b：纯图片剪贴板（截图/复制图片，有图且无文本）→ 转 PNG 字节 → 走 PickBytes。
+        //   判定用 IsImageOnly（而不是 GetDataPresent(Bitmap)）：富文本复制（Word/网页）常带 CF_BITMAP/
+        //   DIB 位图预览 + 文本，若见位图就当图片会把文本误存成图（对齐 Web paste ②图片优先 + 防误伤）。
+        if (ClipboardHelper.IsImageOnly(data))
         {
             e.CancelCommand();
-            if (data.GetData(DataFormats.Bitmap) is System.Windows.Media.Imaging.BitmapSource bmp)
-            {
-                var bytes = EncodePng(bmp);
-                if (bytes != null) PickBytes(bytes, "paste-image.png", "image/png");
-            }
+            var bytes = ClipboardHelper.ReadImageOnlyAsPng(data);
+            if (bytes != null) PickBytes(bytes, "clipboard-image.png", "image/png");
             return;
         }
         // 文件粘贴：FileDrop → PickFile（对齐 Web paste ②文件优先 + preventDefault）
@@ -272,24 +279,10 @@ public partial class PasteDialog : UserControl
         }
         else if (e.Data.GetDataPresent(DataFormats.Bitmap) && e.Data.GetData(DataFormats.Bitmap) is System.Windows.Media.Imaging.BitmapSource bmp)
         {
-            var bytes = EncodePng(bmp);
+            var bytes = ClipboardHelper.EncodePng(bmp);
             if (bytes != null) PickBytes(bytes, "paste-image.png", "image/png");
         }
         e.Handled = true;
-    }
-
-    /// <summary>M3b-2b：BitmapSource → PNG 字节（剪贴板/拖放截图 → 实体存储）。对齐 Web blobToPng canvas.toBlob("image/png")。</summary>
-    private static byte[]? EncodePng(System.Windows.Media.Imaging.BitmapSource bmp)
-    {
-        try
-        {
-            var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(bmp));
-            using var ms = new MemoryStream();
-            encoder.Save(ms);
-            return ms.ToArray();
-        }
-        catch { return null; }
     }
 
     private void PickFileBtn_Click(object sender, RoutedEventArgs e)
@@ -312,7 +305,21 @@ public partial class PasteDialog : UserControl
 
     private void Input_KeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
+        var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        // Ctrl+V 纯图片兜底：剪贴板只有图片无文本时，TextBox 粘贴命令 CanPaste=false → DataObject.Pasting
+        // 事件不触发（OnPasting 收不到，图片识别断点③）→ 在 PreviewKeyDown 层直接读图收下。
+        //   有文本时不抢（富文本复制按文本走，用户可按 Ctrl 粘贴文本）；FileDrop 仍走 OnPasting。
+        if (ctrl && e.Key == Key.V)
+        {
+            var png = ClipboardHelper.ReadImageOnlyAsPng();
+            if (png != null)
+            {
+                e.Handled = true; // 吞掉本次粘贴，避免 TextBox 对无文本剪贴板无操作后事件继续冒泡
+                PickBytes(png, "clipboard-image.png", "image/png");
+                return;
+            }
+        }
+        if (e.Key == Key.Enter && ctrl)
         {
             e.Handled = true;
             Save();
