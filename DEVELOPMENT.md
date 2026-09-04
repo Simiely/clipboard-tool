@@ -46,7 +46,7 @@ server.mjs (入口薄层:静态服务 + 路由分发 + 过期清扫 60s + 自动
 ## exe 桌面版（clipboard-exe/，WPF 重写）
 
 > 第四交付形态，C# WPF net9.0-windows 原生重写（**非壳方案、非旧 WinForms 路线**——旧路线已废弃不参考）。
-> 方案全文见 `docs/exe-wpf-plan.md`；状态：M1 骨架完成（2026-08-31），M2 数据层进行中。
+> 方案全文见 `docs/exe-wpf-plan.md`；状态：**M1 骨架 → M5c 全部完成**（2026-09-04，M5b 同步引擎 + M5c 配置 UI/定时同步 已通过 mock WebDAV 端到端验收：上传→合并→恢复→文件实体 + UI 刷新全链路），`--selftest` 223 断言全过；里程碑明细与 E2E 验收记录见 `docs/exe-wpf-plan.md` 里程碑表格。
 
 - **还原铁律**：规则类逻辑（sortClips / rollToArchive / isExpired / resolveExpire / cleanUrl / mergeSnapshots / 墓碑）与 Web 版逐字一致，**唯一新增功能 = 置顶按钮**；数据 JSON 与 Web 版互导。改 Web 版排序/合并/清理规则时必须同步改 clipboard-exe，反之亦然。
 - **发布**：框架依赖单文件（~1-3MB），需 .NET 9 Desktop Runtime（用户确认装运行库是小问题）；不采用 NativeAOT（WPF 数据绑定与裁剪兼容差）。

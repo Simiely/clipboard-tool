@@ -53,7 +53,7 @@
 | `.rich-split` | 富文本左右分栏（虚线金边） |
 | `.ops .b` | 26px 图标钮（RadiusIcon 8 + inset） |
 
-### 层4 · 弹窗（M4 接入时建 `ModalBase`）
+### 层4 · 弹窗（已落地：ModalHost 静态宿主 + 五个 Dialog）
 
 | Web 类 | 关键效果 |
 |---|---|
@@ -69,5 +69,6 @@
 
 ## 当前状态
 
-- ✅ M1 已落地：令牌（Colors：颜色/圆角 6 级/半透明金/开关阴影）、按钮家族（BtnBase/Primary/Ghost/GhostSm/Danger，active=translateY(1px) 对齐 Web）、StoreBtn、BtnPin、SearchBox（内容入圆角 Border + ClipToBounds）、TagChip（on/off 态）、Badge 家族（ContentControl 封装 + Link/File/Text/Exp 变体）、OptSwitch（新拟态开关：内凹轨道+凸起滑块+选中金晕）、Typetab/TtBtn、NeuBorder（双投影）、ScrollBar。
-- ⏳ M2/M3/M4 按本表补齐：FileChip、PasteBadge/PasteClear、CardControl（含 rich-split）、ModalBase。
+- ✅ **M1→M5c 全部落地**（2026-09-04）：令牌（Colors：颜色/圆角 6 级/半透明金/开关阴影）、按钮家族（BtnBase/Primary/Ghost/GhostSm/Danger，active=translateY(1px) 对齐 Web）、StoreBtn、BtnPin、SearchBox（内容入圆角 Border + ClipToBounds）、TagChip（on/off 态）、Badge 家族（ContentControl 封装 + Link/File/Text/Exp 变体）、OptSwitch（新拟态开关：内凹轨道+凸起滑块+选中金晕）、Typetab/TtBtn、NeuBorder（双投影）、ScrollBar。
+- ✅ 表内控件均已按实际形态落地（命名差异说明）：FileChip/PasteBadge/PasteClear 内联于 `Controls/PasteDialog.xaml`；卡片 = `Controls/CardView.xaml`（含 rich-split 富文本分栏、文件/图片卡体、批量勾选框）；弹窗 = `Controls/ModalHost.cs` 静态宿主（唯一拖动实现点：HTCAPTION 系统级）+ `PasteDialog`/`EditDialog`/`DataDialog`/`JsonDialog`/`TagPicker` 五个 Dialog（无独立 ModalBase 类，`ModalCard` 样式承载卡片外观）。
+- 🔎 本表是「Web 类 → WPF 资源」映射索引，新增效果时仍按下方流程四步走，完成后更新本表。
