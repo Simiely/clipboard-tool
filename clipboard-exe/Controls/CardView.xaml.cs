@@ -47,7 +47,7 @@ public partial class CardView : UserControl
     /// <summary>富文本分栏右栏：复制带格式（对齐 Web makeRichSplit 右 half：copyRich(html, content)）。</summary>
     public event Action<ClipItem, double, double>? CopyRichRequested;
 
-    /// <summary>批量模式：进入/退出时由 MainWindow 设置；控制 .sel-chk 覆盖层显隐与单击行为。</summary>
+    /// <summary>批量模式：进入/退出时由 MainWindow 设置；控制右上 ✕→勾选框原位替换与单击整卡切换选择。</summary>
     public bool BatchMode { get; set; }
     private bool _selected;
     /// <summary>批量模式下单击整卡切换选择时触发（传出条目 id）。</summary>
@@ -104,10 +104,9 @@ public partial class CardView : UserControl
         if (c.ExpireAt.HasValue) StatusPanel.Children.Add(MakeSt("⏳ " + Format.ExpLabel(c.ExpireAt), "StatusStExp"));
         if (c.Archived) StatusPanel.Children.Add(MakeSt("归档", "StatusStArch"));
 
-        // —— row1 右上：归档卡 ↺ 恢复 + ✕ 删除；非归档卡仅 ✕ 删除（对齐 Web .ops.top） ——
-        TopOpsPanel.Children.Clear();
-        if (c.Archived) TopOpsPanel.Children.Add(MakeOpBtn("↺", "恢复到活跃区", del: false, () => RestoreRequested?.Invoke(c)));
-        TopOpsPanel.Children.Add(MakeOpBtn("✕", "删除", del: true, () => DeleteRequested?.Invoke(c)));
+        // —— row1 右上：归档卡 ↺ 恢复 + ✕ 删除；非归档卡仅 ✕ 删除（对齐 Web .ops.top）
+        //    批量模式：BuildTopOps 把 ✕ 原位替换为 26×26 勾选框（同几何同 Margin → 布局零变化） ——
+        BuildTopOps();
 
         // —— body：类型专属内容区（图片→imgwrap / 文件→图标卡 / 链接→URL+按钮 / 文本→摘要） ——
         if (isImage)
@@ -152,7 +151,7 @@ public partial class CardView : UserControl
         OpsPanel.Visibility = OpsPanel.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    // ---- 批量选择（M3b-3b：BatchMode 下整卡单击切换选择 + .sel-chk 覆盖层 + 选中金描边） ----
+    // ---- 批量选择（M3b-3b：BatchMode 下整卡单击切换选择 + 右上 ✕→勾选框原位替换 + 选中金描边） ----
 
     /// <summary>进入/退出批量模式（MainWindow 调用）。退出时清除选中态。</summary>
     public void SetBatchMode(bool on)
@@ -172,16 +171,12 @@ public partial class CardView : UserControl
     private void RefreshBatchVisual()
     {
         bool show = BatchMode;
-        SelChk.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        // 批量模式右上区域清空给 SelChk 让位：隐藏 ✕(TopOpsPanel)/状态徽章(StatusPanel ★置顶⏳过期归档)，
-        // Title 加 30px 右边距（SelChk 22 + 间距 8）避免标题文字延伸到勾选框下面——对齐 Web "sel-chk 替换 ✕" 语义
-        TopOpsPanel.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
-        StatusPanel.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
-        TitleText.Margin = show ? new Thickness(0, 0, 30, 0) : new Thickness(0);
-        bool sel = BatchMode && _selected;
-        SelChk.Background = sel ? (Brush)FindResource("AccentBrush") : Brushes.Transparent;
-        SelChk.BorderBrush = sel ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("MutedBrush");
-        SelChkMark.Visibility = sel ? Visibility.Visible : Visibility.Collapsed;
+        // 批量模式视觉 = 仅把右上 ✕ 原位替换成 26×26 勾选框（用户拍板：多选框占删除按钮位）：
+        //   StatusPanel(★置顶/⏳过期/归档徽章)/标题/Row0 行高全部保持 → 消除旧实现"隐藏徽章 + 标题让位 30px"
+        //   导致的 Row0 行高收缩、卡片内容压缩上移（用户反馈）。布局普通/批量零差异。
+        BuildTopOps();
+        UpdateSelChkVisual();
+        bool sel = show && _selected;
         // 选中金描边：仅当选中且非 pinned 时强制本地值；其余清除本地值交还 hover/pin 触发控制（避免覆盖 hover 金环）
         if (CardBorder.Tag?.ToString() == "pin")
             CardBorder.ClearValue(Border.BorderBrushProperty);
@@ -189,6 +184,51 @@ public partial class CardView : UserControl
             CardBorder.BorderBrush = (Brush)FindResource("AccentBrush");
         else
             CardBorder.ClearValue(Border.BorderBrushProperty);
+    }
+
+    /// <summary>右上操作区（普通模式：↺恢复/✕删除；批量模式：✕ 原位换勾选框——同 26×26/同 Margin(0,0,5,0)，状态徽章与标题不动）。</summary>
+    private Button? _selChkBtn;
+
+    private void BuildTopOps()
+    {
+        var c = _clip;
+        TopOpsPanel.Children.Clear();
+        _selChkBtn = null;
+        if (c == null) return;
+        if (BatchMode)
+        {
+            _selChkBtn = MakeSelChk();
+            TopOpsPanel.Children.Add(_selChkBtn);
+        }
+        else
+        {
+            if (c.Archived) TopOpsPanel.Children.Add(MakeOpBtn("↺", "恢复到活跃区", del: false, () => RestoreRequested?.Invoke(c)));
+            TopOpsPanel.Children.Add(MakeOpBtn("✕", "删除", del: true, () => DeleteRequested?.Invoke(c)));
+        }
+    }
+
+    private Button MakeSelChk()
+    {
+        var b = new Button
+        {
+            Style = (Style)FindResource("SelChkBtn"),
+            Margin = new Thickness(0, 0, 5, 0), // 与 MakeOpBtn 的 ✕ 间距一致（原位替换，横向布局不动）
+            ToolTip = "选择（点击卡片任意处亦可切换）",
+        };
+        b.Click += (_, _) => { if (_clip != null) SelectionToggled?.Invoke(_clip.Id); };
+        return b;
+    }
+
+    /// <summary>勾选框选中态：未选 Transparent+Muted 描边 / 选中 Accent 金底 + ✓ 深字（对齐 Web sel-chk 选中视觉）。</summary>
+    private void UpdateSelChkVisual()
+    {
+        if (_selChkBtn == null) return;
+        bool sel = BatchMode && _selected;
+        _selChkBtn.Background = sel ? (Brush)FindResource("AccentBrush") : Brushes.Transparent;
+        _selChkBtn.BorderBrush = sel ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("MutedBrush");
+        _selChkBtn.Content = sel
+            ? new TextBlock { Text = "✓", FontSize = 14, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("AccentTextBrush") }
+            : null;
     }
 
     // ---- body 构建 ----

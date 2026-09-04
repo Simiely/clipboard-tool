@@ -172,7 +172,7 @@ public partial class MainWindow : Window
         foreach (var c in clips)
         {
             var card = MakeCard(c);
-            card.BatchMode = _batchMode; // 批量模式：卡片显示 .sel-chk 覆盖层 + 单击切换选择
+            card.BatchMode = _batchMode; // 批量模式：右上 ✕ 原位替换勾选框 + 单击整卡切换选择
             card.SetSelected(_batchMode && _batchSel.Contains(c.Id)); // 重建后恢复选中态
             card.SelectionToggled += OnCardSelectionToggled;
             _cards[c.Id] = card;

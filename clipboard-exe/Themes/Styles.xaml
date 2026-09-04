@@ -872,6 +872,34 @@
         </Style.Triggers>
     </Style>
 
+    <!-- 批量模式勾选框（✕ 原位替换：26x26 与 OpsIconBtn 同几何同 Margin → StatusSt/标题/行高不变,卡片布局零位移。
+         未选：Transparent+Muted 1.5 描边 / hover：金描边+金 16% 底 / 选中：Accent 金底 + ✓ 深字——视觉状态由 CardView 代码驱动） -->
+    <Style x:Key="SelChkBtn" TargetType="Button">
+        <Setter Property="Width" Value="26"/>
+        <Setter Property="Height" Value="26"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="{StaticResource MutedBrush}"/>
+        <Setter Property="BorderThickness" Value="1.5"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource RadiusIcon}" ClipToBounds="True">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="bd" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            <Setter TargetName="bd" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- meta 区 #tag 小胶囊（点击过滤）
          ⚠️ 不用 RadiusPill(99): 16px 高元素 + Pill 在 WPF clamp 到 h/2 ≈ 8 后呈"叶子/梭形"。改用 RadiusSt=6 与 StatusSt/Badge 徽章家族视觉统一 -->
     <Style x:Key="MetaTag" TargetType="Button">

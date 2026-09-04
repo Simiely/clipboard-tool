@@ -4,6 +4,7 @@
        - 统一等高 190px，elev 底 + r-lg（18）+ raised 阴影，hover → elev-hi 底 + 金色 .28 描边
        - pinned → amber .65 描边（GoldRingStrong，优先于 hover）
        - row1：类型徽章（.badge elev 底彩字）/ 标题（13.5 单行省略）/ 状态徽章（★置顶·⏳过期·归档）/ 右上 ✕ 删除
+         （批量模式：✕ 原位替换为 26×26 勾选框，StatusSt/标题/行高不动 → 布局零位移）
        - body：文本=.pv 内嵌滚动摘要；链接=砖红 URL + ↗ 打开链接金色主按钮（M3a 仅此两种）
        - foot：meta（复制 N 次 / #tag 过滤 / 时间）+ ops（☆置顶 ✎编辑 {}JSON）
      事件（→ MainWindow 编排）：CopyBumped / Edit / TogglePin / Delete / OpenJson / OpenLink / TagFilter -->
@@ -69,21 +70,6 @@
                             HorizontalAlignment="Right" VerticalAlignment="Center"/>
             </DockPanel>
 
-            <!-- 批量模式勾选覆盖层（.sel-chk：右上角；仅 BatchMode 时显示，点击整卡切换选择）
-                 Web 版 sel-chk 在左上,但 WPF Row1 左上是 TypeBadge 会叠加遮挡文字;改右上=对齐 Web"sel-chk 替换 ✕"的语义,
-                 配合 RefreshBatchVisual 同步隐藏 TopOpsPanel/StatusPanel + Title 加 30px 右边距让位,右上区域彻底清空 -->
-            <Border x:Name="SelChk" Grid.RowSpan="3"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,9,9,0" Width="22" Height="22"
-                    CornerRadius="7"
-                    Background="Transparent"
-                    BorderBrush="{StaticResource MutedBrush}" BorderThickness="1.5"
-                    Visibility="Collapsed" Panel.ZIndex="10">
-                <TextBlock x:Name="SelChkMark" Text="✓" FontSize="13" FontWeight="Bold"
-                           Foreground="{StaticResource AccentTextBrush}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Visibility="Collapsed"/>
-            </Border>
         </Grid>
     </Border>
 </UserControl>
