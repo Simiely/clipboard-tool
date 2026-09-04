@@ -63,6 +63,7 @@ public static class WebDavSync
             LastSyncAt = old?.LastSyncAt ?? 0,
             LastSyncError = old?.LastSyncError ?? "",
             AccountName = old?.AccountName ?? "default",
+            DisplayName = old?.DisplayName ?? "",
             PendingNameMigrations = old?.PendingNameMigrations ?? new List<string>(),
         };
         if (string.IsNullOrEmpty(cfg.Url)) throw new WebDavException(400, "WebDAV 服务器地址不能为空");

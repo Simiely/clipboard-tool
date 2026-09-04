@@ -59,6 +59,7 @@ public partial class MainWindow : Window
 
         // M5c：启动定时自动同步（1 分钟轮询，到点才跑；编排逻辑在 SyncController；接线见 MainWindow.SyncOps.InitAutoSync）
         _sync = new SyncController(_storage, _fileStore, App.DataDir);
+        _sync.ConfigChanged += RefreshAccountBadge; // 配置变化（首次绑定/切账号/同步后）→ 刷新顶栏账号徽章
         InitAutoSync();
 
         // 弹窗宿主 + Toast 初始化（独立顶层 Window，可超出主窗口边界）
@@ -80,6 +81,7 @@ public partial class MainWindow : Window
         _activationTimer.Tick += ActivationTimer_Tick;
 
         ApplyTopBarState(); // 顶栏初始折叠态（默认收起省空间；置顶钮已在工具条常驻，不受影响）
+        RefreshAccountBadge(); // 启动即按是否已绑定账号刷新徽章（纯本地=「本地」，已同步=远端账号昵称）
 
         Loaded += (_, _) => RefreshWall();
     }
@@ -516,6 +518,33 @@ public partial class MainWindow : Window
         TopExpandBtn.ToolTip = _headerExpanded
             ? "收起顶栏，卡片墙上移多出空间"
             : "展开管理区（数据管理 / 退出 / 本地状态）";
+    }
+
+    /// <summary>顶栏状态徽章显示优先级：账号昵称(DisplayName)非空 → 昵称；否则账号名(AccountName)非空 → 账号名；否则「本地」。
+    /// 由 SyncController.ConfigChanged 订阅 + 启动时刷新；改昵称/切账号/同步后采纳远端昵称都会走到。</summary>
+    private void RefreshAccountBadge()
+    {
+        if (AccountBadge == null) return;
+        var cfg = _sync.Config;
+        var nick = cfg?.DisplayName?.Trim();
+        var acct = cfg?.AccountName?.Trim();
+        if (!string.IsNullOrEmpty(nick))
+        {
+            AccountBadge.Text = nick;
+            AccountBadge.ToolTip = string.IsNullOrEmpty(acct)
+                ? $"账号昵称：{nick}"
+                : $"账号昵称：{nick}（账号 {acct}） · {cfg!.Url}";
+        }
+        else if (!string.IsNullOrEmpty(acct))
+        {
+            AccountBadge.Text = acct;
+            AccountBadge.ToolTip = $"已同步账号「{acct}」 · {cfg!.Url}（未设昵称，点数据管理可设置）";
+        }
+        else
+        {
+            AccountBadge.Text = "本地";
+            AccountBadge.ToolTip = "本地数据（未绑定远端账号）";
+        }
     }
 
 

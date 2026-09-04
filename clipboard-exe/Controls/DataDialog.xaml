@@ -56,6 +56,11 @@
                                    VerticalAlignment="Center" Text="信息仅保存于本地"/>
                     </DockPanel>
 
+                    <TextBlock Text="账号昵称（可选）" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,0,0,4"/>
+                    <TextBox x:Name="NickBox" Style="{StaticResource EditInput}" Margin="0,0,0,4"/>
+                    <TextBlock x:Name="NickHint" Foreground="{StaticResource DimBrush}" FontSize="11" Margin="0,0,0,10"
+                               Text="同步后其它设备可见；留空则显示账号名"/>
+
                     <TextBlock Text="服务器地址" Foreground="{StaticResource MutedBrush}" FontSize="12" Margin="0,0,0,4"/>
                     <TextBox x:Name="UrlBox" Style="{StaticResource EditInput}" Margin="0,0,0,10"/>
 

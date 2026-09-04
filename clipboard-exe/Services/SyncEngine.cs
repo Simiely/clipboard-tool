@@ -50,6 +50,14 @@ public static class SyncEngine
             // ① 拉远端快照（桌面无旧格式 userId 路径 / 无改名迁移，仅需当前账号名快照）
             var remoteSnap = await WebDavClient.FetchRemoteSnapshot(cfg, curUrl);
 
+            // ①b 昵称采纳：本地尚未设昵称（首次换机/从未改过）但远端快照带 nickname → 采纳为本地昵称并落库
+            // （本地权威：已有昵称则保留本地，避免远端旧值覆盖新改）
+            if (!string.IsNullOrWhiteSpace(remoteSnap?.Nickname) && string.IsNullOrWhiteSpace(cfg.DisplayName))
+            {
+                cfg.DisplayName = remoteSnap.Nickname.Trim();
+                WebDavSync.SaveConfig(dataDir, cfg);
+            }
+
             // ② 本地快照 = 活跃区 ∪ 归档区（归档条目带 archived 标记，对齐 runSync 的 localClips 组装）
             var active = storage.LoadClips();
             var archived = storage.LoadArchive().Select(c => { c.Archived = true; return c; }).ToList();
@@ -79,6 +87,7 @@ public static class SyncEngine
                     App = "clipboard",
                     Version = 1,
                     SyncedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+                    Nickname = cfg.DisplayName ?? "", // v0.7.x：昵称随快照上传，同账号其它设备下拉可见
                     Clips = merged.Clips,
                     Tombstones = merged.Tombstones,
                 });

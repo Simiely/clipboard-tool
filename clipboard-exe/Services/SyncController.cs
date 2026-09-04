@@ -1,6 +1,7 @@
 // Services/SyncController.cs - WebDAV 同步编排控制器（M5c 抽离：把同步状态/自动同步从 MainWindow 下沉到服务层）
 // 职责：持有同步配置 + 定时自动同步 tick（仅调用 SyncEngine/WebDavSync，不碰 UI——对话框由 MainWindow 打开）。
 // 对齐审计建议：UI 层只编排，业务/编排逻辑下沉服务层（Separation of Concerns）。
+using System;
 using System.Threading.Tasks;
 using ClipboardExe.Controls;
 using ClipboardExe.Models;
@@ -13,8 +14,23 @@ public sealed class SyncController
     private readonly FileStore _fileStore;
     private readonly string _dataDir;
 
-    /// <summary>当前同步配置（null = 未配置）。配置变更（保存/同步成功）后由 MainWindow 回写刷新。</summary>
-    public SyncConfig? Config { get; private set; }
+    private SyncConfig? _config;
+
+    /// <summary>当前同步配置（null = 未配置）。配置变更（保存/同步成功/定时刷新）后触发 ConfigChanged，
+    /// 由订阅方（MainWindow：刷新顶栏账号徽章）响应。服务层自身不碰 UI，仅发通知。</summary>
+    public SyncConfig? Config
+    {
+        get => _config;
+        private set
+        {
+            if (ReferenceEquals(_config, value)) return;
+            _config = value;
+            ConfigChanged?.Invoke();
+        }
+    }
+
+    /// <summary>配置变化通知（切账号/首次绑定/同步后重载均触发）。UI 订阅方须在 UI 线程响应（触发点都在 UI 上下文）。</summary>
+    public event Action? ConfigChanged;
 
     public SyncController(Storage storage, FileStore fileStore, string dataDir)
     {

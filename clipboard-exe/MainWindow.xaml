@@ -44,7 +44,7 @@
                             <Ellipse Width="10" Height="10" Margin="0,0,8,0"
                                      VerticalAlignment="Center"
                                      Fill="{StaticResource AccentBrush}"/>
-                            <TextBlock Text="本地" Foreground="{StaticResource MutedBrush}" FontSize="13"
+                            <TextBlock x:Name="AccountBadge" Text="本地" Foreground="{StaticResource MutedBrush}" FontSize="13"
                                        VerticalAlignment="Center"
                                        Margin="0,0,14,0"/>
                             <Button Style="{StaticResource BtnGhostSm}" Content="◐"

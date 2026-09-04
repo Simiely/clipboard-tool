@@ -9,7 +9,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Clipboard</AssemblyName>
     <RootNamespace>ClipboardExe</RootNamespace>
-    <Version>0.7.0</Version>
+    <Version>0.7.1</Version>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
     <!-- WPF temp 项目 (ClipboardExe_*_wpftmp) 自动生成的 AssemblyInfo 与 SDK 默认 GenerateAssemblyInfo 冲突;
          关掉 SDK 自动生成,WPF temp 仍会自己生成它那份,主程序集 assembly attribute 由下面 ItemGroup 显式定义 -->

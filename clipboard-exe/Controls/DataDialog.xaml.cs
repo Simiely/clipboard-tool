@@ -38,6 +38,13 @@ public partial class DataDialog : UserControl
         IntervalBox.Text = (current != null && current.IntervalMin > 0 ? current.IntervalMin : WebDavSync.DefaultIntervalMin).ToString();
         _saved = current;
         PwdHint.Text = current != null ? "留空则沿用已保存密码" : "首次配置需填写密码";
+        // 账号昵称：仅已绑定账号（有配置且带账号名）可改；否则禁用并提示先绑定同步账号
+        NickBox.Text = current?.DisplayName ?? "";
+        var hasAcct = current != null && !string.IsNullOrWhiteSpace(current.AccountName);
+        NickBox.IsEnabled = hasAcct;
+        NickHint.Text = hasAcct
+            ? "同步后其它设备可见；留空则显示账号名"
+            : "先绑定同步账号（点同步从远端选一个）后，才能设置本账号昵称";
         if (current != null) ShowStatus(current);
     }
 
@@ -121,10 +128,12 @@ public partial class DataDialog : UserControl
         int.TryParse(IntervalBox.Text, out var iv);
         var url = string.IsNullOrWhiteSpace(UrlBox.Text) ? (_saved?.Url ?? WebDavSync.DefaultUrl) : UrlBox.Text.Trim();
         var user = string.IsNullOrWhiteSpace(UserBox.Text) ? (_saved?.User ?? "") : UserBox.Text.Trim();
-        return WebDavSync.ValidateAndBuild(
+        var cfg = WebDavSync.ValidateAndBuild(
             url, user, PwdBox.Password,
             SyncFilesChk.IsChecked == true, AutoSyncChk.IsChecked == true,
             iv > 0 ? iv : WebDavSync.DefaultIntervalMin, _saved);
+        cfg.DisplayName = NickBox.Text?.Trim() ?? ""; // 昵称以输入框为准（清空 = 清掉昵称，显示回账号名）
+        return cfg;
     }
 
     private async void TestSave_Click(object sender, RoutedEventArgs e)

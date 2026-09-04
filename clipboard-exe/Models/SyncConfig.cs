@@ -16,16 +16,21 @@ public sealed class SyncConfig
     [JsonPropertyName("lastSyncAt")] public long LastSyncAt { get; set; }
     [JsonPropertyName("lastSyncError")] public string LastSyncError { get; set; } = "";
     [JsonPropertyName("accountName")] public string AccountName { get; set; } = "default";
+    // v0.7.x：账号昵称（displayName，可随时改，随快照 nickname 同步到同账号其它设备，仅影响展示）
+    // 服务器为纯 WebDAV 盘（无用户库）时，昵称 = 快照顶层 nickname 字段 + 本地 SyncConfig 记忆；本地权威、上传写远端、首次换机采纳远端。
+    [JsonPropertyName("displayName")] public string DisplayName { get; set; } = "";
     [JsonPropertyName("pendingNameMigrations")]
     public List<string> PendingNameMigrations { get; set; } = new();
 }
 
-/// <summary>远端快照（对齐 webdav.js runSync 上传格式 {app,version,syncedAt,clips,tombstones}）。</summary>
+/// <summary>远端快照（对齐 webdav.js runSync 上传格式 {app,version,syncedAt,clips,tombstones}）。
+/// v0.7.x 追加可选 nickname：账号昵称（displayName）随快照在纯 WebDAV 盘上跨设备传播；无该字段 = 旧格式（用账号名兜底）。</summary>
 public sealed class Snapshot
 {
     [JsonPropertyName("app")] public string App { get; set; } = "clipboard";
     [JsonPropertyName("version")] public int Version { get; set; } = 1;
     [JsonPropertyName("syncedAt")] public long SyncedAt { get; set; }
+    [JsonPropertyName("nickname")] public string Nickname { get; set; } = "";
     [JsonPropertyName("clips")] public List<ClipItem> Clips { get; set; } = new();
     [JsonPropertyName("tombstones")] public List<Tombstone> Tombstones { get; set; } = new();
 }

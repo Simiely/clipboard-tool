@@ -1,5 +1,66 @@
 # CHANGELOG.md
 
+## v0.7.1 (2026-09-05) — exe 桌面版 + 本地服务版(bat) + 平台版 三形态统一发布（账号昵称随同步传播）
+
+> 本版是 exe 线首次带完整 WebDAV 同步生态的正式版本，并同步三端。账号「昵称」成为可同步、跨端一致的第一等概念。
+
+### ✨ 账号昵称随快照同步（三端统一）
+- **exe 桌面版**：快照顶层新增可选 `nickname` 字段承载昵称；数据管理新增「账号昵称」编辑（仅已绑定账号可用）；顶栏状态点按 **昵称 → 账号名 → 「本地」** 优先级显示。本地权威、上传带昵称、首次换机采纳远端。
+- **本地服务版(bat) / 平台版**（共用 server.mjs 一处代码）：`users.js` 新增 `getUserDisplayNameEx` / `adoptRemoteNickname`；`webdav.js runSync` 上传快照带该用户昵称、拉取时本地未自定义昵称则采纳远端（`displayName ≠ accountName` 才算自定义，规避 createUser 默认写死 displayName 的坑）。与 exe 语义双向收敛。
+- 三者连同一块 WebDAV 盘、同一账号时，任一端改昵称 → 同步 → 他端采纳一致。
+
+### 🎨 exe 桌面体验
+- **顶栏折叠**：折叠时整条顶栏 Collapsed 收起（仅留工具栏展开按钮 ⌄），不再占细条空间
+- **托盘右键菜单**：WinForms ContextMenuStrip 固定暗色（`Services/TrayDarkMenu.cs`，ToolStripProfessionalRenderer，对齐 Win11 深色观感）
+- **标签栏溢出**：TagBar 包进横向 ScrollViewer（滚轮/触控平移），不再与右下角操作按钮互相遮挡
+
+### 🔄 exe WebDAV 同步体验
+- **首次同步选远端账号**：本地无绑定账号时点击同步 → 弹窗枚举远端 `clipboard-<账号名>.json`（PROPFIND depth:1）→ 单选拉回，免登录式手填
+- **同步后顶栏显示远端账号身份**（绑定后不再停留「本地」）
+- 批量删除确认提示「N 条被过滤隐藏仍会删除」；批量打标弹窗加橙色警告
+
+### 🐛 exe 修复
+- ToolTip 全局 CornerRadius 由 RadiusPill(短文案呈叶子形) 改为固定 6 + ClipToBounds
+- 走查批：折叠退出按钮定位 / 移除冗余 x:Name / 批量隐藏选中提示
+
+> 详细开发记录见下方各「开发线」小节。安装与运行要求同 v0.7.0（exe 需 .NET 9 Desktop Runtime x64；bat/platform 双击 start-server.cmd 或平台托管）。
+
+## Web 服务端(bat 本地服务版 / 平台版共用 server.mjs)：同步带昵称适配 (2026-09-04, 开发线, 未发版)
+
+### ✨ 快照 `nickname` 字段双向传播（对齐 exe 端昵称语义）
+- **背景**：exe 端已把昵称存进快照 `nickname` + 本地记忆。bat 版/平台版跑同一套 `server.mjs`（users.js/webdav.js），用户有 displayName(昵称)，但同步上传快照时**未带昵称** → 与 exe 连同一盘时昵称无法互通。本次补齐两端一致。
+- ✅ **改动**（一处代码，bat+平台两版同时生效）：
+  - `lib/core/users.js`：加 `getUserDisplayNameEx(userId)`（返回 `{hasExplicit, displayName}`）与 `adoptRemoteNickname(userId, nick)`。
+  - **hasExplicit 判定 = displayName ≠ accountName**（不是看字段是否存在！createUser 默认把 displayName=账号名写入，故"有键"≠"自定义"；旧数据仅 name 的 fallback 也满足相等=未自定义）。
+  - `adoptRemoteNickname`：仅当 displayName==accountName（未自定义昵称）时采纳远端 nickname 写入；撞其它用户同名则放弃不抛错。
+  - `lib/core/webdav.js runSync`：上传快照 `...(hasExplicit ? { nickname: displayName } : {})`（未自定义不带字段）；拉取后若未自定义则采纳远端 nickname（当前名快照优先），采纳成功后刷新 hasExplicit 使本轮上传即带。
+- **与 exe 语义对齐**：本地权威（已自定义昵称 → 不被远端覆盖）→ 上传带自己的昵称；未自定义 → 采纳远端 → 上传补带。两端双向收敛。
+- 验证：`--input-type=module` 集成脚本 5/5（无昵称上传无 nickname / 带昵称上传有 / 无昵称采纳到 users / 采纳后上传补带 / 已自定义不被覆盖）；既有 `scripts/test-webdav-sync.mjs` **19 通过 0 失败**（零回归）。
+
+## exe 版：账号昵称（数据管理可改 · 随快照同步 · 顶栏显示昵称） (2026-09-04, 开发线, 未发版)
+
+### ✨ 昵称承载：快照顶层 `nickname` 字段（纯 WebDAV 盘无用户库的现实方案）
+- **背景**：用户要顶栏显示「昵称」而非「账号名」。确认 exe 连的 192.168.2.1:6086 是**纯 WebDAV 盘**（无本项目用户库/API），昵称无处可读 → 只能作为一份数据存在盘上。方案定为**快照顶层可选 `nickname` 字段**：昵称 = 该账号快照的一个附加字段 + 本地 SyncConfig 记忆，本地权威、上传写远端、首次换机采纳远端。
+- ✅ **改动**：
+  - `Models/SyncConfig.cs`：`Snapshot` 加 `Nickname`；`SyncConfig` 加 `DisplayName`（均向后兼容，旧数据无此字段）。
+  - `Services/SyncEngine.cs`：①b 拉取后「本地未设昵称但远端带 nickname → 采纳写 cfg + SaveConfig」；上传快照时 `Nickname = cfg.DisplayName`。
+  - `Services/WebDavSync.cs` `ValidateAndBuild`：透传 `DisplayName`（old?.DisplayName）。
+  - `Controls/DataDialog.xaml(.cs)`：WebDAV 区加「账号昵称」输入框——仅已绑定账号可用（无账号禁用并提示先绑定）；保存配置/立即同步时把框值写入 displayName（清空 = 清掉昵称显示回账号名）。
+  - `MainWindow.xaml.cs` `RefreshAccountBadge`：显示优先级 = 昵称(DisplayName) → 账号名(AccountName) → 「本地」。
+- **多端一致性**：同账号任一 exe 改昵称 → 同步上传 nickname → 其它用同账号的设备拉取时（本地无昵称）采纳 → 显示一致。本地已设昵称则保留本地（避免远端旧值覆盖新改）。
+- 构建 0 错误；`--selftest` ALL PASS。产物 23:28:24。真机验证：数据管理设昵称 → 同步 → 顶栏显示昵称；换机拉取看是否采纳。
+
+## exe 版：同步后顶栏显示远端账号昵称 (2026-09-04, 开发线, 未发版)
+
+### ✨ 顶栏状态点：纯本地 =「本地」/ 已绑定 =「账号昵称」
+- **背景**：顶栏右侧状态点写死「● 本地」，同步绑定远端账号后仍显示「本地」，与真实云端身份不符。用户期望同步成功后就显示该远端账号昵称。
+- ✅ **改动**：
+  - `MainWindow.xaml`：状态点 `<TextBlock Text="本地">` 加 `x:Name="AccountBadge"`。
+  - `Services/SyncController.cs`：`Config` 改私有 setter + backing field，配置变化(首次绑定/切账号/同步后重载)统一触发 `public event Action? ConfigChanged`（服务层不碰 UI，仅发通知）。
+  - `MainWindow.xaml.cs`：ctor 订阅 `_sync.ConfigChanged += RefreshAccountBadge` + 启动调一次；新增 `RefreshAccountBadge()`——`Config==null` 或无账号名 → 徽章「本地」(ToolTip「本地数据(未绑定远端账号)」)；已绑定 → 徽章显示 `AccountName`(ToolTip「已同步账号「xx」· url」)。
+- **覆盖路径**：启动(若已绑定即显示昵称) / 工具栏同步成功 / SyncPickerDialog 首次选号成功 / 自动同步成功 / DataDialog 保存配置 —— 均经 `ConfigChanged` 收敛到同一刷新点。
+- 构建 0 错误；`--selftest` ALL PASS(清残留临时目录后，偶发归档目录污染非代码问题)。产物 22:49:07。真机验证需先同步绑定账号看顶栏文字变化。
+
 ## exe 版：标签栏溢出防遮挡 + 首次同步选远端账号 (2026-09-04, 开发线, 未发版)
 
 ### 🐛 多标签时右下角操作组被遮挡
