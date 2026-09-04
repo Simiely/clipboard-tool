@@ -33,7 +33,7 @@ public partial class MainWindow
         RefreshWall(); // 重建以应用 BatchMode 覆盖层 + 恢复选中态
     }
 
-    private void EditBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(true);
+    private void EditBtn_Click(object sender, RoutedEventArgs e) => SetBatchMode(!_batchMode); // toggle：首次进入批量,再次点击退出(用户期望)
 
     /// <summary>数据管理弹窗：本地备份（导入/导出/清空）+ WebDAV 同步设置（同步配置入口在此，工具栏「同步」只负责同步）。</summary>
     private void DataBtn_Click(object sender, RoutedEventArgs e)

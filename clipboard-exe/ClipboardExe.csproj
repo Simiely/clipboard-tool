@@ -31,4 +31,23 @@
     <ApplicationDefinition Remove="tools/**" />
   </ItemGroup>
 
+  <!-- ===== WpfVisualTreeMcp Inspector (self-hosted "AI 眼睛", DEBUG-only) =====
+       让外部 MCP/CLI 经 named pipe 读真实 visual tree / 属性 / 模拟点击,无需原生注入
+       (native bootstrapper 需 MSVC 编译,本机无 → self-hosted 是官方 Recommended 路径)。
+       仅当本机装有 WpfVisualTreeMcp 且 Debug 构建时启用(DefineConstants 符号随引用存在与否);
+       Release 发布产物纯净,不含任何 inspector 代码。 -->
+  <PropertyGroup Condition="'$(Configuration)'=='Debug' And Exists('C:\Users\2504\.workbuddy\tools\WpfVisualTreeMcp\inspector\WpfVisualTreeMcp.Inspector.dll')">
+    <DefineConstants>$(DefineConstants);WPFMCP_INSPECTOR</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(Configuration)'=='Debug' And Exists('C:\Users\2504\.workbuddy\tools\WpfVisualTreeMcp\inspector\WpfVisualTreeMcp.Inspector.dll')">
+    <Reference Include="WpfVisualTreeMcp.Inspector">
+      <HintPath>C:\Users\2504\.workbuddy\tools\WpfVisualTreeMcp\inspector\WpfVisualTreeMcp.Inspector.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="WpfVisualTreeMcp.Shared">
+      <HintPath>C:\Users\2504\.workbuddy\tools\WpfVisualTreeMcp\inspector\WpfVisualTreeMcp.Shared.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
 </Project>

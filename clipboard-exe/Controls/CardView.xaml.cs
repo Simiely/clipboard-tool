@@ -173,6 +173,11 @@ public partial class CardView : UserControl
     {
         bool show = BatchMode;
         SelChk.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        // 批量模式右上区域清空给 SelChk 让位：隐藏 ✕(TopOpsPanel)/状态徽章(StatusPanel ★置顶⏳过期归档)，
+        // Title 加 30px 右边距（SelChk 22 + 间距 8）避免标题文字延伸到勾选框下面——对齐 Web "sel-chk 替换 ✕" 语义
+        TopOpsPanel.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
+        StatusPanel.Visibility = show ? Visibility.Collapsed : Visibility.Visible;
+        TitleText.Margin = show ? new Thickness(0, 0, 30, 0) : new Thickness(0);
         bool sel = BatchMode && _selected;
         SelChk.Background = sel ? (Brush)FindResource("AccentBrush") : Brushes.Transparent;
         SelChk.BorderBrush = sel ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("MutedBrush");

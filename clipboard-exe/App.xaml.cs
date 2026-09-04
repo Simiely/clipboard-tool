@@ -73,6 +73,19 @@ public partial class App : Application
         AppLog.Init(DataDir, $"clipboard v{AppVersion} ({GitCommit})");
         AppLog.Info("startup");
 
+#if WPFMCP_INSPECTOR
+        // WpfVisualTreeMcp Inspector (self-hosted, DEBUG-only "AI 眼睛")：让外部 MCP/CLI
+        // 经 named pipe 读取真实 visual tree / 依赖属性 / 模拟点击，做自动视觉验收。
+        // 仅在装了 WpfVisualTreeMcp 的 Debug 构建启用（见 csproj），Release 产物不含此段；
+        // 初始化失败只记日志，绝不影响主流程（AI 眼睛是辅助，app 本身不依赖它）。
+        try
+        {
+            WpfVisualTreeMcp.Inspector.InspectorService.Initialize(Environment.ProcessId);
+            AppLog.Info("inspector-ready");
+        }
+        catch (Exception inspectorEx) { AppLog.Info("inspector-init-failed: " + inspectorEx); }
+#endif
+
         // 全局异常兜底：记录且不让进程退出（数据全落盘 JSON 原子写，进程存活比崩溃重启更友好）。
         // 必须设置 e.Handled=true，否则 WPF 仍视异常为未处理而关闭整个应用（"闪退"）。
         DispatcherUnhandledException += (_, ex) =>

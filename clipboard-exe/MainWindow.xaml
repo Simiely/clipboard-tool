@@ -12,9 +12,10 @@
         SizeChanged="Window_SizeChanged">
 
     <Grid>
-        <!-- 对齐 Web 版 .view：max-width 三档（<1280→960 / ≥1280→1440 / ≥1920→1920，SizeChanged 动态调整）+ padding 24 16 80
+        <!-- 对齐 Web 版 .view：max-width 三档（<1280→960 / ≥1280→1440 / ≥1920→1920，SizeChanged 动态调整）+ padding 24 16 16
+             BatchBar 在外层 Grid 底部悬浮（VerticalAlignment=Bottom），不占 ViewGrid 空间——非批量模式下原本预留的 80px 是浪费的固定遮挡
              Stretch：宽度=min(可用宽, MaxWidth)，随窗口拉宽；Center 会收缩到内容宽导致自适应失效 -->
-        <Grid Margin="16,24,16,80">
+        <Grid Margin="16,24,16,16">
             <Grid x:Name="ViewGrid" MaxWidth="960" HorizontalAlignment="Stretch">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
