@@ -61,8 +61,10 @@
             <!-- 行2：内容区（类型专属） -->
             <ContentControl x:Name="BodyHost" Grid.Row="1"/>
 
-            <!-- 行3：分隔线 + meta（复制次数/标签/时间）+ ops（☆置顶 ✎编辑 {}JSON） -->
-            <DockPanel Grid.Row="2" Margin="0,9,0,0" LastChildFill="True">
+            <!-- 行3：分隔线 + meta（复制次数/标签/时间）+ ops（☆置顶 ✎编辑 {}JSON）
+                 ⚠️ MinHeight=35(分隔线行 1+8margin=9 + OpsIconBtn 26px)：批量模式隐藏 OpsPanel 后行高保持 35px,
+                 否则塌到 ~15px → 卡高 190 固定下 Row1(body) 被拉高 = 卡片内容向下拉伸(用户反馈)。 -->
+            <DockPanel Grid.Row="2" Margin="0,9,0,0" LastChildFill="True" MinHeight="35">
                 <Border DockPanel.Dock="Top" Height="1" Background="{StaticResource BorderBrush}" Margin="0,0,0,8"/>
                 <StackPanel x:Name="MetaPanel" DockPanel.Dock="Left" Orientation="Horizontal"
                             VerticalAlignment="Center"/>

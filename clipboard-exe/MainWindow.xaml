@@ -128,11 +128,13 @@
             </Grid>
         </Grid>
 
-        <!-- 批量操作条（对齐 Web .batch-bar：底部悬浮 elev 卡，居中 max-width 与 ViewGrid 一致；仅批量模式可见） -->
-        <Grid x:Name="BatchBar" VerticalAlignment="Bottom" Margin="16,0,16,18"
+        <!-- 批量操作条（对齐 Web .batch-bar：底部悬浮 elev 卡，居中 max-width 与 ViewGrid 一致；仅批量模式可见）
+             贴边：底部 Margin 0（用户拍板——弹出的批量菜单与窗口下边缘完全贴边，无间距） -->
+        <Grid x:Name="BatchBar" VerticalAlignment="Bottom" Margin="16,0,16,0"
               MaxWidth="960" HorizontalAlignment="Stretch"
               Visibility="Collapsed">
-            <ctl:NeuBorder Kind="Raised" Background="{StaticResource ElevBrush}" CornerRadius="{StaticResource RadiusLg}">
+            <!-- 贴底菜单形态：上圆角(18=RadiusLg)下直角(0)——贴边后底部圆角会露出 BgBrush 底色小三角,故下角归零对齐窗口底 -->
+            <ctl:NeuBorder Kind="Raised" Background="{StaticResource ElevBrush}" CornerRadius="18,18,0,0">
                 <StackPanel Orientation="Horizontal" Margin="14,10" VerticalAlignment="Center">
                     <TextBlock x:Name="BatchCountText" Text="已选 0" Foreground="{StaticResource TextBrush}"
                                FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" Margin="6,0,18,0"/>

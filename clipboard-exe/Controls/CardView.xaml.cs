@@ -176,6 +176,9 @@ public partial class CardView : UserControl
         //   导致的 Row0 行高收缩、卡片内容压缩上移（用户反馈）。布局普通/批量零差异。
         BuildTopOps();
         UpdateSelChkVisual();
+        // 批量下隐藏 foot 单卡操作区（☆置顶/✎编辑/↓下载/{}JSON）：避免批量选择态误触弹编辑窗/下载/置顶
+        // （实测:批量下点 ✎ 会弹出 600×491 单卡编辑窗,与批量选择心智冲突）；meta 信息(复制次数/标签/时间)保留
+        OpsPanel.Visibility = show || OpsPanel.Children.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
         bool sel = show && _selected;
         // 选中金描边：仅当选中且非 pinned 时强制本地值；其余清除本地值交还 hover/pin 触发控制（避免覆盖 hover 金环）
         if (CardBorder.Tag?.ToString() == "pin")
