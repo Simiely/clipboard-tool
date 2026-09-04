@@ -1,4 +1,7 @@
 // Services/TrayIconService.cs - 托盘常驻（对齐 Web 版语义：点 X/最小化 → 托盘；托盘"退出"才真正退出）
+// 右键菜单：固定暗色渲染（对齐主窗口暗色 UI，见 TrayDarkMenu.cs）——默认 WinForms ContextMenuStrip
+// 是浅色白底，与主程序 #1A1A1A 暗色割裂；用自定义 ToolStripProfessionalRenderer 强制暗色，不随系统切。
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace ClipboardExe.Services;
@@ -17,10 +20,19 @@ public sealed class TrayIconService : IDisposable
             Icon = System.Drawing.SystemIcons.Application,
             Visible = true,
         };
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("显示主窗口", null, (_, _) => ShowMain());
+        var menu = new ContextMenuStrip
+        {
+            Renderer = new TrayDarkRenderer(),      // 固定暗色渲染（见 TrayDarkMenu.cs）
+            Font = new Font("Segoe UI", 9f),
+            ShowImageMargin = false,                // 无图标列：去掉左侧浅色渐变空列，整条菜单等宽
+        };
+        var showItem = new ToolStripMenuItem("显示主窗口");
+        showItem.Click += (_, _) => ShowMain();
+        menu.Items.Add(showItem);
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("退出", null, (_, _) => RequestExit());
+        var exitItem = new ToolStripMenuItem("退出");
+        exitItem.Click += (_, _) => RequestExit();
+        menu.Items.Add(exitItem);
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => ShowMain();
     }

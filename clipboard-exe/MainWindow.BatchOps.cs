@@ -90,7 +90,19 @@ public partial class MainWindow
         else
             picker.SetTags(new List<string>(), UnionTagsOfSelection());       // 已选条目标签并集
 
-        var wrap = new StackPanel { Children = { title, hint, picker } };
+        var wrap = new StackPanel { Children = { title, hint } };
+        // 勾选含被过滤隐藏项时提示：标签会作用到看不见的勾选，避免用户遗忘(S-13 "跨过滤保持")
+        var hidden = HiddenSelectionCount();
+        if (hidden > 0)
+            wrap.Children.Add(new TextBlock
+            {
+                Text = $"⚠ {_batchSel.Count} 条已选中，其中 {hidden} 条当前被搜索/标签过滤隐藏，仍会被操作",
+                FontSize = 12,
+                Foreground = new SolidColorBrush(Color.FromRgb(0xE0, 0x8A, 0x2E)),
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 12),
+            });
+        wrap.Children.Add(picker);
 
         var ok = new Button
         {
@@ -157,7 +169,10 @@ public partial class MainWindow
     private void BatchDelBtn_Click(object sender, RoutedEventArgs e)
     {
         if (_batchSel.Count == 0) { ToastService.Flash("请先选择内容"); return; }
-        ModalHost.Confirm($"删除选中的 {_batchSel.Count} 条内容？此操作不可撤销", () =>
+        var hidden = HiddenSelectionCount();
+        var msg = $"删除选中的 {_batchSel.Count} 条内容？此操作不可撤销";
+        if (hidden > 0) msg += $"\n⚠ 其中 {hidden} 条当前被搜索/标签过滤隐藏，仍会被删除";
+        ModalHost.Confirm(msg, () =>
         {
             try
             {
@@ -175,5 +190,18 @@ public partial class MainWindow
         BatchCountText.Text = $"已选 {_batchSel.Count}";
         bool allSel = _visibleIds.Count > 0 && _visibleIds.All(id => _batchSel.Contains(id));
         BatchSelectAllBtn.Content = allSel ? "取消全选" : "全选当前页";
+    }
+
+    /// <summary>当前勾选集中"被过滤隐藏"(不在当前可见集 _visibleIds)的条数。0=全部当前可见。
+    /// 勾选集按 id 跨过滤持久(S-13 对齐 Web "跨过滤保持")，用户可能遗忘被搜索/标签隐藏的勾选，
+    /// 批量删除/标签前据此提示，避免"看不见的勾选"被误操作。</summary>
+    private int HiddenSelectionCount()
+    {
+        if (_batchSel.Count == 0) return 0;
+        var vis = new HashSet<string>(_visibleIds, StringComparer.Ordinal);
+        int hidden = 0;
+        foreach (var id in _batchSel)
+            if (!vis.Contains(id)) hidden++;
+        return hidden;
     }
 }

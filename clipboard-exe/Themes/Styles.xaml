@@ -968,7 +968,9 @@
         <Setter Property="CornerRadius" Value="{StaticResource RadiusBtnSm}"/>
     </Style>
 
-    <!-- 全局 ToolTip：深色圆角胶囊（覆盖 WPF 系统默认的白底直角矩形——所有按钮 hover 都受惠） -->
+    <!-- 全局 ToolTip：深色圆角矩形（覆盖 WPF 系统默认的白底/直角/气泡阴影——所有按钮 hover 都受惠）
+         ⚠️ CornerRadius 用绝对 6,不用 RadiusPill=99:99 在 16~22px 高元素上 WPF clamp 到 h/2 ≈ 8-11,
+         视觉呈"叶子/梭形/长方形"——用户期望的是明显圆角矩形(6~8)。 -->
     <Style TargetType="ToolTip">
         <Setter Property="Background" Value="{StaticResource InsetBrush}"/>
         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -986,7 +988,8 @@
                     <Border Background="{TemplateBinding Background}"
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="{StaticResource RadiusPill}"
+                            CornerRadius="6"
+                            ClipToBounds="True"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter TextElement.Foreground="{TemplateBinding Foreground}"
                                           TextElement.FontSize="{TemplateBinding FontSize}"/>

@@ -1,5 +1,80 @@
 # CHANGELOG.md
 
+## exe 版：标签栏溢出防遮挡 + 首次同步选远端账号 (2026-09-04, 开发线, 未发版)
+
+### 🐛 多标签时右下角操作组被遮挡
+- **问题**：工具条行2 Grid `[类型tab | 标签栏 | 操作组]`，中间标签栏是横向 StackPanel 不裁剪，标签一多溢出绘制盖到最右操作组(置顶/编辑/归档/列数/同步)上。
+- ✅ **改动**（`MainWindow.xaml`）：标签栏外层包 `ScrollViewer`(`TagBarScroller`, Grid.Column=1, `HorizontalScrollBarVisibility=Auto`, 纵向 Disabled, `PanningMode=HorizontalOnly`)——标签少照常一行、标签多自行收缩横向滚动，操作组固定不再被盖。
+- `MainWindow.TagBarOps.cs`：新增 `TagBarScroller_MouseWheel`(鼠标滚轮转横向滚动，无溢出忽略) + `using System.Windows.Input`。
+- 复用项目既有 6px 细 ScrollBar 样式(溢出才出现)。构建 0 错误；selftest EXIT 0。真机造 15+ 标签验证。
+
+### ✨ 同步：本地无账号时「枚举远端账号 → 选一个拉回」（免登录式手填账号）
+- **背景**：本地仍为单账号；WebDAV 服务器 `workbuddy/剪贴板/` 下可共存多份 `clipboard-<账号名>.json`。原工具条「同步」在未配置时只提示去「数据管理」手填(像登录页)。用户希望点同步即可从远端已有账号里挑。
+- ✅ **改动**：
+  - `Services/WebDavClient.cs`：新增 `ListRemoteAccountNames(cfg)` —— `PROPFIND depth:1` 列目录，解析 `clipboard-<名>.json` 得账号名(去重保序)；服务器不支持 PROPFIND(405/501) 抛语义错误提示。辅助 `ParseClipboardHrefs`。
+  - 新增 `Controls/SyncPickerDialog.xaml(.cs)`：首次同步弹窗——填/复用服务器凭据 →「连接并列出账号」(先 TestConnection 再枚举)→ 单选远端账号 →「同步所选账号」。所选账号名作为本机 `accountName` 持久化(`SaveConfig`+`RunNow` 内写盘)，后续同步不再询问。
+  - `MainWindow.SyncOps.cs` `SyncBtn_Click`：本地无账号(`Config==null`)→ 打开 `SyncPickerDialog`；有账号 → 维持直接同步(现状不动)。
+- **语义**：首次本地空 + 选账号 → `RunSync` 合并结果即远端数据(`hadLocal=false` 不上传) =「拉回覆盖成该账号数据」；二次以后本地已绑定该账号走正常双向。本轮仅明文快照，加密账号未处理(用户已拍板后续)。
+- 构建 0 错误；`--selftest` EXIT 0。真机验证需真实 WebDAV 服务器(PROPFIND 支持)。
+
+## exe 版托盘右键菜单固定暗色 (2026-09-04, 开发线, 未发版)
+
+### 🎨 托盘右键菜单固定暗色（对齐主窗口暗色 UI / Win11 深色观感）
+
+- **问题**：托盘右键菜单用 WinForms `NotifyIcon.ContextMenuStrip`，其默认 Professional 渲染是浅色白底黑字，与主窗口固定暗色(#1A1A1A)界面割裂，深色观感差。
+- ✅ **改动**：
+  - 新增 `Services/TrayDarkMenu.cs`：`TrayDarkColorTable`(继承 `ProfessionalColorTable`) 对齐主窗暗色令牌(底 `Elev #1F1F1F` / 文字 `#DADADA` / 边框 `#3D3D3D` / hover 金 16% `#33C9A96E`)；`TrayDarkRenderer`(继承 `ToolStripProfessionalRenderer`) 兜底文字前景色(hover=白、禁用=Dim `#6E6E6E`) + 去默认浅描边改暗边框。
+  - `Services/TrayIconService.cs`：`ContextMenuStrip` 挂 `Renderer = new TrayDarkRenderer()`、`ShowImageMargin=false`(去掉左侧浅色空渐变列)、Segoe UI 9pt。
+- **决策**：用户拍板**固定暗色**(不随系统切)——与主窗口固定暗色 UI 一致。采用自定义 Renderer(非实验性 `SetColorMode` WFO5001、不影响 WPF 主程序)。
+- 构建 0 错误；`--selftest` EXIT 0；纯托盘菜单渲染层，不动业务。托盘菜单须真机右键验证视觉效果。
+
+## exe 版走查问题修复 (2026-09-04, 开发线, 未发版)
+
+### 🔧 走查问题清零（scenario-walkthrough v3 两轮 + 修复闭环）
+
+- **P-E2**：移除 `TopBar` 内 `TopBrand`/`TopRightOps` 两个不再被代码独立控制的冗余 `x:Name`（折叠态已改由父 `TopBar` Collapsed 统一控制），纯代码卫生，无行为变化。
+- **P-E3**：批量操作"看不见的勾选"提示（勾选集按 id 跨过滤持久，S-13 对齐 Web "跨过滤保持"）：
+  - 批量**删除**确认：当勾选含被过滤隐藏项时，文案追加 `\n⚠ 其中 M 条当前被搜索/标签过滤隐藏，仍会被删除`。
+  - 批量**标签**弹窗：打开时若有隐藏勾选，在标签选择区上方插一条橙色警告行 `⚠ N 条已选中，其中 M 条…仍会被操作`。
+  - 新增 `HiddenSelectionCount()`（BatchOps.cs）：统计勾选集中不在当前 `_visibleIds` 的条数。
+- **P-E1**（拍板）：折叠态"退出/数据管理"藏二级展开入口 → 用户确认**保持现状**（单机托盘工具以托盘退出为主，数据管理低频可展开）。
+- 构建 0 错误；`--selftest` EXIT 0 无回归；纯 UI + 提示文案层，不动批量/数据业务规则。
+
+## exe 版顶栏折叠优化 (2026-09-04, 开发线, 未发版)
+
+### ✨ 顶栏整体可折叠 + 置顶下沉（彻底节省卡片墙纵向空间）
+
+- **问题**：顶栏（📋剪贴板 + ●本地 + ◐/密码占位 + 数据管理 + 退出）常显占一行，窗口本就矮（MinHeight 480），挤占卡片墙可视区。首版"收成细条"后用户仍觉残留背景卡占空间 → 改为折叠时整条彻底消失。
+- ✅ **改动**（`MainWindow.xaml` + `MainWindow.xaml.cs`）：
+  - Row0 顶栏 `NeuBorder`(`TopBar`) **折叠时整条 `Collapsed`**（Row0 Auto 高度归 0，搜索/工具条整体上移，不留背景卡细条）；展开态恢复完整顶栏（标题 + 本地 + 数据管理 + 退出）。
+  - **展开钮 `TopExpandBtn` 从顶栏移出 → 工具条(Row1)行1搜索框左侧**小图标钮（BtnGhostSm、Padding 6,4、Content `⌄`/`⌃` 按态切）；行1 Grid 2 列改 3 列（Auto钮 | *搜索 | Auto存入）。折叠后它是唯一入口，ToolTip 说明。
+  - **置顶钮 `PinBtn` 下沉到工具条(Row1)行2操作组最左**（编辑前，`Margin 0,0,8,0`）——顶栏折叠后置顶仍需**常驻可点**。
+  - 折叠态默认**收起**（`_headerExpanded=false`，非持久化、重启回默认收起）。
+- **验收**：默认启动顶栏整体消失，仅搜索框左侧一个极小"⌄"图标钮；点"⌄"恢复完整顶栏（含数据管理/退出），点"⌃"再收起；📌 置顶在工具条行2常驻可点。
+- 构建 0 错误；`--selftest` 数据层 223 断言全绿零回归；纯 UI 布局层不动业务规则。
+
+## exe 版交互修复批 (2026-09-04, 开发线, 未发版)
+
+### 🐛 修复①：已有实例（尤其收进托盘/最小化）后再双击 exe 完全无反应
+
+- **问题**：程序已在跑，再双击启动 exe 无任何反应；尤其点 X / 最小化收进托盘（`Hide()`）后，主窗口不可见，双击毫无动静——用户误判"打不开/崩了"，且最小化后找不到窗口。
+- 🔍 **根因**（`App.xaml.cs`）：单实例已有实例分支用 `Process.MainWindowHandle` + `ShowWindowAsync(SW_RESTORE)`。主窗口经 `OnClosing` 收进托盘后是 `Hide()`（非销毁）→ WPF 顶层不可见时 `MainWindowHandle` 返回 **0** → 循环里 `if (h == IntPtr.Zero) continue` → 什么都不做即静默退出。plan §7 原设计是"PostMessage WM_SHOW_MAIN 唤醒"，实现却退化成依赖可见主窗口句柄，对托盘态失效。
+- ✅ **修复**：改用**命名 AutoReset `EventWaitHandle`**（`ClipboardTool_Wake_7e2c1a9f`）+ 第一实例后台线程 `while(WaitOne())` → `Dispatcher.BeginInvoke` 调 `MainWindow.WakeMainFromSecondInstance()`（`Show + Normal + Activate + SetForegroundWindow`，AttachThreadInput 绕过前台锁）。第二实例 `!createdNew` → `SignalExistingInstance()`（`OpenExisting().Set()`）后退出。不依赖窗口句柄 → 托盘态/最小化态都可靠唤醒；AutoReset+循环支持**多次双击多次唤起**。清理：`OnExit` 中断线程 + `Dispose` 事件。
+
+### 🐛 修复②：主窗口激活时存卡窗"闪没" / 激活后完全不弹（含一轮回归修正）
+
+- **问题**：主窗口在后台、剪贴板残留内容时点击主窗口激活 → 存卡窗飞快闪一下就消失，点不进存入/取消。
+- 🔍 **根因**：`MainWindow.OnActivated` **同步** `PromptFromActivation` → `ModalHost.Show(存卡)`。点击非活动窗口激活时，Win32 先送 `WM_MOUSEACTIVATE`(→`OnActivated` 弹窗 Show 抢激活)、**随后才投递 `WM_LBUTTONDOWN`** 到主窗口(落点不在弹窗上) → 焦点抢回主窗口 → 弹窗 `Deactivated`(旧 `_armed` 只在 Loaded 置 true，防不住 Loaded 后的紧接回落) → 立即 `Close()` = 一闪没。
+- ⚠️ **首轮错误修法（已废弃，勿复现）**：`OnActivated` 延迟 + "稳定期内收到主窗口 mouse/key/wheel 则放弃本次自动弹"。但 Win32 消息序决定**点击激活自带的 mouse-down 也必然取消** → 把最常用的"点击激活"一并杀死 → **激活后完全不弹**(用户实测回归)。
+- ✅ **正确修复**（`MainWindow.xaml.cs` + `Controls/ModalHost.cs`）：
+  - `MainWindow`：`OnActivated` → DispatcherTimer **延迟 200ms 再弹**，等点击的 down/up 排空、主窗口稳定激活后弹窗 Show 才能稳定持焦；**绝不因用户后续输入取消**。`ActivationTimer_Tick` 加 `IsActive && !ModalHost.IsOpen` 保护（此间切走则作罢）。
+  - `ModalHost`：打开后 `GuardWindow(450ms)` 内的 `Deactivated` 不立即关——走 `_closePending` + 160ms 延迟确认，期间 `win.Activated` 即取消；稳定失焦才关。兜底残余焦点竞争。
+- **三角验收目标**：点击主窗口激活 → 存卡窗**稳定出现可点**；Alt-Tab 切回 → 自动弹可点；点空白/其它程序 → 正常关弹窗。
+
+### ✅ 验证
+- Release 构建 **0 错误**（警告为既有 CA1416/CS8632 平台注解噪音，非新引入）；`--selftest` **ALL PASS**（数据层 223 断言零回归）；差分门禁 `npm run test:diff` **41 fixtures 全对拍一致**。改动均在 UI 交互/单实例层，不动业务规则，故数据层/差分测试全绿符合预期。
+- ⚠️ 两处均为 GUI 行为，自动化测试不覆盖真实交互，**需用户真机验收**后再发布：①托盘态再双击 exe 应唤起主窗口；②后台态点主窗口激活不应再闪存卡窗，Alt-Tab 切回自动弹仍正常可点。
+
 ## v0.6.18 (2026-09-02) — 平台版 / 本地服务版（bat）发布
 
 ### 修复：手动 Ctrl+V 打开存入弹窗时内容未自动填入

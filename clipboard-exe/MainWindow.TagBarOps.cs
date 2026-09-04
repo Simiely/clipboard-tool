@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Media;
 using ClipboardExe.Services;
 
@@ -35,6 +36,16 @@ public partial class MainWindow
         _typeFilter = rb.Tag as string ?? "all";
         if (_svc == null) return; // InitializeComponent 期间首个 RadioButton 初始 Checked（服务尚未装配）
         RefreshWall();
+    }
+
+    /// <summary>标签栏横向滚轮：鼠标滚轮（含 Shift）直接横向滚动标签栏；无溢出时不滚动。
+    /// ScrollViewer 默认滚轮只纵向，这里把垂直增量转成横向偏移，改善多标签浏览体验。</summary>
+    private void TagBarScroller_MouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (TagBarScroller == null || TagBarScroller.ScrollableWidth <= 0) return; // 无横向溢出，忽略
+        double step = e.Delta > 0 ? -48 : 48; // 每格滚 ~48px（与 chip 节奏相称）
+        TagBarScroller.ScrollToHorizontalOffset(TagBarScroller.HorizontalOffset + step);
+        e.Handled = true; // 阻断默认纵向滚动/冒泡
     }
 
     /// <summary>完整标签栏 chips（M3b-1：聚合全部条目标签去重 + 当前选中金底 + 点击 toggle 过滤）。

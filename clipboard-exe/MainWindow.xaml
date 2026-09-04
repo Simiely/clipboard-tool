@@ -23,23 +23,25 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <!-- 顶栏（对齐 .topbar：elev 底 + raised 阴影 + r-lg 圆角，padding 12 20） -->
-                <ctl:NeuBorder Grid.Row="0" Kind="Raised" Margin="0,0,0,14"
+                <!-- 顶栏（对齐 .topbar：elev 底 + raised 阴影 + r-lg 圆角；**整体可折叠**——折叠态整条 Collapsed，
+                     Row0 高度归 0，工具条/搜索整体上移，不留背景卡细条；展开钮(⌄ 展开管理)移到下方工具条行1
+                     搜索框左侧作一个小图标钮常驻，不占额外行高。置顶钮已下沉到工具条行2操作组，不随此栏隐藏）
+                     状态由 MainWindow.ToggleTopBar/ApplyTopBarState 切换。 -->
+                <ctl:NeuBorder x:Name="TopBar" Grid.Row="0" Kind="Raised" Margin="0,0,0,14"
                                Background="{StaticResource ElevBrush}"
                                CornerRadius="{StaticResource RadiusLg}">
-                    <DockPanel Margin="20,12">
-                        <TextBlock Text="📋" FontSize="22" VerticalAlignment="Center" Margin="0,0,14,0"/>
-                        <TextBlock Text="剪贴板" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                        <!-- who 区（对齐 .topbar .who：muted 13px；置顶为新增按钮）
-                             DockPanel.LastChildFill 默认 true 会把 who 拉伸填满剩余 + 内容从左排，
-                             导致 who 紧贴"剪贴板"无间距（与 Web h1{flex:1} 行为相反）。
-                             显式 Dock=Right + HorizontalAlignment=Right 强制靠右，对齐 Web flex 行为。-->
+                    <DockPanel x:Name="TopBarPanel" Margin="20,12">
+                        <!-- 标题区 -->
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="📋" FontSize="22" VerticalAlignment="Center" Margin="0,0,14,0"/>
+                            <TextBlock Text="剪贴板" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <!-- who/管理 区：本地状态 + 占位(◐/密码) + 数据管理 + 退出
+                             DockPanel.LastChildFill 默认 true 会把本组拉伸填满剩余 + 内容从左排，
+                             导致紧贴标题无间距；显式 Dock=Right + HorizontalAlignment=Right 强制靠右。 -->
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                                    HorizontalAlignment="Right" VerticalAlignment="Center">
-                            <ToggleButton x:Name="PinBtn" Style="{StaticResource BtnPin}"
-                                          Content="📌 置顶" ToolTip="窗口置顶（其他窗口之上）"
-                                          Click="PinBtn_Click"/>
-                            <Ellipse Width="10" Height="10" Margin="14,0,8,0"
+                                    HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
+                            <Ellipse Width="10" Height="10" Margin="0,0,8,0"
                                      VerticalAlignment="Center"
                                      Fill="{StaticResource AccentBrush}"/>
                             <TextBlock Text="本地" Foreground="{StaticResource MutedBrush}" FontSize="13"
@@ -62,16 +64,21 @@
                                Background="{StaticResource ElevBrush}"
                                CornerRadius="{StaticResource RadiusMd}">
                     <StackPanel Margin="14,12">
-                        <!-- 行1：搜索（pill 内嵌）+ 存入（金色 pill 右置） -->
+                        <!-- 行1：顶栏展开钮(小图标, 折叠顶栏时常驻入口) + 搜索（pill 内嵌）+ 存入（金色 pill 右置） -->
                         <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="SearchBox" Style="{StaticResource SearchBox}"
+                            <Button x:Name="TopExpandBtn" Style="{StaticResource BtnGhostSm}" Padding="6,4"
+                                    Content="⌄" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"
+                                    ToolTip="展开顶栏（数据管理 / 退出 / 本地状态）"
+                                    Click="ToggleTopBar_Click"/>
+                            <TextBox Grid.Column="1" x:Name="SearchBox" Style="{StaticResource SearchBox}"
                                      Tag="搜索内容 / 标题 / 标签…"
                                      TextChanged="Search_TextChanged"/>
-                            <Button Grid.Column="1" Style="{StaticResource StoreBtn}"
+                            <Button Grid.Column="2" Style="{StaticResource StoreBtn}"
                                     Content="＋ 存入" Margin="10,0,0,0"
                                     Click="StoreBtn_Click"
                                     ToolTip="存入内容 — 粘贴 / 拖文件 / Ctrl+V 后自动弹出"/>
@@ -95,11 +102,24 @@
                                                  GroupName="TypeFilter" Checked="TypeRadio_Checked"/>
                                 </StackPanel>
                             </Border>
-                            <!-- 标签栏（.tagbar：M3a 轻量版——"全部" + 当前过滤标签，点击清除；完整聚合 M3b） -->
-                            <StackPanel x:Name="TagBar" Grid.Column="1" Orientation="Horizontal"
-                                        Margin="12,0" VerticalAlignment="Center"/>
-                            <!-- 操作组（对齐 .tb .ops：编辑/归档/列数/同步） -->
+                            <!-- 标签栏（.tagbar：M3a 轻量版——"全部" + 当前过滤标签，点击清除；完整聚合 M3b）
+                                 多标签溢出防遮挡：外层包横向 ScrollViewer(TagBarScroller)，标签超宽时不再
+                                 溢出盖到右侧操作组，改显示项目自带 6px 细横向滚动条可滚动查看。
+                                 操作组(Col2 Auto)因此永不被标签遮挡。MouseWheel 支持滚轮直接横向滚。 -->
+                            <ScrollViewer x:Name="TagBarScroller" Grid.Column="1" Margin="12,0"
+                                          VerticalAlignment="Center"
+                                          HorizontalScrollBarVisibility="Auto"
+                                          VerticalScrollBarVisibility="Disabled"
+                                          HorizontalContentAlignment="Left"
+                                          PanningMode="HorizontalOnly"
+                                          MouseWheel="TagBarScroller_MouseWheel">
+                                <StackPanel x:Name="TagBar" Orientation="Horizontal"/>
+                            </ScrollViewer>
+                            <!-- 操作组（对齐 .tb .ops：编辑/归档/列数/同步；置顶钮 M1 常驻下沉至此——顶栏可折叠后置顶需常驻可点） -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <ToggleButton x:Name="PinBtn" Style="{StaticResource BtnPin}" Content="📌 置顶"
+                                              Margin="0,0,8,0" ToolTip="窗口置顶（其他窗口之上）"
+                                              Click="PinBtn_Click"/>
                                 <Button x:Name="EditBtn" Style="{StaticResource BtnGhostSm}" Content="编辑"
                                         Click="EditBtn_Click" ToolTip="进入批量编辑：勾选多条内容后批量加/减标签或删除"/>
                                 <Button x:Name="ArchBtn" Style="{StaticResource BtnGhostSm}"
@@ -109,7 +129,7 @@
                                         Click="ColsBtn_Click"
                                         ToolTip="点击循环切换列数：自动 → 1 → 2 → 3 → 4 → 自动（M3b-1 接入）"/>
                                 <Button x:Name="SyncBtn" Style="{StaticResource BtnGhostSm}" Content="同步"
-                                        Click="SyncBtn_Click" ToolTip="立即同步（配置在「数据管理」中）"/>
+                                        Click="SyncBtn_Click" ToolTip="同步到云端账号；未绑定账号时自动列出远端账号选择"/>
                             </StackPanel>
                         </Grid>
                     </StackPanel>

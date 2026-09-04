@@ -25,12 +25,15 @@ public partial class MainWindow
         _autoTimer.Start();
     }
 
-    /// <summary>工具栏「同步」按钮：用已保存配置立即同步；未配置则提示去「数据管理」设置（不打开配置 UI）。</summary>
+    /// <summary>工具栏「同步」按钮：本地已配账号 → 用已保存配置立即同步；
+    /// 本地无账号（从未配置）→ 打开「选远端账号」弹窗：连服务器列出远端账号，选一个拉回（不做登录式手填账号）。
+    /// 工具条行2操作组同步钮触发；DataDialog 内仍有完整配置/立即同步入口。</summary>
     private async void SyncBtn_Click(object sender, RoutedEventArgs e)
     {
         if (_sync.Config == null)
         {
-            ToastService.Error("尚未配置 WebDAV 同步，请到「数据管理」设置");
+            // 本地无账号：先枚举远端账号让用户挑（SyncPickerDialog 内部处理凭据/枚举/同步）
+            ModalHost.Show(new SyncPickerDialog(_sync, RefreshWall));
             return;
         }
         try

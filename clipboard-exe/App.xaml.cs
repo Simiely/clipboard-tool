@@ -30,8 +30,14 @@ public partial class App : Application
     public static string DataDir { get; private set; } = ".";
 
     private const string MutexName = "ClipboardTool_SingleInstance_7e2c1a9f";
+    // 唤醒信号（AutoReset 命名事件）：让第二实例通知"活着的第一实例"把主窗口恢复前置。
+    // 不能用 Mutex 传信号（Mutex 不可 WaitOne 于其他进程持有）；事件 + 线程循环 WaitOne 支持多次双击多次唤醒。
+    private const string WakeEventName = "ClipboardTool_Wake_7e2c1a9f";
     private Mutex? _mutex;
     private bool _mutexOwned;
+    private EventWaitHandle? _wakeEvent; // 第一实例持有：后台线程等待"第二实例"唤醒信号
+    private Thread? _wakeThread;
+    private MainWindow? _main;           // 供唤醒线程在 UI 线程恢复主窗口
     private TrayIconService? _tray;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -52,18 +58,43 @@ public partial class App : Application
             return;
         }
 
-        // 单实例：已有实例 → 把它的主窗口拉到前台后退出（不静默退出——静默会让用户
-        // 双击 exe 毫无反应，误判为"打不开/崩溃"。参考微软 Technet《Create a single
-        // instance desktop application》：遍历同名进程对 MainWindowHandle 做
-        // ShowWindowAsync(SW_RESTORE) + SetForegroundWindow）。
+        // 单实例：已有实例 → 通知它把主窗口恢复前置后退出（不静默退出——静默会让用户
+        // 双击 exe 毫无反应，误判为"打不开/崩溃"）。
+        // 唤醒用"命名 AutoReset 事件 + 第一实例后台线程 WaitOne"，而非遍历进程取
+        // MainWindowHandle + ShowWindowAsync：主窗口 Hide 进托盘（点 X/最小化→托盘）后
+        // MainWindowHandle 返回 0，外部 ShowWindowAsync 拿不到句柄 → 托盘态再双击无反应。
+        // 事件唤醒让第一实例自己 Show/Normal/Activate，托盘态与最小化态都可靠（对齐 plan §7 WM_SHOW_MAIN）。
         _mutex = new Mutex(true, MutexName, out var createdNew);
         if (!createdNew)
         {
-            ActivateExistingInstance();
+            SignalExistingInstance();
             Environment.Exit(0);
             return;
         }
         _mutexOwned = true;
+
+        // 第一实例：启动后台线程监听唤醒事件。AutoReset 保证每次 Set 只放行一次 →
+        // 循环 WaitOne 支持"多次双击、每次都唤起主窗口"。收到信号回到 UI 线程恢复主窗。
+        _wakeEvent = new EventWaitHandle(false, EventResetMode.AutoReset, WakeEventName);
+        _wakeThread = new Thread(() =>
+        {
+            while (_wakeEvent.WaitOne())
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    // 极早启动竞争：主窗尚未装配则稍后重试（正常装配在数毫秒内完成）。
+                    if (_main != null) { _main.WakeMainFromSecondInstance(); return; }
+                    var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+                    timer.Tick += (_, _) =>
+                    {
+                        timer.Stop();
+                        if (_main != null) _main.WakeMainFromSecondInstance();
+                    };
+                    timer.Start();
+                }));
+            }
+        }) { IsBackground = true };
+        _wakeThread.Start();
 
         // 数据目录：exe 同目录 data/（便携式，整个文件夹拷走即迁移）
         var exeDir = Path.GetDirectoryName(Environment.ProcessPath) ?? ".";
@@ -102,11 +133,10 @@ public partial class App : Application
         try
         {
             var settings = Settings.Load(DataDir);
-            MainWindow? main = null;
-            _tray = new TrayIconService("剪贴板", () => { main?.ReallyExit(); return true; });
-            main = new MainWindow(settings, _tray);
-            main.Closed += (_, _) => _tray?.Dispose();
-            main.Show();
+            _tray = new TrayIconService("剪贴板", () => { _main?.ReallyExit(); return true; });
+            _main = new MainWindow(settings, _tray);
+            _main.Closed += (_, _) => _tray?.Dispose();
+            _main.Show();
         }
         catch (Exception startupEx)
         {
@@ -127,6 +157,9 @@ public partial class App : Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        // 停唤醒线程 + 释放命名事件，避免本进程退出后内核对象残留被新进程误 Open
+        try { _wakeThread?.Interrupt(); } catch { /* 线程退出中断不影响主流程 */ }
+        try { _wakeEvent?.Dispose(); } catch { /* 释放失败不影响退出 */ }
         if (_mutexOwned)
         {
             try { _mutex?.ReleaseMutex(); } catch { /* 释放失败不影响退出 */ }
@@ -135,30 +168,17 @@ public partial class App : Application
     }
 
     [DllImport("user32.dll")]
-    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
-
-    [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
-    private const int SwRestore = 9;
-
-    /// <summary>已有实例在跑：把它的主窗口恢复并置前（若主窗收进托盘则无可见句柄，尽力而为）。</summary>
-    private static void ActivateExistingInstance()
+    /// <summary>第二实例：打开第一实例创建的唤醒事件并置位，让它自己恢复主窗口（随后本进程退出）。</summary>
+    private static void SignalExistingInstance()
     {
         try
         {
-            var me = Environment.ProcessId;
-            foreach (var p in Process.GetProcessesByName("Clipboard"))
-            {
-                if (p.Id == me) continue;
-                var h = p.MainWindowHandle;
-                if (h == IntPtr.Zero) continue; // 窗口已 Hide 到托盘，无法从外部 Show
-                ShowWindowAsync(h, SwRestore);
-                SetForegroundWindow(h);
-                break;
-            }
+            using var ev = EventWaitHandle.OpenExisting(WakeEventName);
+            ev.Set();
         }
-        catch { /* 激活失败不影响退出 */ }
+        catch (Exception ex) { AppLog.Info("wake-signal-failed: " + ex.Message); /* 第一实例未建/异常：忽略 */ }
     }
 
     private static string ReadVersion()

@@ -136,6 +136,69 @@ public static class WebDavClient
         }
     }
 
+    // ---------- 远端账号枚举（v0.7.x 本地单账号切换远端账号：PROPFIND 列目录找 clipboard-<账号名>.json） ----------
+
+    /// <summary>列出远端 workbuddy/剪贴板/ 下已存在的账号快照名（clipboard-&lt;名&gt;.json → 名）。
+    /// 返回远端真实存在的账号名集合（去重保序）；服务器不支持 PROPFIND(405/501) 时抛 WebDavException 提示。
+    /// 供「本地无账号首次同步 → 选远端账号拉回」使用。</summary>
+    public static async Task<List<string>> ListRemoteAccountNames(SyncConfig c)
+    {
+        var url = DataDirUrl(c);
+        var names = new List<string>();
+        using (var cts = new CancellationTokenSource(REQ_TIMEOUT_MS))
+        using (var req = new HttpRequestMessage(new HttpMethod("PROPFIND"), url))
+        {
+            req.Headers.Authorization =
+                new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes(c.User + ":" + c.Pass)));
+            req.Headers.Add("Depth", "1");
+            // 部分服务器需请求体；空体 + 标准 propfind 是普遍兼容做法
+            req.Content = new StringContent(
+                "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+                "<D:propfind xmlns:D=\"DAV:\"><D:prop><D:displayname/></D:prop></D:propfind>",
+                Encoding.UTF8, "application/xml");
+            try
+            {
+                using var resp = await Http.SendAsync(req, cts.Token);
+                var code = (int)resp.StatusCode;
+                if (code == 401 || code == 403)
+                    throw new WebDavException(401, "WebDAV 认证失败（检查用户名/密码）");
+                if (code == 405 || code == 501)
+                    throw new WebDavException(502, "该 WebDAV 服务器不支持列出账号（PROPFIND 不可用）");
+                if (code != 207 && code != 200)
+                    throw new WebDavException(502, "列出远端账号失败（HTTP " + code + "）");
+                var buf = await resp.Content.ReadAsByteArrayAsync();
+                ParseClipboardHrefs(Encoding.UTF8.GetString(buf), names);
+            }
+            catch (OperationCanceledException)
+            {
+                throw new WebDavException(502, "WebDAV 连接失败: 请求超时");
+            }
+            catch (Exception e) when (e is not WebDavException)
+            {
+                throw new WebDavException(502, "WebDAV 连接失败: " + e.Message);
+            }
+        }
+        return names;
+    }
+
+    /// <summary>从 PROPFIND 207 XML 中提取所有形如 clipboard-&lt;名&gt;.json 的 href，解码出账号名（去重保序）。</summary>
+    private static void ParseClipboardHrefs(string xml, List<string> into)
+    {
+        if (string.IsNullOrEmpty(xml)) return;
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var hrefPattern = new Regex("<[A-Za-z0-9_]*:?href>([^<]+)</", RegexOptions.Compiled);
+        foreach (System.Text.RegularExpressions.Match m in hrefPattern.Matches(xml))
+        {
+            var href = m.Groups[1].Value.Trim();
+            var idx = href.LastIndexOf("clipboard-", StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) continue;
+            var tail = href.Substring(idx + "clipboard-".Length);
+            if (!tail.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) continue;
+            var name = Uri.UnescapeDataString(tail.Substring(0, tail.Length - ".json".Length));
+            if (!string.IsNullOrEmpty(name) && seen.Add(name)) into.Add(name);
+        }
+    }
+
     /// <summary>上传快照（按 URL）。</summary>
     public static async Task UploadSnapshot(SyncConfig c, string url, Snapshot snap)
     {

@@ -24,6 +24,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Threading;
 
 namespace ClipboardExe.Controls;
 
@@ -33,6 +34,32 @@ public static class ModalHost
     private static Window? _current;
     private static bool _closing;   // 防 Deactivated 重入 Close 触发 VerifyNotClosing（窗口关闭中再次 Close 会抛异常）
     private static bool _armed;      // Show 后短暂屏蔽 Deactivated 自动关闭，避开打开瞬间的激活抖动（Owner 切换导致的瞬时 Deactivated）
+
+    // ---- 打开后"激活稳定保护期"：治愈"点击主窗口激活 → 存卡窗闪一下就没" ----
+    // 根因：点击后台主窗口激活 → OnActivated 立即弹存卡窗（win.Show 抢激活）→ 用户那一下点击落点仍在
+    // 主窗口 → 焦点又切回主窗口 → 弹窗 Deactivated → 自动 Close = 一闪即没，来不及点存入/取消。
+    // 关键在 _armed 只在 Loaded 就置 true，保护窗太短，防不住 Loaded 之后紧接的焦点回落。
+    // 修法：把保护从"仅 Loaded"扩展为"打开后 GuardWindowMs 内的 Deactivated 一律延迟确认"——
+    // 震荡期不立即关，给弹窗重新拿回焦点的机会；稳定失焦(用户真去点了别处)才关。
+    private static readonly TimeSpan GuardWindow = TimeSpan.FromMilliseconds(450);
+    private static readonly DispatcherTimer _closeGuard = new() { Interval = TimeSpan.FromMilliseconds(160) };
+    private static DateTime _openedAt;
+    private static bool _closePending;   // 震荡期标记一次延迟关闭，_closeGuard 到点若仍未重新激活才真正关
+
+    static ModalHost()
+    {
+        // 延迟确认到点：若期间未被重新激活(win.Activated 已取消 pending)，才真正关闭。
+        // 静态注册一次即可，避免 Show 多次重复订阅 Tick。
+        _closeGuard.Tick += (_, _) =>
+        {
+            _closeGuard.Stop();
+            if (_closePending)
+            {
+                _closePending = false;
+                Close();
+            }
+        };
+    }
 
     // ---- 系统级拖动（ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION）常量与 P/Invoke ----
     // WM_NCLBUTTONDOWN = 在非客户区按下左键；HTCAPTION = 命中区域视为标题栏 → 系统进入原生移动循环。
@@ -111,6 +138,9 @@ public static class ModalHost
         _current = win;
         _closing = false;
         _armed = false;
+        _openedAt = DateTime.UtcNow;
+        _closePending = false;
+        _closeGuard.Stop();
         win.Loaded += (_, _) =>
         {
             // 用真实渲染尺寸再夹一次，确保完整可见
@@ -121,10 +151,23 @@ public static class ModalHost
         // 非模态：主窗口保持可点击；失焦（点空白/主窗口/其它程序）即关闭。
         //  仅当本窗口仍是当前弹窗(_current==win)、已就绪(_armed)、非关闭中(_closing)、非子对话框期间(SuppressDismiss)才关，
         //  以防打开瞬间 Owner 切换产生的瞬时 Deactivated 把刚开的弹窗立刻关掉，以及关闭过程 WmActivate 重入导致 VerifyNotClosing 崩溃。
+        //  打开后 GuardWindow 内失焦 → 不立即关：走 _closePending + 延迟确认，弹窗重新激活(win.Activated)即取消，
+        //  治愈"点击主窗口激活 → 存卡窗闪一下就没"(见文件头注释)。
+        win.Activated += (_, _) => { _closePending = false; _closeGuard.Stop(); };
         win.Deactivated += (_, _) =>
         {
-            if (SuppressDismiss || !_armed || _closing) return;
-            if (_current == win) Close();
+            if (SuppressDismiss || _closing) return;
+            if (_current != win) return;
+            if (!_armed) return;
+            if ((DateTime.UtcNow - _openedAt) < GuardWindow)
+            {
+                // 仍在"激活稳定保护期"：本次失焦可能是点击主窗口激活的焦点震荡，延迟确认，给重新激活机会
+                _closePending = true;
+                _closeGuard.Stop();
+                _closeGuard.Start();
+                return;
+            }
+            Close();
         };
         // 拖动：无边框窗口无系统拖动（WindowStyle.None）。Preview 隧道阶段拦截（子元素 Handled 无法吞噬），
         //   命中交互控件（按钮/输入框/下拉/滚动条等）不拖 → return 放行，控件交互正常；
@@ -165,6 +208,8 @@ public static class ModalHost
         if (w == null || _closing) return;       // 已无弹窗 / 正在关闭中：不重入，避免 VerifyNotClosing
         _closing = true;                          // 标记关闭中（关闭过程 WmActivate 重入 Deactivated 时不再重复 Close）
         _current = null;
+        _closePending = false;                    // 清延迟关闭标记，防迟到的 _closeGuard Tick 误关新弹窗
+        _closeGuard.Stop();
         try { w.Close(); }
         finally { _closing = false; }
     }

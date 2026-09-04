@@ -33,6 +33,15 @@ public partial class MainWindow : Window
     private bool _reallyExit;
     private bool _everActivated;        // 首次激活（启动）不自动弹窗，仅后续切回才检测
     private uint? _lastHandledSeq;      // 已处理过的剪贴板序列号（激活/剪贴板事件共用；null = 尚未处理过任何内容）
+    // 激活后延迟弹窗：等"点击激活"那一记 mouse down/up 排空、窗口稳定激活后再弹，避免弹窗在
+    // Show 抢焦点后被紧接的鼠标落点抢回 → 闪没/点不到。注意：此延迟只"推迟弹"，绝不以用户后续输入取消
+    // （Win32：点击非活动窗口时 WM_MOUSEACTIVATE→OnActivated 在 WM_LBUTTONDOWN 之前投递，若见 mouse-down
+    // 就取消，会把最常用的"点击激活"一并取消 → 激活后完全不弹，是回归）。
+    private readonly DispatcherTimer _activationTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
+
+    // 顶栏折叠态：默认收起（折叠 = 只留右侧「⌄ 展开管理」细条，省卡片墙纵向空间；展开 = 显示数据管理/退出/本地等）。
+    // 置顶钮已下沉到工具条操作组常驻，不随顶栏隐藏。非持久化——重启回到默认收起。
+    private bool _headerExpanded;
 
     private const double Gap = 16; // .list gap:16px（卡片右/下外边距，MakeCard 使用）
 
@@ -66,6 +75,11 @@ public partial class MainWindow : Window
         UpdateColsBtnText();
         ArchBtn.Content = "归档·关";
         ArchBtn.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x84, 0x84, 0x84));
+
+        // 激活后延迟弹窗：Tick 由 OnActivated 触发(见 OnActivated 注释)；这里只注册一次。
+        _activationTimer.Tick += ActivationTimer_Tick;
+
+        ApplyTopBarState(); // 顶栏初始折叠态（默认收起省空间；置顶钮已在工具条常驻，不受影响）
 
         Loaded += (_, _) => RefreshWall();
     }
@@ -403,9 +417,23 @@ public partial class MainWindow : Window
         base.OnActivated(e);
         if (_watcher != null) _watcher.Paused = false; // 前台激活恢复捕获
         if (!_everActivated) { _everActivated = true; return; } // 首次启动不自动弹窗
-        PromptFromActivation(); // 切回窗口时：剪贴板有内容则弹存卡/编辑窗
+        // 切回窗口时：剪贴板有内容则弹存卡/编辑窗（对齐 Web 前台语义）。
+        // 延迟 200ms 再弹，等"点击激活"那一记 mouse down/up 排空、主窗口稳定激活，弹窗 Show 才能稳定持焦
+        // （若在 OnActivated 同步弹，弹窗 Show 抢激活后紧接的鼠标落点会把焦点抢回 → 弹窗 Deactivated → 闪没）。
+        // 注意：绝不能因为"随后收到用户输入"就取消本次延迟——Win32 点击非活动窗口时
+        // WM_MOUSEACTIVATE(→OnActivated) 在 WM_LBUTTONDOWN(→PreviewMouseDown) 之前投递，
+        // 若用 mouse-down 取消，会把最常用的"点击激活"一并取消 → 激活后完全不弹(回归)。
+        _activationTimer.Stop();
+        _activationTimer.Start();
     }
 
+    /// <summary>激活延迟到点：主窗口已稳定激活才弹；若此间又失活(用户切走)则本次作罢。</summary>
+    private void ActivationTimer_Tick(object? sender, EventArgs e)
+    {
+        _activationTimer.Stop();
+        if (_everActivated && IsActive && !ModalHost.IsOpen)
+            PromptFromActivation();
+    }
     protected override void OnDeactivated(EventArgs e)
     {
         base.OnDeactivated(e);
@@ -468,6 +496,29 @@ public partial class MainWindow : Window
 
     private void ExitBtn_Click(object sender, RoutedEventArgs e) => ReallyExit();
 
+    /// <summary>顶栏折叠钮：收起/展开整条顶栏（标题 + 本地 + 占位 + 数据管理 + 退出）。
+    /// 置顶钮(PinBtn)在工具条操作组常驻，不在此栏内、不随折叠隐藏。折叠 = 整条 TopBar Collapsed
+    /// (Row0 归 0)，搜索/工具条整体上移、彻底不留细条；展开 = 恢复完整顶栏。实现见 ApplyTopBarState。</summary>
+    private void ToggleTopBar_Click(object sender, RoutedEventArgs e)
+    {
+        _headerExpanded = !_headerExpanded;
+        ApplyTopBarState();
+    }
+
+    /// <summary>应用顶栏折叠/展开态到可视元素。
+    /// 折叠 = 整条 TopBar(Row0) Collapsed → 高度归 0，工具条/搜索整体上移，不留背景卡细条（彻底省空间）。
+    /// 展开钮 TopExpandBtn 在工具条行1搜索框左侧作小图标钮常驻（不随顶栏隐藏），Content 按态切 ⌄/⌃。</summary>
+    private void ApplyTopBarState()
+    {
+        if (TopBar == null) return; // InitializeComponent 前不会走（构造末尾才调）
+        TopBar.Visibility = _headerExpanded ? Visibility.Visible : Visibility.Collapsed;
+        TopExpandBtn.Content = _headerExpanded ? "⌃" : "⌄";
+        TopExpandBtn.ToolTip = _headerExpanded
+            ? "收起顶栏，卡片墙上移多出空间"
+            : "展开管理区（数据管理 / 退出 / 本地状态）";
+    }
+
+
     public void ReallyExit()
     {
         _reallyExit = true;
@@ -492,12 +543,42 @@ public partial class MainWindow : Window
         _watcher?.Dispose();
     }
 
-    private void ShowMainFromTray()
+    /// <summary>从托盘/第二实例唤起：显示并恢复前置。托盘菜单/托盘双击/第二实例唤醒共用。</summary>
+    public void ShowMainFromTray()
     {
         Show();
         WindowState = WindowState.Normal;
         Activate();
+        ForceForeground(); // 置前：绕过 Windows 前台锁，让窗口真正跳到最前（托盘/二次唤起常受前台限制）
     }
+
+    /// <summary>第二实例双击唤起入口（区别于托盘右键——同样显示+置前）。</summary>
+    public void WakeMainFromSecondInstance() => ShowMainFromTray();
+
+    /// <summary>可靠置前：先 attach 前台再 SetForegroundWindow（Windows 前台锁限制下也能抢到焦点）。</summary>
+    private void ForceForeground()
+    {
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                _ = AttachThreadInput(GetCurrentThreadId(), GetWindowThreadProcessId(hwnd, IntPtr.Zero), true);
+                SetForegroundWindow(hwnd);
+                _ = AttachThreadInput(GetCurrentThreadId(), GetWindowThreadProcessId(hwnd, IntPtr.Zero), false);
+            }
+        }
+        catch { /* 置前失败不致命：窗口至少已显示 */ }
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr lpdwProcessId);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [System.Runtime.InteropServices.DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
 
     // 同步逻辑已抽到 MainWindow.SyncOps.cs（partial class）
 }
