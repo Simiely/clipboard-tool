@@ -37,7 +37,11 @@ public partial class MainWindow
         {
             ToastService.Flash("同步中…");
             var r = await _sync.RunNow(_sync.Config);
-            if (r.Ok) ToastService.Flash($"同步完成 · 共 {r.Clips} 条");
+            if (r.Ok)
+            {
+                RefreshWall(); // 同步可能增/删/改本地条目 → 刷新卡片墙（本地为空恢复远端等场景）
+                ToastService.Flash($"同步完成 · 共 {r.Clips} 条");
+            }
             else ToastService.Error("同步失败：" + (r.Error ?? "未知错误"));
         }
         catch (Exception ex) { ToastService.Error("同步失败：" + ex.Message); }

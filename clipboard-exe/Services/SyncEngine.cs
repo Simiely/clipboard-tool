@@ -116,7 +116,7 @@ public static class SyncEngine
         {
             if (c.Type != "file" || string.IsNullOrEmpty(c.FileId)) continue;
             var ext = FileStore.ExtFor(c.FileMime, c.FileName);
-            var remote = fBase + c.FileId + ext;
+            var remote = fBase + c.FileId + "." + ext; // 对齐 Web extFor 返回带点 ".pdf"：ExtFor 不带点，此处补上，防远端名 fileId+"pdf" 畸形
             byte[]? local = null;
             try { local = fileStore.ReadAllBytes(c.FileId); } catch { local = null; }
             if (local != null)

@@ -157,6 +157,7 @@ public partial class DataDialog : UserControl
             if (r.Ok)
             {
                 _saved = cfg;
+                _onChanged(); // 同步可能增/删/改本地条目 → 刷新卡片墙（含归档→活跃恢复等场景）
                 ToastService.Flash($"同步完成 · 共 {r.Clips} 条");
                 if (_sync.Config != null) ShowStatus(_sync.Config);
             }
