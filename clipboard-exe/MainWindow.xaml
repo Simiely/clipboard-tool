@@ -51,6 +51,13 @@
                                     IsEnabled="False" ToolTip="无饱和度配色（V2 接入）"/>
                             <Button Style="{StaticResource BtnGhostSm}" Content="密码"
                                     IsEnabled="False" ToolTip="密码（单机版不启用）"/>
+                            <!-- 归档开关 + 列数（视图/显示类）随顶栏折叠——用户定稿：从工具条移入折叠区，展开顶栏才见 -->
+                            <Button x:Name="ArchBtn" Style="{StaticResource BtnGhostSm}"
+                                    Click="ArchBtn_Click"
+                                    ToolTip="显示/隐藏归档（点击切换）"/>
+                            <Button x:Name="ColsBtn" Style="{StaticResource BtnGhostSm}"
+                                    Click="ColsBtn_Click"
+                                    ToolTip="点击循环切换列数：自动 → 1 → 2 → 3 → 4 → 自动"/>
                             <Button x:Name="DataBtn" Style="{StaticResource BtnGhostSm}" Content="数据管理"
                                     Click="DataBtn_Click" ToolTip="导入 / 导出 / 清空（本地备份）"/>
                             <Button Style="{StaticResource BtnGhostSm}" Content="退出"
@@ -112,22 +119,17 @@
                                           VerticalScrollBarVisibility="Disabled"
                                           HorizontalContentAlignment="Left"
                                           PanningMode="HorizontalOnly"
-                                          MouseWheel="TagBarScroller_MouseWheel">
+                                          PreviewMouseWheel="TagBarScroller_MouseWheel">
                                 <StackPanel x:Name="TagBar" Orientation="Horizontal"/>
                             </ScrollViewer>
-                            <!-- 操作组（对齐 .tb .ops：编辑/归档/列数/同步；置顶钮 M1 常驻下沉至此——顶栏可折叠后置顶需常驻可点） -->
+                            <!-- 操作组（对齐 .tb .ops：编辑/同步；归档开关、列数已随顶栏折叠区收纳(MainWindow.xaml 顶栏段)——
+                                 置顶钮 M1 常驻下沉至此：顶栏可折叠后置顶需常驻可点） -->
                             <StackPanel Grid.Column="2" Orientation="Horizontal">
                                 <ToggleButton x:Name="PinBtn" Style="{StaticResource BtnPin}" Content="📌 置顶"
                                               Margin="0,0,8,0" ToolTip="窗口置顶（其他窗口之上）"
                                               Click="PinBtn_Click"/>
                                 <Button x:Name="EditBtn" Style="{StaticResource BtnGhostSm}" Content="编辑"
                                         Click="EditBtn_Click" ToolTip="进入批量编辑：勾选多条内容后批量加/减标签或删除"/>
-                                <Button x:Name="ArchBtn" Style="{StaticResource BtnGhostSm}"
-                                        Click="ArchBtn_Click"
-                                        ToolTip="显示/隐藏归档（点击切换）"/>
-                                <Button x:Name="ColsBtn" Style="{StaticResource BtnGhostSm}"
-                                        Click="ColsBtn_Click"
-                                        ToolTip="点击循环切换列数：自动 → 1 → 2 → 3 → 4 → 自动（M3b-1 接入）"/>
                                 <Button x:Name="SyncBtn" Style="{StaticResource BtnGhostSm}" Content="同步"
                                         Click="SyncBtn_Click" ToolTip="同步到云端账号；未绑定账号时自动列出远端账号选择"/>
                             </StackPanel>

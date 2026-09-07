@@ -38,11 +38,13 @@ public partial class MainWindow
         RefreshWall();
     }
 
-    /// <summary>标签栏横向滚轮：鼠标滚轮（含 Shift）直接横向滚动标签栏；无溢出时不滚动。
+    /// <summary>标签栏横向滚轮：鼠标滚轮（含 Shift）直接横向滚动标签栏；无溢出时不拦截（让位默认）。
+    /// 用 PreviewMouseWheel(隧道) 而非 MouseWheel(冒泡)——在 ScrollViewer 内部任何处理之前抢先接住，
+    /// 确保溢出时滚轮必定横滚（不再可能被内部拦截而"无滚轮反应"）；未溢出则不设 Handled，事件继续走默认路径。
     /// ScrollViewer 默认滚轮只纵向，这里把垂直增量转成横向偏移，改善多标签浏览体验。</summary>
     private void TagBarScroller_MouseWheel(object sender, MouseWheelEventArgs e)
     {
-        if (TagBarScroller == null || TagBarScroller.ScrollableWidth <= 0) return; // 无横向溢出，忽略
+        if (TagBarScroller == null || TagBarScroller.ScrollableWidth <= 0) return; // 无横向溢出，忽略（不 Handled，放行默认）
         double step = e.Delta > 0 ? -48 : 48; // 每格滚 ~48px（与 chip 节奏相称）
         TagBarScroller.ScrollToHorizontalOffset(TagBarScroller.HorizontalOffset + step);
         e.Handled = true; // 阻断默认纵向滚动/冒泡

@@ -10,16 +10,19 @@ public static class LayoutRules
         clientWidth >= 1920 ? 1920 : clientWidth >= 1280 ? 1440 : 960;
 
     /// <summary>
-    /// 自适应列数（对齐 Web .list auto-fill minmax(280px,1fr) + data-cols 1~4 覆盖）：
-    /// 基准卡片最小宽 280 + gap 16 → 每行能放几列；钳制 1~4（Web 列数选择器上限）。
-    /// 取整用 (w+gap)/(280+gap) 对齐 CSS auto-fill 的取整语义（278px 宽仍 1 列，296px 才 2 列）。
-    /// <para>maxColumns：用户列数偏好，0 或 负数 = 用 4 作上限（自动模式）；1~4 = 锁定上限（M3b-1 接入）。</para>
+    /// 卡片墙列数（镜像 Web .list）：
+    /// · auto（maxColumns≤0）：CSS `repeat(auto-fill, minmax(280px,1fr))`——基准卡片最小宽 280 + gap 16，
+    ///   自适应几列；取整 (w+gap)/(280+gap) 对齐 auto-fill 语义（278px 仍 1 列，296px 才 2 列），钳 1~4。
+    /// · 锁定（maxColumns 1~4）：精确强制该列数（镜像 Web data-cols=N → `repeat(N,minmax(0,1fr))`），
+    ///   卡片随列数缩窄、不被容器宽度压制——窄窗锁 3/4 也要真 3/4 列（v0.7.2 修复：旧实现把 maxColumns 当"上限"，
+    ///   窄窗被 280 下限压回 2 列，与 Web 双版本不一致）。
     /// </summary>
     public static int ColumnsFor(double contentWidth, int maxColumns = 0)
     {
         const double min = 280.0, gap = 16.0;
-        var n = (int)Math.Floor((contentWidth + gap) / (min + gap));
-        var upper = maxColumns > 0 ? Math.Min(maxColumns, 4) : 4;
-        return Math.Clamp(n, 1, upper);
+        if (maxColumns > 0)
+            return Math.Clamp(maxColumns, 1, 4); // 锁定：精确 N 列
+        var n = (int)Math.Floor((contentWidth + gap) / (min + gap)); // 自动：minmax(280px,1fr)
+        return Math.Clamp(n, 1, 4);
     }
 }

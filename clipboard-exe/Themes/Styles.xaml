@@ -474,7 +474,9 @@
 
     <!-- ================================================================
          层2 · 滚动条（细条默认样式：对齐 Web ::-webkit-scrollbar 主 9px/卡内 .pv 4px 的超细感，
-               统一为 6px 细条 + 小圆角（RadiusScroll 3，非全圆胶囊）+ thumb hover 变亮）
+               统一为 2px 极细条 + 小圆角（RadiusScroll 3，非全圆胶囊）+ thumb hover 变亮）
+               竖向(卡片墙/弹窗)与横向(标签栏)同粗细 2px——用户定稿：标签栏横向滚动条不再偏粗(原6px)，
+               与右侧竖向滚动条 UI 一致。
          ================================================================ -->
     <Style TargetType="ScrollBar">
         <Setter Property="Background" Value="Transparent"/>
@@ -514,7 +516,8 @@
         <Style.Triggers>
             <Trigger Property="Orientation" Value="Horizontal">
                 <Setter Property="Width" Value="Auto"/>
-                <Setter Property="Height" Value="6"/>
+                <Setter Property="Height" Value="2"/>
+                <Setter Property="MinHeight" Value="2"/>
             </Trigger>
         </Style.Triggers>
     </Style>

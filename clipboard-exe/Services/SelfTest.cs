@@ -202,14 +202,20 @@ public static class SelfTest
             var dup = svc.Unarchive(m1.Id);
             Check("Unarchive 活跃区已存在返回 false", dup == false, Line);
 
-            // LayoutRules.ColumnsFor maxColumns：0/负=自动 4 上限，1~4=锁定上限
+            // LayoutRules.ColumnsFor maxColumns：0/负=auto 自适应（minmax 280），1~4=精确锁定 N 列（data-cols=N → minmax(0,1fr)，不被宽度压制）
             Check("列数 maxColumns=0 与无参等效（1200px→4）", LayoutRules.ColumnsFor(1200, 0) == 4, Line);
             Check("列数 maxColumns=1（1200px 锁 1 列）", LayoutRules.ColumnsFor(1200, 1) == 1, Line);
             Check("列数 maxColumns=2（900px 锁 2 列）", LayoutRules.ColumnsFor(900, 2) == 2, Line);
-            Check("列数 maxColumns=3（1500px 钳到 3）", LayoutRules.ColumnsFor(1500, 3) == 3, Line);
+            Check("列数 maxColumns=3（1500px 精确 3 列）", LayoutRules.ColumnsFor(1500, 3) == 3, Line);
             Check("列数 maxColumns=-1 视作自动（2000px→4）", LayoutRules.ColumnsFor(2000, -1) == 4, Line);
             Check("列数 maxColumns=99 钳到 4（1500px）", LayoutRules.ColumnsFor(1500, 99) == 4, Line);
-            Check("列数 maxColumns=2（260px 仍 1 列——下限生效）", LayoutRules.ColumnsFor(260, 2) == 1, Line);
+            // 锁定不再被容器宽度压制（旧实现窄窗被 280 下限压回更少列，双版本不一致）
+            Check("列数 maxColumns=2（260px 精确 2 列）", LayoutRules.ColumnsFor(260, 2) == 2, Line);
+            Check("列数 窄窗 798px 锁 3 精确 3 列（用户验收回归）", LayoutRules.ColumnsFor(798, 3) == 3, Line);
+            Check("列数 窄窗 798px 锁 4 精确 4 列（用户验收回归）", LayoutRules.ColumnsFor(798, 4) == 4, Line);
+            Check("列数 窄窗 500px 锁 3 精确 3 列", LayoutRules.ColumnsFor(500, 3) == 3, Line);
+            Check("列数 自动 500px → 1 列（minmax 下限）", LayoutRules.ColumnsFor(500, 0) == 1, Line);
+            Check("列数 自动 798px → 2 列（minmax 自适应）", LayoutRules.ColumnsFor(798, 0) == 2, Line);
 
             // ---- M3b-2a 增量：FileStore 文件实体（对齐 files.js saveFile/getFilePath/deleteFile）+ Format.FileKindFor ----
             var fs = new FileStore(dir);
