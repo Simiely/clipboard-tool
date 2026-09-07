@@ -238,8 +238,8 @@ public partial class MainWindow : Window
             {
                 try
                 {
-                    _svc.Delete(cc.Id);
-                    if (cc.Type == "file" && !string.IsNullOrEmpty(cc.FileId)) _fileStore.Delete(cc.FileId); // 联动清理文件实体（对齐 Web 路由层 deleteFile）
+                    var delFileId = _svc.Delete(cc.Id); // v0.7.2：跨活跃+归档删除并记墓碑（防同步复活）；返回文件 id 供实体清理
+                    if (!string.IsNullOrEmpty(delFileId)) _fileStore.Delete(delFileId); // 联动清理文件实体（对齐 Web 路由层 deleteFile）
                     ToastService.Flash("已删除");
                     RefreshWall();
                 }

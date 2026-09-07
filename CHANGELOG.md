@@ -1,5 +1,19 @@
 # CHANGELOG.md
 
+## v0.7.2 (2026-09-07) — 修复 exe 单卡删除后同步复活（墓碑缺口）+ 墓碑 TTL 对齐 90 天
+
+> 用户实测：exe 删除某张卡片 → 点同步 → 卡片又回来了。根因：exe 的**单卡删除** `ClipService.Delete` 与 `BatchDelete` 语义不一致——只从活跃区移除、**不记墓碑**；而服务端(Web/bat/platform)单删是 `deleteClip`/`deleteArchivedClip` → `recordTombstoneIfConfigured`。同步时本地无该墓碑裁决，远端上次同步留下的旧副本被 `mergeSnapshots` 按 updatedAt 并入 → 复活。已修复并使 exe 与 Web 双版本规则一致（AGENTS「还原铁律」准入门槛）。
+
+### 🐛 exe 修复
+- **单卡删除补墓碑**（`ClipService.Delete`）：改为跨活跃区+归档区删除（归档卡 ✕ 此前静默无效，现真正删除）并**无条件记墓碑**（`deletedAt=now`），与 `BatchDelete` 同语义；返回被删文件 id 供 `MainWindow` 联动清理文件实体（对齐 Web 路由层 `deleteFile`）。归档卡单删、文件卡单删的实体清理也一并正确。
+- **墓碑 TTL 30 天 → 90 天**（`SyncEngine.TombstoneExpireMs`）：对齐 Web `lib/core/tombstones.js TOMB_TTL_MS=90d` 与 `docs` 记录——TTL 过短会在墓碑先于远端旧副本被清理时二次复活。
+- 自检新增 6 断言：单删记墓碑 / 删除不存在抛错 / **M5 ⑨ 删后同步不复活回归用例**（本地墓碑 + 远端旧副本 → 墓碑裁决删除）等，`--selftest` **ALL PASS**（含既有 M5 ①②③④⑤⑥⑦⑧）。
+
+### ✅ bat / 平台版核查结论（无需改动）
+- bat(本地服务版 start-server.cmd) 与 平台版共用根 `lib/core` + `server.mjs` 一处代码，单删已正确：路由 `DELETE /api/clips/:id` → `deleteClip`(404 回退 `deleteArchivedClip`) → `recordTombstoneIfConfigured`（已配置 WebDAV 才记，P-102 语义）；批量删同。墓碑 TTL 已 90 天。**该 bug 在 bat/平台侧不存在**，仅 exe 单删是缺口。
+
+> 详细开发记录见下方「开发线」小节。安装与运行要求同 v0.7.1（exe 需 .NET 9 Desktop Runtime x64；bat/platform 双击 start-server.cmd 或平台托管）。
+
 ## v0.7.1 (2026-09-05) — exe 桌面版 + 本地服务版(bat) + 平台版 三形态统一发布（账号昵称随同步传播）
 
 > 本版是 exe 线首次带完整 WebDAV 同步生态的正式版本，并同步三端。账号「昵称」成为可同步、跨端一致的第一等概念。

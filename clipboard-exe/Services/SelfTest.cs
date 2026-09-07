@@ -170,6 +170,10 @@ public static class SelfTest
             var m2 = svc.Create("text", "删除测试", "将被删除", null, null, null, null);
             svc.Delete(m2.Id);
             Check("Delete 后不存在", svc.GetById(m2.Id) == null, Line);
+            Check("Delete 记墓碑 m2（防同步复活，对齐 Web deleteClip→recordTombstoneIfConfigured）",
+                storage.LoadTombstones().Any(t => t.Id == m2.Id), Line);
+            Check("Delete 归档不存在抛异常", Throws(() => svc.Delete("not-exist-id")), Line);
+            storage.SaveTombstones(new List<Tombstone>()); // 复位墓碑——单条删除测试的墓碑不污染后续 BatchDelete 精确断言
             // 链接更新：非法 url 拒绝、合法 url 清理追踪参数
             var m3 = svc.Create("link", "", null, null, "https://x.com/p?a=1", null, null);
             Check("Update link 非法 url 抛异常", Throws(() => svc.Update(m3.Id, "", null, null, url: "javascript:alert(1)")), Line);
@@ -497,6 +501,25 @@ public static class SelfTest
             {
                 var r = WebDavSync.MergeSnapshots(new() { Mk("a", 100) }, new(), new Snapshot { Clips = new(), Tombstones = new() });
                 Check("M5 ⑧ localTomb=[] 容错", r.Clips.Count == 1 && r.Tombstones.Count == 0, Line);
+            }
+            // ⑨【回归·v0.7.2】单卡删除后同步不复活：本地已删(墓碑 now) + 远端仍存旧副本(updatedAt 旧) → 墓碑裁决删除。
+            //    此前 exe ClipService.Delete 不记墓碑，此场景远端旧副本被并入 → 删掉卡片同步后"回来"（真实用户报告）。
+            {
+                var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var local = new List<ClipItem> { Mk("stay", nowMs - 1000), Mk("doomed", nowMs - 2000) };
+                // 用户单删 doomed → 记墓碑 deletedAt=now
+                var localTomb = new List<Tombstone> { Tmb("doomed", nowMs) };
+                // 远端是上次同步留下的旧快照：still 含 doomed（updatedAt 老于墓碑）
+                var remote = new Snapshot
+                {
+                    Clips = new() { Mk("stay", nowMs - 1000), Mk("doomed", nowMs - 5000), Mk("remote-only", nowMs - 3000) },
+                    Tombstones = new(),
+                };
+                var r = WebDavSync.MergeSnapshots(local, localTomb, remote);
+                Check("M5 ⑨ 已删卡片不复活(墓碑裁决)", !r.Clips.Any(c => c.Id == "doomed"), Line);
+                Check("M5 ⑨ 未删卡片正常保留", r.Clips.Any(c => c.Id == "stay"), Line);
+                Check("M5 ⑨ 远端新增正常并入", r.Clips.Any(c => c.Id == "remote-only"), Line);
+                Check("M5 ⑨ 墓碑随输出传播到远端", r.Tombstones.Any(t => t.Id == "doomed"), Line);
             }
 
             // ===== M5a WebDav 配置 IO（对齐 webdav.js getSyncConfig/saveSyncConfig） =====

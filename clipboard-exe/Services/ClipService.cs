@@ -115,12 +115,38 @@ public sealed class ClipService
         return c.CopyCount;
     }
 
-    /// <summary>删除活跃区条目（对齐 DELETE /api/clips/:id；文件实体由 M3b 联动清理）。</summary>
-    public void Delete(string id)
+    /// <summary>删除单条（对齐 Web DELETE /api/clips/:id 路由：先活跃区、不存在则归档区；文件实体由调用方按返回 fileId 联动清理）。
+    /// v0.7.2 修复：此前仅从活跃区移除且**不记墓碑**——与 Web 路由层 deleteClip/deleteArchivedClip 后 recordTombstoneIfConfigured
+    /// 不一致，单卡删除后下次 WebDAV 同步把远端仍存的旧副本合并回本地（无墓碑裁决 → 复活）。现改为跨活跃+归档删除并记墓碑，
+    /// 与 BatchDelete 同语义（防远端复活）。返回被删条目的 fileId（文件类供调用方清理实体；无则 null）。</summary>
+    public string? Delete(string id)
     {
-        var list = _storage.LoadClips();
-        list.RemoveAll(c => c.Id == id);
-        _storage.SaveClips(list);
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        string? fileId = null;
+        var found = false;
+        foreach (var (load, save) in new (Func<List<ClipItem>> load, Action<List<ClipItem>> save)[]
+        {
+            (_storage.LoadClips, _storage.SaveClips),
+            (_storage.LoadArchive, _storage.SaveArchive),
+        })
+        {
+            var list = load();
+            var kept = new List<ClipItem>(list.Count);
+            foreach (var c in list)
+            {
+                if (c.Id == id)
+                {
+                    found = true;
+                    if (c.Type == "file" && !string.IsNullOrEmpty(c.FileId)) fileId = c.FileId;
+                }
+                else kept.Add(c);
+            }
+            if (kept.Count != list.Count) save(kept);
+        }
+        if (!found) throw new InvalidOperationException("条目不存在");
+        // 墓碑：同 id 保留最新 deletedAt（与 BatchDelete 一致，无条件记录——桌面单机形态本地留存无害且便于本地删除传播）
+        RecordTombstone(id, now);
+        return fileId;
     }
 
     /// <summary>移入归档（对齐 POST /api/clips/:id/archive：活跃区移除 + 追加归档）。</summary>
@@ -286,6 +312,14 @@ public sealed class ClipService
             clip.FileMime = raw.FileMime ?? "";
         }
         return clip;
+    }
+
+    /// <summary>记墓碑（单条删除用；与 BatchDelete 同语义）：同 id 保留最新 deletedAt，直接追加覆盖。</summary>
+    private void RecordTombstone(string id, long deletedAt)
+    {
+        var existing = _storage.LoadTombstones().Where(t => t.Id != id).ToList();
+        existing.Add(new Tombstone { Id = id, DeletedAt = deletedAt });
+        _storage.SaveTombstones(existing);
     }
 
     // ---- 批量编辑（对齐 Web 版 clips-mutate.js batchDeleteClips / batchSetTags）----
