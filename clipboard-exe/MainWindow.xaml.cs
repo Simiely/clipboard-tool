@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Reflection;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
@@ -48,6 +49,8 @@ public partial class MainWindow : Window
     public MainWindow(Settings settings, TrayIconService? tray)
     {
         InitializeComponent();
+        // 标题栏版本标识：读取程序集信息版本(AssemblyInformationalVersion, csproj <Version> 生成, 如 0.7.4)
+        Title = "剪贴板 v" + (Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0] ?? "0");
         _settings = settings;
         _tray = tray;
         if (_tray != null) _tray.ShowMainRequested += ShowMainFromTray;
