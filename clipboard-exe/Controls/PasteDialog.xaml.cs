@@ -28,6 +28,7 @@ public partial class PasteDialog : UserControl
     private readonly DispatcherTimer _dupTimer;
     private bool _dupJumped;
     private bool _autoFilling; // autoFill 程序赋值期间置 true：不触发用户输入级重复检测（对齐 Web：程序 set value 不派发 input 事件）
+    private readonly bool _skipAutoFill; // v0.7.3：dup 编辑窗「＋ 新建」直达本窗时跳过剪贴板 autoFill，避免又预查 dup 循环
 
     /// <summary>已选文件（含图片：图片在 M3b-2b 也走 file 通道）。</summary>
     private PickedFile? _pickedFile;
@@ -38,13 +39,14 @@ public partial class PasteDialog : UserControl
     /// <summary>存入成功 → MainWindow 刷新列表。</summary>
     public event Action? Saved;
 
-    public PasteDialog(ClipService svc, FileStore fileStore, Func<List<ClipItem>> getClips, Func<List<string>> getTags)
+    public PasteDialog(ClipService svc, FileStore fileStore, Func<List<ClipItem>> getClips, Func<List<string>> getTags, bool skipAutoFill = false)
     {
         InitializeComponent();
         _svc = svc;
         _fileStore = fileStore;
         _getClips = getClips;
         _getTags = getTags;
+        _skipAutoFill = skipAutoFill;
 
         ExpireBox.ItemsSource = new[]
         {
@@ -72,30 +74,36 @@ public partial class PasteDialog : UserControl
         // 粘贴拦截：资源管理器复制文件 Ctrl+V → FileDrop → 选文件（对齐 ta paste ②图片/文件优先）
         InputBox.AddHandler(DataObject.PastingEvent, new DataObjectPastingEventHandler(OnPasting), true);
 
-        // 打开即自动填入剪贴板文本（对齐 autoFillPasteModal：文本优先）
-        // 程序赋值不触发 Web input 事件 → 也不该启动重复检测；WPF 赋值会触发 TextChanged，
-        // 用 _autoFilling 抑制，仅保留徽章刷新（UpdateBadge 在赋值后显式调用）。
-        try
+        // v0.7.3：dup 编辑窗「＋ 新建」直达本窗 → skipAutoFill=true：
+        //   不读剪贴板（否则那段被判定重复的文本又 autoFill 进来、预查再跳回 dup 编辑窗 → 死循环），
+        //   直接从空白手动输入态开始。
+        if (!_skipAutoFill)
         {
-            var t = Clipboard.GetText();
-            if (!string.IsNullOrEmpty(t) && string.IsNullOrEmpty(InputBox.Text))
+            // 打开即自动填入剪贴板文本（对齐 autoFillPasteModal：文本优先）
+            // 程序赋值不触发 Web input 事件 → 也不该启动重复检测；WPF 赋值会触发 TextChanged，
+            // 用 _autoFilling 抑制，仅保留徽章刷新（UpdateBadge 在赋值后显式调用）。
+            try
             {
-                _autoFilling = true;
-                try { InputBox.Text = t; }
-                finally { _autoFilling = false; }
-                UpdateBadge();
-                ToastService.Flash("已填入剪贴板内容");
+                var t = Clipboard.GetText();
+                if (!string.IsNullOrEmpty(t) && string.IsNullOrEmpty(InputBox.Text))
+                {
+                    _autoFilling = true;
+                    try { InputBox.Text = t; }
+                    finally { _autoFilling = false; }
+                    UpdateBadge();
+                    ToastService.Flash("已填入剪贴板内容");
+                }
+                // 纯图片剪贴板（截图 Win+Shift+S / 右键复制图片 / 微信QQ复制图片：无文本但有 Bitmap/DIB/PNG）
+                // → 打开即自动接收成图片 chip——此前只认文本，图片复制打开弹窗后是空窗（图片识别断点②）。
+                // 文本优先级不变：已有文本（富文本复制）不抢，仍可手动 Ctrl+V 覆盖。
+                else if (ClipboardHelper.IsImageOnlyClipboard())
+                {
+                    var png = ClipboardHelper.ReadImageOnlyAsPng();
+                    if (png != null) PickBytes(png, "clipboard-image.png", "image/png");
+                }
             }
-            // 纯图片剪贴板（截图 Win+Shift+S / 右键复制图片 / 微信QQ复制图片：无文本但有 Bitmap/DIB/PNG）
-            // → 打开即自动接收成图片 chip——此前只认文本，图片复制打开弹窗后是空窗（图片识别断点②）。
-            // 文本优先级不变：已有文本（富文本复制）不抢，仍可手动 Ctrl+V 覆盖。
-            else if (ClipboardHelper.IsImageOnlyClipboard())
-            {
-                var png = ClipboardHelper.ReadImageOnlyAsPng();
-                if (png != null) PickBytes(png, "clipboard-image.png", "image/png");
-            }
+            catch { /* 剪贴板不可读则留空 */ }
         }
-        catch { /* 剪贴板不可读则留空 */ }
         UpdateBadge();
 
         // 对齐 Web v0.6.6（app.js: autoFillPasteModal(...).then(() => checkDuplicate())——
@@ -103,8 +111,12 @@ public partial class PasteDialog : UserControl
         // TextBox.Text 程序赋值会触发 TextChanged（MS Learn），但被 _autoFilling 抑制（不算用户输入、不启动检测）；
         // 若此处不补查，则「打开存入窗即自动填入」的场景（Ctrl+V / ＋存入 等无预查入口）永远不做去重，
         // 库里已有相同内容也会被存成多张卡。无文本/选文件时 CheckDuplicate 内部会自行跳过。
-        _dupTimer.Stop();
-        _dupTimer.Start();
+        // skipAutoFill=true 时本为空文本，无需补查。
+        if (!_skipAutoFill)
+        {
+            _dupTimer.Stop();
+            _dupTimer.Start();
+        }
     }
 
     // ---- 类型徽章实时识别（对齐 updateBadge：文件 > 链接 > 文本） ----
@@ -359,6 +371,17 @@ public partial class PasteDialog : UserControl
         InputBox.Text = "";
         ClearPicked();
         ToastService.Flash("已清空");
+        InputBox.Focus();
+    }
+
+    /// <summary>v0.7.3：新建（手动录入一条新内容）——清掉自动识别/填入的剪贴板文本、已选文件/图片与别名，回到空白手动输入态。</summary>
+    private void New_Click(object sender, RoutedEventArgs e)
+    {
+        InputBox.Text = "";
+        TitleBox.Text = "";
+        ClearPicked();
+        UpdateBadge();
+        ToastService.Flash("已新建 · 手动输入即可");
         InputBox.Focus();
     }
 

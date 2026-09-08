@@ -136,27 +136,31 @@ public partial class MainWindow : Window
 
     // ---- 弹窗编排 ----
 
-    private void OpenPasteDialog()
+    private void OpenPasteDialog(bool skipAutoFill = false)
     {
         // 预查（对齐 Web findDuplicateClip 语义 + 用户期望"先检索再弹，只出一扇"）：
         //   剪贴板文本已存在 → 直接弹编辑窗（不再"存卡窗 → autoFill → 300ms 检测 → 跳编辑窗"两扇窗连续出现）。
         //   剪贴板为空/非文本（手动输入、拖文件/图片）→ 不预查，正常开存卡窗；用户在窗内改文本撞重仍由
         //   PasteDialog 输入级兜底跳转（单扇窗内过渡，可接受且合理）。
-        string pre;
-        try { pre = (Clipboard.GetText() ?? "").Trim(); }
-        catch { pre = ""; }
-        if (pre.Length > 0)
+        //   skipAutoFill=true（v0.7.3 dup 编辑窗「＋ 新建」直达）：不清剪贴板 autoFill → 不做预查，直接空白手动输入。
+        if (!skipAutoFill)
         {
-            var dup = ClipService.FindDuplicate(pre, _svc.Search(""));
-            if (dup != null)
+            string pre;
+            try { pre = (Clipboard.GetText() ?? "").Trim(); }
+            catch { pre = ""; }
+            if (pre.Length > 0)
             {
-                if (!dup.Archived) { OpenEditDialog(dup, dup: true); return; }
-                ToastService.Flash("已有相同内容");
-                return;
+                var dup = ClipService.FindDuplicate(pre, _svc.Search(""));
+                if (dup != null)
+                {
+                    if (!dup.Archived) { OpenEditDialog(dup, dup: true); return; }
+                    ToastService.Flash("已有相同内容");
+                    return;
+                }
             }
         }
 
-        var dlg = new PasteDialog(_svc, _fileStore, () => _svc.Search(""), GetAllTags);
+        var dlg = new PasteDialog(_svc, _fileStore, () => _svc.Search(""), GetAllTags, skipAutoFill);
         dlg.DuplicateFound += c =>
         {
             if (!c.Archived) OpenEditDialog(c, dup: true);
@@ -171,6 +175,12 @@ public partial class MainWindow : Window
         var dlg = new EditDialog(_svc, c, GetAllTags, dup);
         dlg.Saved += RefreshWall;
         dlg.Archived += RefreshWall;
+        // v0.7.3：dup 编辑窗「＋ 新建」→ 关掉当前 dup 窗，打开干净存入窗（skipAutoFill：忽略剪贴板，手动录入全新内容）
+        dlg.NewRequested += () =>
+        {
+            ModalHost.Close(); // 关掉本 dup 编辑窗
+            OpenPasteDialog(skipAutoFill: true); // 干净存入窗：忽略剪贴板 → 无预查 dup，直接空白手动输入
+        };
         ModalHost.Show(dlg);
     }
 

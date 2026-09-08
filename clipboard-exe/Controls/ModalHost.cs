@@ -35,6 +35,13 @@ public static class ModalHost
     private static bool _closing;   // 防 Deactivated 重入 Close 触发 VerifyNotClosing（窗口关闭中再次 Close 会抛异常）
     private static bool _armed;      // Show 后短暂屏蔽 Deactivated 自动关闭，避开打开瞬间的激活抖动（Owner 切换导致的瞬时 Deactivated）
 
+    // v0.7.3 修复：子弹窗（Confirm）栈 —— 之前 Confirm 走 Show 会把当前弹窗（EditDialog）顶掉，
+    //   导致点"清除格式"后编辑窗被关闭、无法保存。
+    //   修法：Confirm 不再创建新 Window，而是把 Confirm 卡放进 _current 的 Content 顶层 Grid（Overlay），
+    //   关闭时只移除该层。EditDialog 等主弹窗全程存活。Overlay 用 Border + 透暗遮罩。
+    private static Grid? _overlayHost;     // 注入到 _current.Content 顶层的覆盖层 Grid
+    private static readonly Stack<Grid> _overlayStack = new(); // 支持嵌套（理论上用不到）
+
     // ---- 打开后"激活稳定保护期"：治愈"点击主窗口激活 → 存卡窗闪一下就没" ----
     // 根因：点击后台主窗口激活 → OnActivated 立即弹存卡窗（win.Show 抢激活）→ 用户那一下点击落点仍在
     // 主窗口 → 焦点又切回主窗口 → 弹窗 Deactivated → 自动 Close = 一闪即没，来不及点存入/取消。
@@ -121,14 +128,21 @@ public static class ModalHost
         // 全卡非交互区可拖（系统拖动在 PreviewMouseLeftButtonDown 触发）——SizeAll 光标提示可拖范围；
         // 交互控件自带光标覆盖（TextBox 隐式样式 IBeam、按钮家族 Hand），不会误显示。
         content.Cursor = Cursors.SizeAll;
-        win.Content = new ScrollViewer
+
+        // v0.7.3：弹窗根 = Grid 叠层（Content + 顶层 Overlay Host）。
+        // 子弹窗（Confirm）不替换主弹窗，而是在 Overlay 顶层叠层显示；保证 EditDialog/PasteDialog 等主弹窗持续存活。
+        var root = new Grid();
+        root.Children.Add(new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             MaxWidth = wa.Width - 24,
             MaxHeight = wa.Height - 24,
             Content = content,
-        };
+        });
+        _overlayHost = new Grid { IsHitTestVisible = false }; // 默认不挡命中（无 Overlay 时不挡拖动/点击）
+        root.Children.Add(_overlayHost);
+        win.Content = root;
 
         // 先把窗口摆到主窗口附近（用估算尺寸），避免 Show 瞬间的 0,0 闪烁；Loaded 再用真实尺寸精修
         content.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -210,15 +224,103 @@ public static class ModalHost
         _current = null;
         _closePending = false;                    // 清延迟关闭标记，防迟到的 _closeGuard Tick 误关新弹窗
         _closeGuard.Stop();
+        _overlayHost = null;                      // v0.7.3：主弹窗关闭时清空 overlay host 引用
+        _overlayStack.Clear();                    // v0.7.3：清空子弹窗栈
         try { w.Close(); }
         finally { _closing = false; }
     }
 
-    /// <summary>确认框（对齐 askConfirm：标题"确认操作" + 消息 + 确认/取消等宽按钮）。</summary>
+    /// <summary>
+    /// v0.7.3 修复：确认框——叠在当前弹窗之上（不替换）。
+    /// 之前 v0.7.3 用 Show 创建新 Window，会把 _current（EditDialog 等主弹窗）顶掉，造成"清除格式点击后编辑窗被关"的 bug。
+    /// 新版：把 Confirm 卡片放到 _current 的顶层 Grid（_overlayHost）里，主弹窗全程存活。
+    /// 暗色遮罩盖住整个主弹窗；点击遮罩不关闭（确认框必须明确选确认/取消，避免误关）。
+    /// </summary>
     public static void Confirm(string msg, Action onOk, string okText = "确认", Action? onCancel = null)
     {
-        if (_owner == null) return;
+        if (_owner == null || _current == null || _overlayHost == null)
+        {
+            // 无主弹窗（极端边界）走原 Show 路径：把 confirm 当独立弹窗
+            ConfirmStandalone(msg, onOk, okText, onCancel);
+            return;
+        }
 
+        var title = new TextBlock { Text = "确认操作", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
+        var body = new TextBlock
+        {
+            Text = msg,
+            FontSize = 13,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x84, 0x84, 0x84)),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 18),
+        };
+        var ok = new Button
+        {
+            Style = (Style)Application.Current.FindResource("BtnPrimary"),
+            Content = okText,
+            MinWidth = 130,
+            Margin = new Thickness(0, 0, 10, 0),
+        };
+        var cancel = new Button
+        {
+            Style = (Style)Application.Current.FindResource("BtnClose"),
+            Content = "取消",
+            MinWidth = 130,
+        };
+        var row = new Grid();
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        Grid.SetColumn(ok, 0);
+        Grid.SetColumn(cancel, 1);
+        ok.Margin = new Thickness(0, 0, 10, 0);
+        row.Children.Add(ok);
+        row.Children.Add(cancel);
+
+        var sp = new StackPanel { Children = { title, body, row } };
+        var card = new Border
+        {
+            Style = (Style)Application.Current.FindResource("ModalCard"),
+            Width = 360,
+            Child = sp,
+        };
+
+        // 暗色遮罩（半透明）+ 居中卡片，覆盖整个主弹窗。IsHitTestVisible=true 拦截主弹窗的点击/拖动。
+        var mask = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(0x66, 0x00, 0x00, 0x00)),
+            IsHitTestVisible = true,
+            // 屏蔽主弹窗系统拖动：吃掉 PreviewMouseLeftButtonDown
+        };
+        mask.PreviewMouseLeftButtonDown += (_, e) => { e.Handled = true; };
+        // 居中卡片容器
+        var center = new Grid
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        center.Children.Add(card);
+        var overlay = new Grid();
+        overlay.Children.Add(mask);
+        overlay.Children.Add(center);
+        _overlayHost.Children.Add(overlay);
+        _overlayHost.IsHitTestVisible = true; // 启用覆盖层命中
+        _overlayStack.Push(overlay);
+
+        void CloseOverlay()
+        {
+            if (_overlayHost == null) return;
+            _overlayHost.Children.Remove(overlay);
+            if (_overlayStack.Count > 0) _overlayStack.Pop();
+            if (_overlayHost.Children.Count == 0) _overlayHost.IsHitTestVisible = false; // 没覆盖层了恢复
+        }
+
+        ok.Click += (_, _) => { CloseOverlay(); onOk(); };
+        cancel.Click += (_, _) => { CloseOverlay(); onCancel?.Invoke(); };
+    }
+
+    /// <summary>v0.7.3 兜底：当前无主弹窗时（极端边界），把 confirm 当独立弹窗。保留 v0.7.3 行为。</summary>
+    private static void ConfirmStandalone(string msg, Action onOk, string okText, Action? onCancel)
+    {
         var title = new TextBlock { Text = "确认操作", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
         var body = new TextBlock
         {

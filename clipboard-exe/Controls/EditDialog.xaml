@@ -19,12 +19,19 @@
                 <ContentControl x:Name="TypeBadge" DockPanel.Dock="Right" VerticalAlignment="Center"/>
             </DockPanel>
 
-            <!-- 重复常驻提示（.edit-dup：⚠️ 已有相同内容 / 可修改标题或标签） -->
+            <!-- 重复常驻提示（.edit-dup：⚠️ 已有相同内容 / 可修改标题或标签）+ 右上「＋ 新建」直达干净存入窗 -->
             <Border x:Name="DupTip" Style="{StaticResource DupTip}" Visibility="Collapsed">
-                <StackPanel>
-                    <TextBlock Text="⚠️ 已有相同内容" Foreground="{StaticResource AmberBrush}" FontSize="12" FontWeight="Medium"/>
-                    <TextBlock Text="可修改标题或标签，方便下次检索" Foreground="{StaticResource DimBrush}" FontSize="11" Margin="0,2,0,0"/>
-                </StackPanel>
+                <DockPanel>
+                    <Button x:Name="DupNewBtn" DockPanel.Dock="Right" Style="{StaticResource BtnGhostSm}"
+                            Padding="8,3" Margin="8,0,0,0" VerticalAlignment="Top"
+                            Visibility="Collapsed" Content="＋ 新建"
+                            ToolTip="不编辑这条已有内容，打开空白存入窗手动录入一条新内容"
+                            Click="DupNew_Click"/>
+                    <StackPanel>
+                        <TextBlock Text="⚠️ 已有相同内容" Foreground="{StaticResource AmberBrush}" FontSize="12" FontWeight="Medium"/>
+                        <TextBlock Text="可修改标题或标签，方便下次检索；或点右侧「新建」录入全新内容" Foreground="{StaticResource DimBrush}" FontSize="11" Margin="0,2,0,0"/>
+                    </StackPanel>
+                </DockPanel>
             </Border>
 
             <!-- ① 内容区（.edit-sec） -->
@@ -38,6 +45,13 @@
                         </Border>
                         <TextBlock x:Name="Sec1Title" FontSize="13" Foreground="{StaticResource TextBrush}"
                                    VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        <!-- v0.7.3：富文本卡「清除格式」按钮（对齐 Web v0.6.13，仅 Html 非空的格式文本卡显示）——
+                             点击标记 → 保存时 html 置空转纯文本；再点取消 -->
+                        <Button x:Name="ClearFmtBtn" DockPanel.Dock="Right" Style="{StaticResource BtnGhostSm}"
+                                Padding="6,2" Margin="8,0,0,0" VerticalAlignment="Center"
+                                Visibility="Collapsed" Content="清除格式"
+                                ToolTip="不需要保留格式时点击，保存后该条目将变为纯文本（不再带字体/颜色/对齐等格式）"
+                                Click="ClearFmt_Click"/>
                         <TextBlock x:Name="Sec1Hint" DockPanel.Dock="Right" FontSize="11"
                                    Foreground="{StaticResource DimBrush}" VerticalAlignment="Center"/>
                     </DockPanel>

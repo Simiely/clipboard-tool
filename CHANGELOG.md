@@ -1,5 +1,28 @@
 # CHANGELOG.md
 
+## v0.7.3 (2026-09-08) — exe 图片 hover 预览彻底重写（无重复/无白边/等比/可复制）+ 编辑/存入交互闭环 + 同步并发锁硬化
+
+> 本版是 exe 桌面版一次较集中的**图片预览浮层重写 + 编辑/存入交互闭环**发布，并顺带按走查结论硬化同步并发锁。bat/平台形态代码未变（自 v0.7.1 无改动），仅随本版重打 zip 保持三形态同版。
+
+### 🖼 exe 图片 hover 预览彻底重写（对齐 Web `.img-hover-preview`，方案A）
+用户连续多版反馈「标题重复 N 遍 + 左右白边」。根因：旧版多 TextBlock 叠层/ScrollViewer Stretch 导致并排重复与白边；且 WPF Popup 只在 `IsOpen` 时自动测量一次，缩放改内部内容不重测视窗 → 缩放后尺寸不更新。本版**整段重写**：
+- **单 TextBlock cap**：全链只 1 个 TextBlock，从结构上杜绝「重复 N 遍」；cap 改为**黑字 + 白色字形细描边**（`DropShadowEffect{White, BlurRadius=1, ShadowDepth=0}`——WPF 无 `TextBlock.Stroke` 的单元素最稳等价，不叠层），去掉半透黑圆角矩形底
+- **box 显式宽高 = 图等比显示尺寸**（`origW×scale × origH×scale`），不再依赖 Popup 自动测量 → 缩放必然同步、无白边无裁切；图片 `Stretch=Uniform` 填满 box（box 比例=原图 → 完整）
+- **垂直锚定边开时定一次不翻转**：浮层上方/下方定一次，缩放只在固定一侧屏内钳制 → 缩放**不上下跳动**
+- **点击预览图即复制**：浮层 `MouseLeftButtonUp` → 复制该图片到系统剪贴板并关浮层（Popup 独立窗格不透传卡片）
+- 卡片图区滚轮缩放 + 浮层自身滚轮缩放均可用（50%~300% 步进 15%），浮层/卡片间迁移 220ms 延迟关闭防闪关
+
+### 🖋 exe 编辑/存入交互闭环
+- **重复编辑窗「＋ 新建」直达干净存入窗**：不再被迫改那条已有内容，可一键开空白存入窗手动录入（`skipAutoFill` 跳过剪贴板 autoFill，避免被判定重复的文本又填回 → 死循环）
+- **存入窗「＋ 新建」按钮**：一键清掉自动识别的剪贴板文本/已选文件/图片，回到空白手动输入态
+- **富文本卡「清除格式」**：对齐 Web v0.6.13，格式文本卡可一键标记清除（二次确认防误），保存后 html 置空转纯文本；富文本卡编辑正文 → `TextToHtml` 重建 html（此前 exe 漏传 html 致正文/预览不一致，契约对齐 Web）
+- **确认框改弹窗内 Overlay 叠层**（不新建 Window）：修复「点清除格式/归档后编辑窗被顶掉、无法保存」的 bug——Confirm 卡片叠在当前弹窗顶层 Grid，暗色遮罩拦截点击/拖动，主弹窗全程存活
+
+### 🔒 exe 同步并发锁硬化（走查 W-02）
+`SyncEngine.InFlight`（static HashSet）的 Add/Remove **加锁**——手动同步 + 定时 autoSync 都经 `SyncController` 的 `Task.Run` 走线程池并发触发，裸 HashSet 非线程安全理论可双同步/异常。加对象锁（`InFlightLock`）细粒度保证互斥，`--selftest` 仍 ALL PASS。
+
+> 详细开发记录见下方「开发线」小节。安装与运行要求同 v0.7.2（exe 需 .NET 9 Desktop Runtime x64）。发布 zip：exe(DEFLATE) + bat + platform 三形态。
+
 ## v0.7.2 (2026-09-07) — 修复 exe 单卡删除后同步复活（墓碑缺口）+ 墓碑 TTL 对齐 90 天
 
 > 用户实测：exe 删除某张卡片 → 点同步 → 卡片又回来了。根因：exe 的**单卡删除** `ClipService.Delete` 与 `BatchDelete` 语义不一致——只从活跃区移除、**不记墓碑**；而服务端(Web/bat/platform)单删是 `deleteClip`/`deleteArchivedClip` → `recordTombstoneIfConfigured`。同步时本地无该墓碑裁决，远端上次同步留下的旧副本被 `mergeSnapshots` 按 updatedAt 并入 → 复活。已修复并使 exe 与 Web 双版本规则一致（AGENTS「还原铁律」准入门槛）。

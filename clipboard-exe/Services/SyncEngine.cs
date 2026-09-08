@@ -25,7 +25,10 @@ public sealed class SyncResult
 public static class SyncEngine
 {
     // v0.6.13：per-account 同步进行中——手动同步与定时 autoSync 可能并发，重入抛"同步进行中"（对齐 syncInFlight）。
+    // v0.7.3（W-02 修复）：InFlight 的 Add/Remove 加锁——RunSync 由 SyncController 经 Task.Run 在线程池并发触发，
+    //         裸 HashSet 的 Add/Remove 非线程安全，理论竞态可致双同步/异常。加对象锁保证互斥（细粒度：仅占用账本操作）。
     private static readonly HashSet<string> InFlight = new(StringComparer.Ordinal);
+    private static readonly object InFlightLock = new();
     // v0.6.14：墓碑过期清理（防无限增长，对齐 pruneTombstones 的 TOMB_TTL_MS）。
     // v0.7.2：30 天 → 90 天，与 Web lib/core/tombstones.js TOMB_TTL_MS=90d 对齐——TTL 过短会在
     //         墓碑先于远端旧副本被清理时，让已删条目在跨端二次同步时复活（防复活窗口必须 ≥ 远端备份留存窗口）。
@@ -42,7 +45,9 @@ public static class SyncEngine
     /// <summary>WebDAV 一键同步（对齐 runSync）。dataDir 用于写回 webdav.json 的 lastSyncAt/lastSyncError。</summary>
     public static async Task<SyncResult> RunSync(Storage storage, FileStore fileStore, SyncConfig cfg, string dataDir)
     {
-        if (!InFlight.Add(cfg.AccountName)) return Err("同步进行中，请稍候");
+        bool acquired;
+        lock (InFlightLock) { acquired = InFlight.Add(cfg.AccountName); }
+        if (!acquired) return Err("同步进行中，请稍候");
         try
         {
             await WebDavClient.EnsureDir(cfg);
@@ -114,7 +119,7 @@ public static class SyncEngine
             try { cfg.LastSyncError = ex.Message; WebDavSync.SaveConfig(dataDir, cfg); } catch { /* 写回失败不影响返回 */ }
             return Err(ex.Message);
         }
-        finally { InFlight.Remove(cfg.AccountName); }
+        finally { lock (InFlightLock) { InFlight.Remove(cfg.AccountName); } }
     }
 
     /// <summary>实体同步（对齐 webdav.js syncFileEntities）：本地有实体 → PUT 上传；本地缺失（恢复）→ GET 拉回本地。</summary>

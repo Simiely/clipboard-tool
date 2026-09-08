@@ -7,6 +7,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using ClipboardExe.Models;
 using ClipboardExe.Services;
 
@@ -18,11 +19,17 @@ public partial class EditDialog : UserControl
     private readonly ClipItem _clip;
     private readonly Func<List<string>> _getTags;
 
+    /// <summary>v0.7.3：富文本「清除格式」标记——保存时 html 置空转纯文本（对齐 Web v0.6.13）。</summary>
+    private bool _clearFormat;
+
     /// <summary>保存成功 → MainWindow 刷新列表。</summary>
     public event Action? Saved;
 
     /// <summary>归档成功 → MainWindow 刷新列表。</summary>
     public event Action? Archived;
+
+    /// <summary>v0.7.3：dup 编辑窗「＋ 新建」→ MainWindow 关本窗并打开干净存入窗。</summary>
+    public event Action? NewRequested;
 
     public EditDialog(ClipService svc, ClipItem clip, Func<List<string>> getTags, bool dup = false)
     {
@@ -38,11 +45,17 @@ public partial class EditDialog : UserControl
         TypeBadge.Style = (Style)FindResource(isLink ? "TypeBadgeLink" : clip.Html.Length > 0 ? "TypeBadgeRich" : "TypeBadgeText");
         TypeBadge.Content = isLink ? "链接" : clip.Html.Length > 0 ? "格式文本" : "文本";
 
-        if (dup) DupTip.Visibility = Visibility.Visible;
+        if (dup)
+        {
+            DupTip.Visibility = Visibility.Visible;
+            DupNewBtn.Visibility = Visibility.Visible; // v0.7.3：dup 时显示「＋ 新建」直达干净存入窗
+        }
 
         // ① 内容区
+        var isRich = !isLink && clip.Html.Length > 0; // 富文本（格式文本）卡：正文变→保存重建 html；可一键清除格式
         Sec1Title.Text = isLink ? "链接" : "内容";
-        Sec1Hint.Text = isLink ? "与文本一致，直接编辑" : "纯文本";
+        Sec1Hint.Text = isLink ? "与文本一致，直接编辑" : isRich ? "编辑正文，保存后保留原格式" : "纯文本";
+        if (isRich) ClearFmtBtn.Visibility = Visibility.Visible; // v0.7.3：仅富文本卡显示清除格式入口
         if (isLink)
         {
             ContentBox.Text = clip.Url;
@@ -100,6 +113,30 @@ public partial class EditDialog : UserControl
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => ModalHost.Close();
 
+    /// <summary>v0.7.3：dup 编辑窗「＋ 新建」——不编辑这条已有内容，通知 MainWindow 打开干净存入窗（忽略剪贴板，手动录入）。</summary>
+    private void DupNew_Click(object sender, RoutedEventArgs e) => NewRequested?.Invoke();
+
+    /// <summary>v0.7.3：富文本清除格式切换（对齐 Web v0.6.13 clearBtn）。标记后保存 html 置空转纯文本。</summary>
+    private void ClearFmt_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_clearFormat)
+        {
+            // 与 Web 一致先二次确认，避免误把带格式内容变纯文本
+            ModalHost.Confirm("清除格式后该条目将变为纯文本，复制时不再保留格式（字体/颜色/对齐等）。继续？", () =>
+            {
+                _clearFormat = true;
+                ClearFmtBtn.Content = "已标记清除 · 保存生效（点此取消）";
+                ClearFmtBtn.Foreground = (Brush)FindResource("AmberBrush");
+            }, "清除格式");
+        }
+        else
+        {
+            _clearFormat = false;
+            ClearFmtBtn.Content = "清除格式";
+            ClearFmtBtn.ClearValue(Control.ForegroundProperty); // 回退到样式默认前景
+        }
+    }
+
     private void Archive_Click(object sender, RoutedEventArgs e)
     {
         ModalHost.Confirm("将该条目移入归档？归档后可「含归档」查看，可随时恢复。", () =>
@@ -126,7 +163,15 @@ public partial class EditDialog : UserControl
             if (_clip.Type == "link")
                 _svc.Update(_clip.Id, title, tags, expire, url: ContentBox.Text);
             else
-                _svc.Update(_clip.Id, title, tags, expire, content: ContentBox.Text);
+            {
+                var newContent = ContentBox.Text ?? "";
+                // v0.7.3：富文本卡编辑 html 契约（对齐 Web v0.6.11 + v0.6.13，此前 exe 漏传 html 致正文/预览不一致）：
+                //   正文变 → TextToHtml 重建（复制带格式与预览拿一致）；清除格式 → html 置空转纯文本；正文未变 → 保留原 html
+                string? newHtml = null;
+                if (_clip.Html.Length > 0)
+                    newHtml = _clearFormat ? "" : (newContent != (_clip.Content ?? "") ? RichText.TextToHtml(newContent) : _clip.Html);
+                _svc.Update(_clip.Id, title, tags, expire, content: newContent, html: newHtml);
+            }
             ModalHost.Close();
             ToastService.Flash("已保存");
             Saved?.Invoke();

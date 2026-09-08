@@ -27,8 +27,14 @@ public partial class CardView : UserControl
     private byte[]? _imageBytes;      // M3b-2b：当前图片卡字节（已读则缓存，避免 hover 预览再读一次）
     private Popup? _imgPreviewPopup;  // M3b-2b：hover 浮层 Popup（唯一改 IsOpen 出口）
     private DispatcherTimer? _imgPreviewTimer; // M3b-2b：260ms 延迟打开（对齐 Web setTimeout 防快速划过误弹）
+    private DispatcherTimer? _imgCloseTimer;  // 浮层/卡片间迁移的延迟关闭（鼠标移入浮层不闪关）
+    private bool _inFloater;         // 鼠标当前在浮层上（避免 imgwrap MouseLeave 误关正在停留的浮层）
+    private TextBlock? _capText; // 浮层标题 TextBlock（缩放时同步文字 + MaxWidth 跟随图宽）。单一引用——绝不用多 TextBlock 叠层（那会并排重复，叠层技巧在 WPF 实战中不可靠）。
     private double _imgPreviewScale = 1.0; // M3b-2b：当前缩放（默认 100%，每次开重置）
     private double _imgPreviewStep = 0.15; // M3b-2b：滚轮缩放步长（对齐 Web LS.get("zoomStep", 0.15)；未来从 Settings 读取）
+    private Border? _previewBg;    // 浮层 box(Border) 引用：缩放时同步显式宽高（对齐 Web box.style.width）
+    private Image? _previewImg;    // 浮层图引用：缩放时同步宽高
+    private bool _previewAnchorAbove = true; // 浮层垂直锚定边（true=卡片上方/false=下方）：开浮层定一次，缩放不再翻转 → 杜绝上下跳动
 
     public event Action<ClipItem>? EditRequested;
     /// <summary>统一复制请求（文本/链接）：卡只发请求，由 MainWindow 经 ClipboardHelper 写入并反馈（审计：单一写入入口）。</summary>
@@ -236,10 +242,11 @@ public partial class CardView : UserControl
 
     // ---- body 构建 ----
 
-    /// <summary>文本卡 body：.pv 内嵌滚动摘要（InsetPanel 底，muted 12px，line-height 1.6，可滚动——对齐 .pv overflow-y:auto）。</summary>
+    /// <summary>文本卡 body：普通换行摘要（InsetPanel 底，muted 12px，line-height 1.6）。
+    /// 不做内嵌滚动——卡片不响应滚轮，滚轮始终作用于整页列表（用户拍板：卡片不适配滚轮，文本自然换行、
+    /// 超出卡片高度部分由 ClipToBounds 裁切即可；要看全文双击编辑或复制）。</summary>
     private FrameworkElement BuildTextBody(ClipItem c)
     {
-        var scroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         var text = new TextBlock
         {
             Text = c.Content ?? "",
@@ -248,12 +255,12 @@ public partial class CardView : UserControl
             TextWrapping = TextWrapping.Wrap, // 对齐 white-space:pre-wrap（保留换行 + 自动折行）
             LineHeight = 19.2,                // 12 * 1.6
         };
-        scroll.Content = text;
         return new Border
         {
-            Child = scroll,
+            Child = text,
             Style = (Style)FindResource("InsetPanel"),
             Padding = new Thickness(11, 9, 6, 9),
+            ClipToBounds = true, // 超高文本裁在卡内，不外溢 foot 行；滚轮永远滚整页
         };
     }
 
@@ -370,6 +377,13 @@ public partial class CardView : UserControl
         // 绑定 mouseenter：仅图片区域触发（对齐 Web v0.6.13 触发区收窄）
         wrap.MouseEnter += ImgWrap_MouseEnter;
         wrap.MouseLeave += ImgWrap_MouseLeavePreview;
+        // 滚轮缩放绑在图片区（非浮层）：预览开着时鼠标停在卡片图片上滚轮即缩放（对齐 Web 缩放绑 card）；
+        // 预览关时不 Handled → 放行页面滚动。浮层自身也另挂缩放（滚轮在浮层上时同样可缩放）。
+        wrap.PreviewMouseWheel += (_, e) =>
+        {
+            if (_imgPreviewPopup == null || !_imgPreviewPopup.IsOpen) return; // 预览未开：放行页面
+            if (!_inFloater) ZoomPreview(e);  // 鼠标在卡片图区：缩放预览并消费滚轮
+        };
         return wrap;
     }
 
@@ -506,7 +520,10 @@ public partial class CardView : UserControl
     private void ImgWrap_MouseEnter(object sender, MouseEventArgs e)
     {
         if (BatchMode) return; // 批量模式不弹预览（避免误触 + 干净的选择交互）
+        _imgCloseTimer?.Stop(); // 从浮层回到卡片：取消待关
+        _imgCloseTimer = null;
         if (_imageBytes == null) return;
+        if (_imgPreviewPopup != null && _imgPreviewPopup.IsOpen) return; // 浮层已在：保持
         if (_imgPreviewTimer != null) _imgPreviewTimer.Stop();
         _imgPreviewTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(260) }; // 对齐 Web 260ms 延迟防快速划过误弹
         _imgPreviewTimer.Tick += (_, _) =>
@@ -517,8 +534,35 @@ public partial class CardView : UserControl
         _imgPreviewTimer.Start();
     }
 
-    private void ImgWrap_MouseLeavePreview(object sender, MouseEventArgs e) => CloseImagePreview();
+    private void ImgWrap_MouseLeavePreview(object sender, MouseEventArgs e)
+    {
+        // 延迟关闭：鼠标移向浮层（卡片上方/下方，独立 Popup 窗口）会先触发本卡 MouseLeave。
+        // 若即刻 Close 则浮层一旦打开就闪关、无法停留滚轮缩放（用户反馈"放大没做进去"的根因之一）。
+        // 延迟 220ms：期间鼠标进入浮层（bg.MouseEnter 取消）则不关；真正离开才关。
+        _imgPreviewTimer?.Stop();
+        if (_imgPreviewPopup != null && _imgPreviewPopup.IsOpen && _inFloater) return; // 鼠标已在浮层
+        if (_imgCloseTimer != null) _imgCloseTimer.Stop();
+        _imgCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
+        _imgCloseTimer.Tick += (_, _) =>
+        {
+            _imgCloseTimer?.Stop();
+            _imgCloseTimer = null;
+            if (_inFloater) return; // 已进入浮层：不关
+            CloseImagePreview();
+        };
+        _imgCloseTimer.Start();
+    }
 
+    /// <summary>
+    /// 打开图片预览浮层（方案A·对齐 Web .img-hover-preview，彻底重写）：
+    /// ① 浮层 box(bg) = 圆角 Border，白底 + BorderClip 圆角裁剪(图四角裁进圆角) + 阴影
+    /// ② box 尺寸由代码显式设 = 图等比显示尺寸 origW*scale × origH*scale（不依赖 Popup 自动测量 → 缩放后尺寸必然同步，无白条/裁切）
+    /// ③ 图 = box 内单格 Grid 唯一尺寸元素，Stretch=Uniform 填满 box（box 比例=原图，图完整无裁切）
+    /// ④ 底部 cap = 单 TextBlock 直接叠图底（黑字 + 白色 DropShadowEffect 细描边，无圆角矩形底），MaxWidth≤图宽(超长省略号)
+    /// ⑤ 缩放：更新 box 显式宽高 + img 宽高 + cap 文字 + 重新 placement；垂直锚定边开时定一次不翻转（缩放不上下跳）
+    /// ⑥ 点击预览图 = 复制该图片（Copy→CopyImageRequested），并关浮层
+    /// 关键安全：全链只 1 个 TextBlock → "重复 N 遍"从结构上不可能。
+    /// </summary>
     private void OpenImagePreview()
     {
         if (_imageBytes == null || _clip == null) return;
@@ -538,47 +582,127 @@ public partial class CardView : UserControl
         }
         catch { return; }
 
-        // 浮层容器（.img-hover-preview：白底 / r-lg / sh-raised 阴影 / padding 10）
+        double origW = bmp.PixelWidth;
+        double origH = bmp.PixelHeight;
+        if (origW <= 0 || origH <= 0) return;
+
+        // 0) 视口钳制：原图超大时初始等比缩到当前屏工作区能容纳的最大尺寸（对齐 Web min(img, inner-16)）
+        var win = Window.GetWindow(CardBorder);
+        var wa0 = win != null ? win.GetScreenWorkAreaDip() : SystemParameters.WorkArea;
+        const double vpPad = 16;
+        const double capReserveH = 0; // cap 叠图上不额外占高
+        double maxW = Math.Max(64, wa0.Width - vpPad * 2);
+        double maxH = Math.Max(64, wa0.Height - vpPad * 2 - capReserveH);
+        double fitScale = Math.Min(maxW / origW, maxH / origH);
+        if (fitScale < 1.0) _imgPreviewScale = fitScale;
+
+        // 图等比显示尺寸（box = 图，精确 1:1）
+        double dispW = origW * _imgPreviewScale;
+        double dispH = origH * _imgPreviewScale;
+
+        // 1) box：圆角白底容器（显式宽高 = 图尺寸；BorderClip 把内部(图/cap)裁进圆角 4 角）
         var bg = new Border
         {
             Background = Brushes.White,
-            CornerRadius = (CornerRadius)FindResource("RadiusLg"),
-            Padding = new Thickness(10),
+            CornerRadius = (CornerRadius)FindResource("RadiusMd"),
+            Padding = new Thickness(0),
+            Width = dispW,
+            Height = dispH,
             Effect = new System.Windows.Media.Effects.DropShadowEffect { Color = Colors.Black, BlurRadius = 12, ShadowDepth = 4, Opacity = 0.35 },
         };
-        var inner = new StackPanel();
-        // 图片（ScrollViewer 套住，超框可滚动；wheel 缩放绑定在外层）
-        var img = new Image { Source = bmp, StretchDirection = StretchDirection.Both };
-        var scroll = new ScrollViewer
+        ctl:BorderClip.SetClipToRadius(bg, true);
+
+        // 2) 单格 Grid：Image 撑满(Uniform，box 比例=原图→完整无裁) + cap 叠底
+        var stack = new Grid();
+
+        var img = new Image
         {
-            Content = img,
-            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            MaxWidth = 800,
-            MaxHeight = 600,
+            Source = bmp,
+            Stretch = System.Windows.Media.Stretch.Uniform, // 填满 box（box 比例=原图 → 图完整）
+            StretchDirection = StretchDirection.Both,
         };
-        img.Width = bmp.PixelWidth;
-        img.Height = bmp.PixelHeight;
-        // 标题（.img-cap：fname · fsize · 百分比；M3b-2b 简化）
-        var cap = new TextBlock
+        img.Width = dispW;
+        img.Height = dispH;
+        stack.Children.Add(img);
+
+        // 3) cap = 单 TextBlock 直接叠图底（无圆角矩形底）：黑字 + 白色 DropShadowEffect(ShadowDepth=0,BlurRadius=1)
+        //    渲染成"字形外围细白描边"（WPF 无 TextBlock.Stroke，单元素最稳等价——不叠层不重复）。
+        //    IsHitTestVisible=false 让点击穿透到 bg → 触发复制。
+        _capText = new TextBlock
         {
             Text = (_clip.FileName ?? "图片") + " · " + Format.Size(_clip.FileSize) + " · " + Math.Round(_imgPreviewScale * 100) + "%",
             FontSize = 11,
-            Foreground = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)),
-            Margin = new Thickness(0, 6, 0, 0),
+            FontFamily = new FontFamily("Segoe UI, Microsoft YaHei UI, ui-sans-serif"),
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brushes.Black,
+            TextAlignment = TextAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = TextWrapping.NoWrap,
+            IsHitTestVisible = false,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Margin = new Thickness(0, 0, 0, 8),
+            MaxWidth = Math.Max(40, dispW - 8),
+            Effect = new System.Windows.Media.Effects.DropShadowEffect
+            {
+                Color = Colors.White,
+                BlurRadius = 1,      // 1px 细白描边
+                ShadowDepth = 0,     // 0 偏移 → 向四周均匀扩散成描边
+                Opacity = 1,
+            },
         };
-        inner.Children.Add(scroll);
-        inner.Children.Add(cap);
-        bg.Child = inner;
-        // 鼠标滚轮在背景上缩放（preventDefault 拦截，绑 Popup 整体而非 Image）
+        stack.Children.Add(_capText);
+
+        bg.Child = stack;
+        _previewBg = bg;
+        _previewImg = img;
+        // 滚轮缩放：PreviewMouseWheel 隧道，浮层上滚轮先于内部
         bg.PreviewMouseWheel += ImgPreview_Wheel;
-        // 浮层挂到 CardBorder（弹出层不影响布局；对齐 Web card.appendChild(box) 浮层挂卡片内部）
+        // 点击预览图 = 复制该图片（图片卡走 Copy→CopyImageRequested 复制到系统剪贴板），并关闭浮层。
+        // Popup 是独立窗格，点击不会透传给卡片单击，故在此显式接管。
+        bg.MouseLeftButtonUp += (_, e) =>
+        {
+            if (_clip == null) return;
+            var pos = e.GetPosition(null); // 屏幕坐标（对齐 e.clientX/Y）
+            CloseImagePreview();           // 先关浮层，避免复制 toast 盖在浮层上
+            Copy(_clip, pos.X, pos.Y);     // 图片卡 → CopyImageRequested；文本/链接同理按类型复制
+            e.Handled = true;
+        };
+        // 浮层停留态：鼠标进入浮层 → 取消关闭
+        bg.MouseEnter += (_, _) =>
+        {
+            _inFloater = true;
+            _imgCloseTimer?.Stop();
+            _imgCloseTimer = null;
+        };
+        bg.MouseLeave += (_, _) =>
+        {
+            _inFloater = false;
+            if (_imgCloseTimer != null) _imgCloseTimer.Stop();
+            _imgCloseTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
+            _imgCloseTimer.Tick += (_, _) =>
+            {
+                _imgCloseTimer?.Stop();
+                _imgCloseTimer = null;
+                CloseImagePreview();
+            };
+            _imgCloseTimer.Start();
+        };
+        // 浮层挂到 CardBorder。开浮层定一次垂直锚定边（避免缩放过程在上下方翻转跳动）：
+        // 卡片中心在上半屏(下方空间大) → 放下方；在下半屏(上方空间大) → 放上方。整浮层生命周期不换边。
+        var cardRect0 = CardBorder.PointToScreen(new Point(0, 0));
+        var win0 = Window.GetWindow(CardBorder);
+        var wa0b = win0 != null ? win0.GetScreenWorkAreaDip() : SystemParameters.WorkArea;
+        var cardCenterY = cardRect0.Y + CardBorder.ActualHeight / 2;
+        double roomAbove = cardCenterY - wa0b.Top;
+        double roomBelow = wa0b.Bottom - cardCenterY;
+        _previewAnchorAbove = roomBelow < roomAbove; // 下方空间不足且上方更宽裕 → 放上方；否则放下方
         _imgPreviewPopup = new Popup
         {
             PlacementTarget = CardBorder,
             Placement = PlacementMode.Custom,
             AllowsTransparency = true,
-            StaysOpen = true, // mouseleave 由我们显式控制
+            StaysOpen = true,
             Child = bg,
         };
         _imgPreviewPopup.CustomPopupPlacementCallback = (popupSize, targetSize, offset) =>
@@ -586,8 +710,8 @@ public partial class CardView : UserControl
         _imgPreviewPopup.IsOpen = true;
     }
 
-    /// <summary>浮层定位（对齐 Web reposition：跟随卡片正中上方 4px，顶部空间不够时落底部；视口钳制 8px）。
-    /// 视口取卡片所在屏工作区（双屏：卡片在副屏时按副屏钳制，不落出屏外）。</summary>
+    /// <summary>浮层定位（对齐 Web reposition：跟随卡片水平正中；垂直固定锚定边不翻转）。视口取卡片所在屏工作区。
+    /// 锚定边 _previewAnchorAbove 在开浮层时定一次：缩放宽高变化仅做该边内的屏内钳制，绝不上下翻转换边 → 缩放不跳。</summary>
     private CustomPopupPlacement[] RepositionPreview(Size popupSize, Size targetSize)
     {
         var cardRect = CardBorder.PointToScreen(new Point(0, 0)); // 卡片屏幕坐标（DIP，虚拟屏空间）
@@ -598,20 +722,35 @@ public partial class CardView : UserControl
         // 水平：卡片居中，钳制 [wa.Left+8, wa.Right - bw - 8]
         var left = cardRect.X + (targetSize.Width - bw) / 2;
         left = Math.Max(wa.Left + 8, Math.Min(left, wa.Right - bw - 8));
-        // 垂直：优先卡片顶部 - 4px - bh（间隙 4px 贴卡片防"飘远"）；上方空间不够则卡片底部 + 4px
-        var topAbove = cardRect.Y - bh - 4;
-        var topBelow = cardRect.Y + targetSize.Height + 4;
-        var top = (topAbove >= wa.Top + 8) ? topAbove : Math.Min(topBelow, wa.Bottom - bh - 8);
+        // 垂直：按开浮层时定的锚定边定位（不翻转）。
+        double top;
+        if (_previewAnchorAbove)
+        {
+            // 放卡片上方，间隙 4px；过高则钳到屏顶 +8（允许略微盖住卡片，但绝不换边）
+            top = Math.Max(wa.Top + 8, cardRect.Y - bh - 4);
+        }
+        else
+        {
+            // 放卡片下方，间隙 4px；过高则钳到屏底 - bh - 8（允许略微上扩盖卡，绝不换边）
+            top = Math.Min(wa.Bottom - bh - 8, cardRect.Y + targetSize.Height + 4);
+            if (top < wa.Top + 8) top = wa.Top + 8; // 卡片极贴屏底时再兜底，不落出屏
+        }
         // Popup 的 CustomPopupPlacement 返回相对 PlacementTarget 的偏移（Point(0,0) = PlacementTarget 左上）
         var relX = left - cardRect.X;
         var relY = top - cardRect.Y;
         return new[] { new CustomPopupPlacement(new Point(relX, relY), PopupPrimaryAxis.Horizontal) };
     }
 
-    private void ImgPreview_Wheel(object sender, MouseWheelEventArgs e)
+    /// <summary>浮层滚轮缩放（PreviewMouseWheel 隧道到浮层自身）。</summary>
+    private void ImgPreview_Wheel(object sender, MouseWheelEventArgs e) => ZoomPreview(e);
+
+    /// <summary>滚轮缩放统一入口：delta>0 放大 / <0 缩小，钳制 50%~300%（对齐 Web zoom：Math.min(3,max(.5,scale±step))）。
+    /// 卡片图区与浮层共用。预览打开期间滚轮一律消费（Handled），绝不漏给页面滚动——即使已到 50%/300% 钳制边界，
+    /// 继续滚也只是不缩放、不滚页面（用户拍板：预览放大时滚轮永远属于预览，界面滚动应被完全屏蔽）。</summary>
+    private void ZoomPreview(MouseWheelEventArgs e)
     {
-        if (_imgPreviewPopup == null || !_imgPreviewPopup.IsOpen) return;
-        e.Handled = true; // 拦截页面滚动
+        if (_imgPreviewPopup == null || !_imgPreviewPopup.IsOpen) return; // 预览未开：放行（由调用点保证仅预览开时调用）
+        e.Handled = true; // 预览打开即吞下滚轮，杜绝透传到主窗页面滚动
         var before = _imgPreviewScale;
         _imgPreviewScale = Math.Min(3.0, Math.Max(0.5, _imgPreviewScale + (e.Delta > 0 ? _imgPreviewStep : -_imgPreviewStep)));
         if (_imgPreviewScale != before) ApplyPreviewScale();
@@ -619,10 +758,8 @@ public partial class CardView : UserControl
 
     private void ApplyPreviewScale()
     {
-        if (_imgPreviewPopup?.Child is not Border bg || bg.Child is not StackPanel sp) return;
-        if (sp.Children.Count < 2 || sp.Children[0] is not ScrollViewer sv || sv.Content is not Image img) return;
         if (_imageBytes == null || _clip == null) return;
-        // 用 bytes 重新构造 BitmapImage 以获取 PixelWidth/Height
+        if (_previewBg == null || _previewImg == null) return;
         try
         {
             using var ms = new MemoryStream(_imageBytes);
@@ -631,14 +768,27 @@ public partial class CardView : UserControl
             bmp.CacheOption = BitmapCacheOption.OnLoad;
             bmp.StreamSource = ms;
             bmp.EndInit();
-            img.Source = bmp;
-            img.Width = bmp.PixelWidth * _imgPreviewScale;
-            img.Height = bmp.PixelHeight * _imgPreviewScale;
-            if (sp.Children[1] is TextBlock cap)
-                cap.Text = (_clip.FileName ?? "图片") + " · " + Format.Size(_clip.FileSize) + " · " + Math.Round(_imgPreviewScale * 100) + "%";
-            // 视口钳制：Popup.CustomPopupPlacementCallback 在下次 IsOpen=true 时才回调；显式调用重新定位
-            _imgPreviewPopup.HorizontalOffset += 0.001; // 触发重新 placement
-            _imgPreviewPopup.HorizontalOffset -= 0.001;
+            // 图等比显示尺寸 = box 尺寸（对齐 Web img.style.width=natural*scale + box.style.width=img+pad）
+            double dispW = bmp.PixelWidth * _imgPreviewScale;
+            double dispH = bmp.PixelHeight * _imgPreviewScale;
+            // 更新 box 显式宽高 → Popup 视窗跟随（无白条/裁切）。这是方案A关键：不再依赖 Popup 自动测量
+            _previewBg.Width = dispW;
+            _previewBg.Height = dispH;
+            _previewImg.Source = bmp;
+            _previewImg.Width = dispW;
+            _previewImg.Height = dispH;
+            // 同步 cap 文字 + MaxWidth（≤图宽；无 chip 底，TextBlock 即 cap）
+            if (_capText != null)
+            {
+                _capText.Text = (_clip.FileName ?? "图片") + " · " + Format.Size(_clip.FileSize) + " · " + Math.Round(_imgPreviewScale * 100) + "%";
+                _capText.MaxWidth = Math.Max(40, dispW - 8);
+            }
+            // 视口钳制：触发重新 placement（缩放后 box 变大/变小需重新定位居中）
+            if (_imgPreviewPopup != null && _imgPreviewPopup.IsOpen)
+            {
+                _imgPreviewPopup.HorizontalOffset += 0.001; // 触发重新 placement
+                _imgPreviewPopup.HorizontalOffset -= 0.001;
+            }
         }
         catch { /* 缩放失败不抛——预览仍可用 */ }
     }
@@ -647,6 +797,12 @@ public partial class CardView : UserControl
     {
         _imgPreviewTimer?.Stop();
         _imgPreviewTimer = null;
+        _imgCloseTimer?.Stop();
+        _imgCloseTimer = null;
+        _inFloater = false;
+        _capText = null; // 释放单 TextBlock 引用，下次重建时填充
+        _previewBg = null;
+        _previewImg = null;
         if (_imgPreviewPopup != null)
         {
             _imgPreviewPopup.IsOpen = false;

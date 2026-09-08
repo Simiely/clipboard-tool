@@ -18,12 +18,17 @@
                 <TextBlock Text="存入内容" FontSize="17" FontWeight="Medium" VerticalAlignment="Center" Margin="10,0,0,0"/>
             </DockPanel>
 
-            <!-- paste-badge-row：类型徽章（实时识别）+ 一键清空 -->
+            <!-- paste-badge-row：类型徽章（实时识别）+ 一键新建 / 清空 -->
             <DockPanel Margin="0,0,0,10">
                 <ContentControl x:Name="TypeBadge" DockPanel.Dock="Left" VerticalAlignment="Center"/>
                 <Button Content="🗑 清空" Style="{StaticResource BtnGhostSm}" DockPanel.Dock="Right"
                         HorizontalAlignment="Right" VerticalAlignment="Center" Click="Clear_Click"
-                        ToolTip="清空输入"/>
+                        ToolTip="清空当前输入/已识别内容"/>
+                <!-- v0.7.3：新建（手动录入一条新内容）——清除自动识别/填入的剪贴板文本与已选文件，回到空白手动输入态 -->
+                <Button Content="＋ 新建" Style="{StaticResource BtnGhostSm}" DockPanel.Dock="Right"
+                        HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,6,0"
+                        Click="New_Click"
+                        ToolTip="忽略剪贴板自动识别，从空白开始手动输入一条新内容"/>
             </DockPanel>
 
             <!-- 输入区（对齐 .paste-modal textarea：min-height 150；Ctrl+Enter 快速存入） -->
