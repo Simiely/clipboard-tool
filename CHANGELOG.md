@@ -1,5 +1,32 @@
 # CHANGELOG.md
 
+## v0.7.5 (2026-09-08) — 开机自启 + 开机静默托盘 + 图标去「方角」改超椭圆 squircle
+
+> 本版是 exe 桌面版的两个增强：①顶栏加 **⚡ 开机自启**开关（写注册表 Run，开机 `/startup` 静默驻留托盘、不弹主窗），方案对齐 WindowTinter proto-shadow（README 明写"勾选开机自启后开机仅驻留托盘、不弹主窗"）；②修复图标「方角」问题——源图是整张方形不透明画布，旧脚本纯缩放导致开始菜单/任务栏图标四角直边粉色，改为**超椭圆 alpha 裁剪**（同 WindowTinter `DEV.md §17 超椭圆图标`：n=4 大尺寸 squircle / n=8 小尺寸近圆）。bat/platform 形态代码未变，不重打 zip（仅 exe zip 重打）。
+
+### 🚀 开机自启 + 开机静默托盘
+- `Services/AutoStart.cs`（新）：写/删 `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` 的 `ClipboardTool="<exe路径>" /startup`。`Enable/Disable` 幂等；`IsEnabled` 读注册表实际态（非 settings.json），保证按钮态与系统真实一致。
+- `Settings.cs` + `LaunchAtStartup`；`MainWindow.xaml` 顶栏加 **⚡ 开机自启** 幽灵按钮（on=金色 0xD4AF37 / off=灰 0x848484）。
+- `MainWindow.AutoStartOps.cs`（新 partial）：按钮点击 toggle `AutoStart.Enable/Disable` + 写 Settings，刷新按钮态，Toast 反馈。
+- `MainWindow` 加 `startHidden` 参数 → 静默模式下 `Minimized + ShowInTaskbar=false` 创建窗口（保留句柄，ClipboardWatcher 才能在 `OnSourceInitialized` 挂上）；托盘双击唤出 `ShowMainFromTray` 恢复 `ShowInTaskbar=true`。
+- `App.xaml.cs`：识别 `/startup`（及 `/silent` `/minimized` `/background` `/tray`）参数 → `startSilent`；**`ShutdownMode` 改 `OnExplicitShutdown`**（关键坑：WPF 默认 `OnLastWindowClose` 会在无可见主窗的静默模式下误退进程，托盘"退出"成为唯一退出路径）。
+
+### 🎨 图标去方角 — 超椭圆 squircle（对齐 WindowTinter DEV.md §17）
+- 根因：源图 `D:\download\生成液态玻璃风格icon.png` 是 RGB 2048×2048 整张不透明方形画布，粉色背景直填四角；旧 `_make_icon.py` 纯 LANCZOS 缩放 → ICO 各帧四角直边粉色（用户原话"图标是方的"）。
+- 方案（同 WindowTinter proto-shadow `DEV.md §17` Python+Pillow 思路）：
+  - 每帧缩放后**按目标像素网格**生成超椭圆 alpha 蒙版 `|x/(1-inset)|^n + |y/(1-inset)|^n ≤ 1`
+  - 大尺寸 48/64/128/256 用 **n=4**（squircle，Win11 现代应用图标同款轮廓）
+  - 小尺寸 16/24/32 用 **n=8**（近圆——小尺寸 squircle 的圆角只有 1px 视觉退化，n=8 让小图标仍显圆滑）
+  - inset 4% 留边距；蒙版 1px 3×3 模糊抗锯齿
+- `Assets/_make_icon.py` 重写（RGB→RGBA）；`Assets/app.ico` 重生成（105KB→120KB，7 帧全 RGBA）。校验：每帧 mask 与 alpha **0 内部漏空 / 0 外部漏色**。
+- `ClipboardExe.csproj` ApplicationIcon 上方注释更新描述新算法。
+
+### 🧪 selftest
+- `--selftest` 在发布 exe 上跑通 **ALL PASS**（238 项断言零回归，含拼音/URL 清理/去重/归档/同步/墓碑/M5 配置等）。注：首次偶发 round-trip 3 FAIL 系 selftest 临时目录残留（`%TEMP%\clipboard-selftest-{pid}`）所致，复跑稳定 ALL PASS，非代码回归。
+
+### 📝 文档基线
+- `docs/发布规范.md` 发布记录表追加 v0.7.5 行。
+
 ## v0.7.4 (2026-09-08) — 应用图标接入液态玻璃风格「COPY」剪贴板 + 托盘图标同步换皮 + exe 合并为单文件
 
 > 本版是 exe 桌面版的**视觉层与打包形态**变更：把项目长期占位的 `SystemIcons.Application` 托盘/开始菜单图标换成真实的液态玻璃风格「COPY」剪贴板（7 帧 ico），并把发布形式从 5 文件 framework-dependent 改为 **PublishSingleFile 单文件 framework-dependent**。bat/platform 形态代码未变，不重打 zip。

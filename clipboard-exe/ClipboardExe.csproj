@@ -9,10 +9,17 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Clipboard</AssemblyName>
     <RootNamespace>ClipboardExe</RootNamespace>
-    <Version>0.7.4</Version>
+    <Version>0.7.5</Version>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
-    <!-- 应用图标：液态玻璃风格 COPY 剪贴板（源 D:\download\生成液态玻璃风格icon.png 2048×2048）。
-         7 帧(16/24/32/48/64/128/256)由 Assets/_make_icon.py 生成。
+    <!-- 应用图标：液态玻璃风格 COPY 剪贴板（源 D:\download\生成液态玻璃风格icon.png 2048×2048 RGB）。
+         处理方式:超椭圆(squircle/超椭圆) alpha 裁剪 — 与 WindowTinter proto-shadow
+         (DEV.md §17 "超椭圆图标") 完全一致的实现思路:
+           ① 7 帧 (16/24/32/48/64/128/256) 由 Assets/_make_icon.py 生成。
+           ② 大尺寸 (48/64/128/256) 用 n=4 超椭圆方程 |x|^n+|y|^n<=1
+              (squircle,iOS-style 圆角方形) — 与 Windows 11 现代应用图标轮廓一致。
+           ③ 小尺寸 (16/24/32) 改用 n=8 (近圆) — 小图标 squircle 的圆角
+              视觉退化严重,n=8 让小尺寸仍呈现明显圆滑轮廓。
+           ④ 蒙版在缩放后按目标像素网格应用,并做 1px 3x3 模糊抗锯齿。
          Windows 自动按场景挑帧:开始菜单/任务栏 = 48~256,托盘 NotifyIcon = 16/32。 -->
     <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <!-- WPF temp 项目 (ClipboardExe_*_wpftmp) 自动生成的 AssemblyInfo 与 SDK 默认 GenerateAssemblyInfo 冲突;
