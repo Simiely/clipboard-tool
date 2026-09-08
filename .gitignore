@@ -25,6 +25,9 @@ clipboard-exe/publish/
 # 单文件发布实验目录（v0.7.4+ 验证 PublishSingleFile 产出，不进库）
 _publish/
 
+# Assets/ 辅助预览图（开发时用 Pillow 拼的 7 帧合图，进库的只有 app.ico 7 帧 ico）
+clipboard-exe/Assets/app_sizes.png
+
 # 截图工具构建产物与临时验证截图
 clipboard-exe/tools/shot/bin/
 clipboard-exe/tools/shot/obj/
