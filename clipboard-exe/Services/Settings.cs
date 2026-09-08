@@ -14,6 +14,10 @@ public sealed class Settings
     /// <summary>列数偏好：0=自适应（默认），1~4=用户锁定（M3b-1 接入）。</summary>
     public int MaxColumns { get; set; }
 
+    /// <summary>开机自启意图（上次用户在顶栏按钮选的态）。实际是否生效以注册表 Run 值为准，
+    /// App 启动时用 AutoStart.IsEnabled() 反映真实态（用户可被任务管理器禁用/手动改注册表）。</summary>
+    public bool LaunchAtStartup { get; set; }
+
     private readonly string _file;
 
     /// <summary>JsonSerializer.Deserialize 需要 public 无参 ctor（私有带参 ctor 不算）。
@@ -37,6 +41,7 @@ public sealed class Settings
                 {
                     AlwaysOnTop = loaded.AlwaysOnTop,
                     MaxColumns = loaded.MaxColumns,
+                    LaunchAtStartup = loaded.LaunchAtStartup,
                 };
             }
         }

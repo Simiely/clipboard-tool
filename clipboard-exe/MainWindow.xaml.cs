@@ -46,7 +46,7 @@ public partial class MainWindow : Window
 
     private const double Gap = 16; // .list gap:16px（卡片右/下外边距，MakeCard 使用）
 
-    public MainWindow(Settings settings, TrayIconService? tray)
+    public MainWindow(Settings settings, TrayIconService? tray, bool startHidden = false)
     {
         InitializeComponent();
         // 标题栏版本标识：读取程序集信息版本(AssemblyInformationalVersion, csproj <Version> 生成, 如 0.7.4)
@@ -54,6 +54,16 @@ public partial class MainWindow : Window
         _settings = settings;
         _tray = tray;
         if (_tray != null) _tray.ShowMainRequested += ShowMainFromTray;
+
+        // 开机自启静默（/startup）：以最小化 + 无任务栏按钮创建，等同"托盘待命"——
+        // 句柄照常创建（watcher/定时器/托盘都起来），但用户看不到也不被打扰；
+        // 因窗口从未激活，watcher 保持 Paused（前台语义，不抢收剪贴板）。托盘双击/二次双击唤出即恢复。
+        // 参考 WindowTinter：窗口以最小化态创建，无闪烁。
+        if (startHidden)
+        {
+            WindowState = WindowState.Minimized;
+            ShowInTaskbar = false;
+        }
 
         // 服务装配（数据目录 exe 同目录 data/）
         _storage = new Storage(App.DataDir);
@@ -79,6 +89,8 @@ public partial class MainWindow : Window
         UpdateColsBtnText();
         ArchBtn.Content = "归档·关";
         ArchBtn.Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x84, 0x84, 0x84));
+        // 开机自启按钮初值（以注册表 Run 实际态为准——用户可能被任务管理器禁用/手动改注册表）
+        RefreshAutoStartBtn();
 
         // 激活后延迟弹窗：Tick 由 OnActivated 触发(见 OnActivated 注释)；这里只注册一次。
         _activationTimer.Tick += ActivationTimer_Tick;
@@ -588,6 +600,7 @@ public partial class MainWindow : Window
     /// <summary>从托盘/第二实例唤起：显示并恢复前置。托盘菜单/托盘双击/第二实例唤醒共用。</summary>
     public void ShowMainFromTray()
     {
+        ShowInTaskbar = true; // startHidden 静默启动设过 false；唤出时恢复任务栏按钮
         Show();
         WindowState = WindowState.Normal;
         Activate();

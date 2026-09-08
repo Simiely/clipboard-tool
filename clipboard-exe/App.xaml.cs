@@ -50,6 +50,12 @@ public partial class App : Application
         // 必须在任何视觉对象创建之前设置。
         RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly;
 
+        // 生命周期改为显式退出：托盘常驻工具（含 /startup 开机静默模式：主窗最小化/或用户收进托盘后无可见窗）
+        // 不能依赖默认 OnLastWindowClose——否则主窗一旦被关/静默无可见窗时应用自动退出。
+        // 对齐 WindowTinter 托盘语义：程序只被托盘右键「退出」真正终止（ReallyExit→Shutdown），
+        // 点 X/最小化收托盘、静默启动都不结束进程。
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         // 自检模式（--selftest）：跑数据层规则断言后退出，不启动主窗（发版前健康检查）。
         // 置于单实例检查之前：自检与主程序互不干扰，可随时并行跑（对齐 Web 版 node 测试脚本思路）。
         if (e.Args.Contains("--selftest"))
@@ -134,7 +140,15 @@ public partial class App : Application
         {
             var settings = Settings.Load(DataDir);
             _tray = new TrayIconService("剪贴板", () => { _main?.ReallyExit(); return true; });
-            _main = new MainWindow(settings, _tray);
+            // 开机自启静默：注册表 Run 值带 /startup → 只驻留托盘、不显示主窗（手动双击无参数则正常显示）。
+            // 支持多别名（对齐 WindowTinter /startup /silent /minimized /background /tray 惯例）。
+            bool startSilent = e.Args.Any(a =>
+                a.Equals("/startup", StringComparison.OrdinalIgnoreCase)
+                || a.Equals("/silent", StringComparison.OrdinalIgnoreCase)
+                || a.Equals("/minimized", StringComparison.OrdinalIgnoreCase)
+                || a.Equals("/background", StringComparison.OrdinalIgnoreCase)
+                || a.Equals("/tray", StringComparison.OrdinalIgnoreCase));
+            _main = new MainWindow(settings, _tray, startSilent);
             _main.Closed += (_, _) => _tray?.Dispose();
             _main.Show();
         }

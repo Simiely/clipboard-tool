@@ -60,6 +60,9 @@
                                     ToolTip="点击循环切换列数：自动 → 1 → 2 → 3 → 4 → 自动"/>
                             <Button x:Name="DataBtn" Style="{StaticResource BtnGhostSm}" Content="数据管理"
                                     Click="DataBtn_Click" ToolTip="导入 / 导出 / 清空（本地备份）"/>
+                            <Button x:Name="AutoStartBtn" Style="{StaticResource BtnGhostSm}"
+                                    Click="AutoStartBtn_Click"
+                                    ToolTip="开机自启动：登录后自动驻留托盘（不弹主窗），点击切换。需写入注册表 Run 项"/>
                             <Button Style="{StaticResource BtnGhostSm}" Content="退出"
                                     Click="ExitBtn_Click" ToolTip="退出并停止捕获"/>
                         </StackPanel>
