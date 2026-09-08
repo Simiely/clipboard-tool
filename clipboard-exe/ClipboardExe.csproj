@@ -9,8 +9,12 @@
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>Clipboard</AssemblyName>
     <RootNamespace>ClipboardExe</RootNamespace>
-    <Version>0.7.3</Version>
+    <Version>0.7.4</Version>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <!-- 应用图标：液态玻璃风格 COPY 剪贴板（源 D:\download\生成液态玻璃风格icon.png 2048×2048）。
+         7 帧(16/24/32/48/64/128/256)由 Assets/_make_icon.py 生成。
+         Windows 自动按场景挑帧:开始菜单/任务栏 = 48~256,托盘 NotifyIcon = 16/32。 -->
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
     <!-- WPF temp 项目 (ClipboardExe_*_wpftmp) 自动生成的 AssemblyInfo 与 SDK 默认 GenerateAssemblyInfo 冲突;
          关掉 SDK 自动生成,WPF temp 仍会自己生成它那份,主程序集 assembly attribute 由下面 ItemGroup 显式定义 -->
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -29,6 +33,19 @@
     <EmbeddedResource Remove="tools/**" />
     <Page Remove="tools/**" />
     <ApplicationDefinition Remove="tools/**" />
+  </ItemGroup>
+
+  <!-- Assets/:
+       - app.ico    双重身份:
+                    ① <ApplicationIcon> 把它编进 exe Win32 资源(开始菜单/任务栏图标)。
+                    ② 下面 <Resource Include> 把它再以 WPF Resource 嵌入,运行时通过
+                       pack://application:,,,/Assets/app.ico 加载给托盘 NotifyIcon
+                       (与 Win32 图标共用同一份二进制,零运行时复制成本)。
+       - _make_icon.py + app_sizes.png + 其他辅助文件:None Remove 一律排除,不进任何构建产物。 -->
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+    <None Remove="Assets\_make_icon.py" />
+    <None Remove="Assets\app_sizes.png" />
   </ItemGroup>
 
   <!-- ===== WpfVisualTreeMcp Inspector (self-hosted "AI 眼睛", DEBUG-only) =====

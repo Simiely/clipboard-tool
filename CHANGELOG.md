@@ -1,5 +1,39 @@
 # CHANGELOG.md
 
+## v0.7.4 (2026-09-08) — 应用图标接入液态玻璃风格「COPY」剪贴板 + 托盘图标同步换皮 + exe 合并为单文件
+
+> 本版是 exe 桌面版的**视觉层与打包形态**变更：把项目长期占位的 `SystemIcons.Application` 托盘/开始菜单图标换成真实的液态玻璃风格「COPY」剪贴板（7 帧 ico），并把发布形式从 5 文件 framework-dependent 改为 **PublishSingleFile 单文件 framework-dependent**。bat/platform 形态代码未变，不重打 zip。
+
+### 🎨 应用图标接入（Assets/app.ico，7 帧）
+- 源：`D:\download\生成液态玻璃风格icon.png`（2048×2048，粉色 COPY 剪贴板），通过 `Assets/_make_icon.py`（Pillow）生成 16/24/32/48/64/128/256 共 7 帧 ico，PNG-in-ICO 编码（256 帧为 PNG 流）。
+- `ClipboardExe.csproj` 新增 `<ApplicationIcon>Assets\app.ico</ApplicationIcon>` → 图标编进 exe Win32 资源（开始菜单/任务栏图标）。
+- 同步 `<Resource Include="Assets\app.ico">` 把它以 WPF Resource 嵌入，运行时通过 `pack://application:,,,/Assets/app.ico` 加载给托盘 NotifyIcon（与 Win32 图标共用同一份二进制，零运行时复制成本）。
+- `_make_icon.py` 与 `Assets/app_sizes.png`（检视图）`.gitignore` 走 csproj 的 `<None Remove>` 排除，不进构建产物。
+- `bin/Release/net9.0-windows/win-x64/Clipboard.dll` 字节串包含 "0.7.4"（AssemblyInformationalVersion），PE 资源目录可解析出 7 帧 ICONDIR。
+
+### 🖼 托盘图标同步换皮
+- `Services/TrayIconService.cs` 构造时 `Icon = LoadAppIcon()`，从 WPF pack 资源加载与 exe 同款的 .ico。Windows 托盘 NotifyIcon 自动按 16×16/32×32 挑最匹配的帧渲染，dpi ≥ 100% 时再放大，锐利不糊。
+- `LoadAppIcon()` 兜底：资源不可用时返回 `SystemIcons.Application`，托盘不空白（任务栏图标另由 `<ApplicationIcon>` 保证）。
+- 解决：v0.7.3 之前用占位 `SystemIcons.Application`，托盘右键菜单虽已暗色（`TrayDarkRenderer`），但图标是 Windows 默认通用图标，与应用品牌脱节。
+
+### 📦 exe 合并为单文件（PublishSingleFile=true，framework-dependent）
+- 发布命令：`dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=embedded`
+- 产物：`Clipboard.exe` 唯一文件（805 KB；.NET 9 DLL/JSON 全内嵌 + 自解压到 `%LOCALAPPDATA%\Temp\.net\Clipboard\<hash>\`），pdb 通过 `DebugType=embedded` 嵌进 exe（崩溃栈可直接定位，无额外文件）。
+- **运行要求不变**：仍需装 .NET 9 Desktop Runtime x64（不是 self-contained，runtime 不内嵌以控制体积）。 `.NET 9 SDK` 不够，发布说明明确要求 Desktop Runtime。
+- `App.OnStartup` 的 `RenderOptions.ProcessRenderMode = RenderMode.SoftwareOnly` 强制软件渲染保留（PublishSingleFile 下 DropShadowEffect 视觉树会静默崩溃 → 白屏；剪贴板工具对渲染性能无要求）。
+- 安装目录约定从「5 文件同目录」改为「1 个 exe」即可——`Clipboard.dll` / `Clipboard.deps.json` / `Clipboard.runtimeconfig.json` 不再产出。`data/` 子目录（含 clips.json / archive.json / files/）保留原路径不变，便于跨版本迁移。
+
+### 🧪 selftest
+- `--selftest` 在新发布的单文件 exe 上跑通，**ALL PASS**（含拼音字库/URL 清理/去重/排序/归档/同步/墓碑/M5 配置等共 238 项断言），与 v0.7.3 同基线。
+
+### 📝 文档基线
+- `docs/发布规范.md` 更新 exe 形态描述：「exe framework-dependent 单文件 PublishSingleFile，唯一产物 `Clipboard.exe`，运行要求 .NET 9 Desktop Runtime x64」。发布 zip 内仅 exe + 使用说明。
+- `docs/发布规范.md` v0.7.x 发布记录新增 v0.7.4。
+- AGENTS.md 基线更新至 2026-09-08 · commit <v0.7.4 commit>。
+- `使用说明.txt` 同步：写明图标 + 单文件形态。
+
+> 详细开发记录见下方「开发线」小节。bat/platform 形态未触，仍以 v0.7.3 同号 zip（已发）随本期重新确认；本版仅重新发布 exe 单文件形态（zip 内 exe 替换为 v0.7.4 单文件版）。
+
 ## v0.7.3 (2026-09-08) — exe 图片 hover 预览彻底重写（无重复/无白边/等比/可复制）+ 编辑/存入交互闭环 + 同步并发锁硬化
 
 > 本版是 exe 桌面版一次较集中的**图片预览浮层重写 + 编辑/存入交互闭环**发布，并顺带按走查结论硬化同步并发锁。bat/平台形态代码未变（自 v0.7.1 无改动），仅随本版重打 zip 保持三形态同版。
