@@ -18,6 +18,9 @@ public sealed class SyncConfig
     [JsonPropertyName("intervalMin")] public int IntervalMin { get; set; }
     [JsonPropertyName("lastSyncAt")] public long LastSyncAt { get; set; }
     [JsonPropertyName("lastSyncError")] public string LastSyncError { get; set; } = "";
+    // v0.7.6：一次性迁移标记（对齐 Web 端 webdav.json 的 v0706SyncFiles）。
+    // 置 true 表示「本份配置已经过 syncFiles 默认值迁移」，此后用户主动关闭不会被再次翻开。
+    [JsonPropertyName("v0706SyncFiles")] public bool SyncFilesMigrated { get; set; }
     [JsonPropertyName("accountName")] public string AccountName { get; set; } = "default";
     // v0.7.x：账号昵称（displayName，可随时改，随快照 nickname 同步到同账号其它设备，仅影响展示）
     // 服务器为纯 WebDAV 盘（无用户库）时，昵称 = 快照顶层 nickname 字段 + 本地 SyncConfig 记忆；本地权威、上传写远端、首次换机采纳远端。

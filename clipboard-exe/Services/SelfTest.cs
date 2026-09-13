@@ -553,6 +553,31 @@ public static class SelfTest
                     loadedCfg is { SyncFiles: true, AutoSync: true, IntervalMin: 120, AccountName: "laptop" }, Line);
                 Check("M5 配置：无配置文件返回 null", WebDavSync.LoadConfig(Path.Combine(dir, "nope")) == null, Line);
                 Check("M5 配置：未配置时默认地址 = http://192.168.2.1:6086", WebDavSync.DefaultUrl == "http://192.168.2.1:6086", Line);
+            }
+            // v0.7.6 回归：存量 "syncFiles":false 必须被一次性迁移翻开。
+            // 属性默认值 = true 只对「JSON 里没有该字段」生效，已落盘的显式 false 会覆盖它。
+            // 少了这段迁移，exe 端永不上传实体 → 他端同步后拉不到东西（本次整条问题链的源头）。
+            {
+                var migDir = Path.Combine(dir, "mig");
+                Directory.CreateDirectory(migDir);
+                File.WriteAllText(Path.Combine(migDir, "webdav.json"),
+                    "{\"url\":\"https://dav.example.com\",\"user\":\"me\",\"pass\":\"secret\",\"syncFiles\":false,\"intervalMin\":720}");
+
+                var c1 = WebDavSync.LoadConfig(migDir);
+                Check("v0.7.6 迁移：存量 syncFiles=false 首次读取被翻 true", c1 is { SyncFiles: true }, Line);
+                Check("v0.7.6 迁移：写入迁移标记（不重复翻）",
+                    c1 != null && File.ReadAllText(Path.Combine(migDir, "webdav.json")).Contains("v0706SyncFiles"), Line);
+
+                // 迁移后用户主动关闭必须被尊重——标记存在就不再自动翻开
+                c1!.SyncFiles = false;
+                WebDavSync.SaveConfig(migDir, c1);
+                var c2 = WebDavSync.LoadConfig(migDir);
+                Check("v0.7.6 迁移：迁移后用户主动关闭 syncFiles 不被再次翻开", c2 is { SyncFiles: false }, Line);
+
+                // 迁移不应破坏其它字段（曾 SaveConfig 整份写回，防序列化丢字段）
+                Check("v0.7.6 迁移：Url/User/Pass/Account 不丢", c2 is { Url: "https://dav.example.com", User: "me", Pass: "secret" }, Line);
+            }
+            {
 
                 // v0.7.6-P1 回归：空 fileMime 曾让 MediaTypeHeaderValue("") 抛异常并中断整次同步
                 Check("MimeOrDefault：null → octet-stream",

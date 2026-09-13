@@ -35,9 +35,27 @@ public static class WebDavSync
             var c = JsonSerializer.Deserialize<SyncConfig>(File.ReadAllText(f), JsonOpt);
             if (c == null) return null;
             if (c.IntervalMin <= 0) c.IntervalMin = DefaultIntervalMin;
+            try { MigrateSyncFilesOnce(dataDir, c); } catch { /* 迁移失败不影响读取 */ }
             return c;
         }
         catch { return null; }
+    }
+
+    /// <summary>v0.7.6 一次性迁移：存量 `syncFiles:false` 翻 true（对齐 webdav.js migrateSyncFilesDefaults）。
+    ///
+    /// **为什么必须在 exe 端也做**：`SyncConfig.SyncFiles` 的属性默认值 `= true` 只对
+    /// 「JSON 里没有该字段」或新建对象生效——**已落盘的 `data/webdav.json` 里显式写的
+    /// `"syncFiles": false` 会在反序列化时覆盖它**，于是 exe 端依旧不备份实体上云，
+    /// 云端没有实体 → 他端（含 Web 版）同步后即便"拉回无条件"也拉不到东西。
+    /// 这正是本次整条问题链的源头，只改属性默认值等于没改（与 Web 端同一个教训）。
+    ///
+    /// 只翻「从未迁移过」的配置：迁移后用户再主动关闭会被尊重（有标记就不再自动翻开）。</summary>
+    private static void MigrateSyncFilesOnce(string dataDir, SyncConfig c)
+    {
+        if (c.SyncFilesMigrated) return;
+        c.SyncFilesMigrated = true;
+        if (!c.SyncFiles) c.SyncFiles = true;
+        SaveConfig(dataDir, c); // 写回标记（只此一次）
     }
 
     /// <summary>写同步配置（UTF-8 无 BOM，camelCase 缩进，与既有数据文件一致）。</summary>
