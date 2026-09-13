@@ -143,7 +143,11 @@ public partial class MainWindow : Window
         catch { return; }
         // 纯图片剪贴板（截图 Win+Shift+S / 右键复制图片 / 微信QQ复制图片：无文本但有 Bitmap/DIB/PNG）
         // 也应弹存卡窗——此前只认文本，图片复制永远走不到 OpenPasteDialog（图片识别断点①）。
-        if (text.Length == 0 && !ClipboardHelper.IsImageOnlyClipboard()) return;
+        // v0.7.6-P2：**文件剪贴板**（资源管理器复制文件，只有 FileDrop 无文本无图）此前同样被这里挡掉 ——
+        // 这是「复制文件后程序毫无反应、跟 Web 体验不一样」的第一道断点（断点①的文件版）。
+        // 补齐后：复制文件 → 自动弹存卡窗 → PasteDialog.autoFill 的文件分支自动填入（全程无需 Ctrl+V）。
+        if (text.Length == 0 && !ClipboardHelper.IsImageOnlyClipboard()
+            && ClipboardHelper.GetFileDropList() == null) return;
         if (!TryTakeClipboardSeq()) return; // 剪贴板未再变化（激活/事件/反复切回窗口都在这里收敛）
         // 去重预查统一收敛到 OpenPasteDialog：剪贴板文本已存在 → 只弹编辑窗；否则开存卡窗（autoFill）
         OpenPasteDialog();

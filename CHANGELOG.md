@@ -57,10 +57,25 @@
   ③handler 挂到**控件根** `PreviewKeyDown`（隧道，根先收到），焦点不在输入框时也能识别，
   用 `if (e.Handled) return;` 防同一按键被根与输入框各处理一次。
 
-**验证**：`dotnet build` **0 错误**；`--selftest` **243 断言 ALL PASS**（新增 5 条 `MimeOrDefault` 回归断言：
-null / 空串 / 空白 / 正常 mime / 空 mime 构造 `MediaTypeHeaderValue` 不抛异常——直接复现原崩溃点）；
-发布版单文件 exe 自检同样 243 ALL PASS。
-**Ctrl+V 文件识别属 GUI 交互层，自动化不覆盖，需真机确认**（资源管理器复制文件 → 弹窗内 Ctrl+V 应直接收下）。
+### 🔧 P2 补丁：复制文件后程序没反应（与 Web 体验对齐）
+
+> 用户反馈「Ctrl+V 无法识别文件，跟 Web 的体验不一样」。上一轮只补了**按键兜底**，没找对根因——
+> **Web 版根本不需要按 Ctrl+V**：它在弹窗打开时就把剪贴板的**文本 / 图片 / 文件**一并自动填好。
+> exe 侧有**两个断点都只认文本和图片、都漏了文件**（图片当初补过，文件没人管）：
+
+- **断点① `MainWindow.TryAutoPrompt`**：`if (text.Length == 0 && !IsImageOnlyClipboard()) return;`
+  → 资源管理器复制文件（无文本无图、只有 FileDrop）**直接 return，压根不弹窗**，用户感觉"程序没反应"。
+  现已加 `&& ClipboardHelper.GetFileDropList() == null` 放行文件。
+- **断点② `PasteDialog` 自动填入**：只读 `Clipboard.GetText()` 和纯图片 → 就算手动点「＋」开弹窗，
+  复制的文件也不会被填进去，是个空窗。现已补文件分支（优先级同 Web：文本 > 图片 > 文件）。
+- 附加：弹窗 `Loaded` 时主动聚焦输入框——WPF 键盘事件沿焦点树路由，焦点不在弹窗内时
+  上一轮加的根级 `PreviewKeyDown` 收不到，按键兜底形同虚设。
+- 多文件：对齐 Web（只取第一个，`e.clipboardData.files[0]`），并 toast 提示"剪贴板有 N 个文件，已接收第一个"。
+
+**现在的链路（与 Web 一致）**：资源管理器复制文件 → 监听自动弹窗 → **直接显示文件 chip** → 点存入即可，全程无需按键。
+
+**验证**：`dotnet build` **0 错误**；`--selftest` **243 断言 ALL PASS**；发布版 exe 同样 243 ALL PASS。
+**属 GUI 交互层，自动化不覆盖，需真机确认**（复制文件 → 应自动弹窗并显示文件 chip）。
 
 ### 🔧 顺带修好两个「一直是死的」测试脚本（与本问题无关的历史债）
 - `scripts/test-auto-sync.mjs` ①找用户只认中文名「WebDAV测试」，而 `test-webdav-sync.mjs` 建的是「WebDAVTest」→ 恒报「未找到测试用户」；现兼容两者并支持 `TEST_USER` 覆盖，失败时打印现有用户名。②远端快照路径仍拼 `userId`（v0.6.13 起已按**账号名**寻址）→ 恒 404 导致 `.json()` 崩溃；改取 `accountName`。修复后 **3/3 通过**（此前 `npm test` 这条从未真跑通过）。

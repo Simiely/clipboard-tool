@@ -80,6 +80,15 @@ public partial class PasteDialog : UserControl
         //   handler 开头 `if (e.Handled) return;` 防同一按键被根与 InputBox 各处理一次。
         PreviewKeyDown += Input_KeyDown;
 
+        // v0.7.6-P2：加载后主动聚焦输入框。WPF 键盘事件沿**焦点元素所在的视觉树**路由，
+        // 焦点不在本弹窗内时（剪贴板监听自动弹窗，焦点可能仍在主窗口），
+        // 上面挂的根级 PreviewKeyDown 根本收不到 → Ctrl+V 兜底形同虚设。
+        Loaded += (_, _) =>
+        {
+            try { if (InputBox.Visibility == Visibility.Visible) InputBox.Focus(); }
+            catch { /* 聚焦失败不影响使用 */ }
+        };
+
         // v0.7.3：dup 编辑窗「＋ 新建」直达本窗 → skipAutoFill=true：
         //   不读剪贴板（否则那段被判定重复的文本又 autoFill 进来、预查再跳回 dup 编辑窗 → 死循环），
         //   直接从空白手动输入态开始。
@@ -106,6 +115,18 @@ public partial class PasteDialog : UserControl
                 {
                     var png = ClipboardHelper.ReadImageOnlyAsPng();
                     if (png != null) PickBytes(png, "clipboard-image.png", "image/png");
+                }
+                // v0.7.6-P2 修复（核心）：**文件分支此前完全缺失** —— 这是「Ctrl+V 无法识别文件、
+                // 与 Web 体验不一致」的真正根因。Web 版 autoFillPasteModal 在弹窗打开时就把
+                // 剪贴板的 text / 图片 / **文件** 一并填好（用户根本不需要按 Ctrl+V）；
+                // 而 exe 的 autoFill 只认文本和图片，复制文件后弹窗是空窗。
+                // 优先级与 Web 一致：文本 > 图片 > 文件（资源管理器复制文件不带文本，会落到本分支）。
+                else if (ClipboardHelper.GetFileDropList() is { Length: > 0 } files)
+                {
+                    // 对齐 Web：只取第一个（Web 是 e.clipboardData.files[0]）
+                    PickFile(files[0]);
+                    if (files.Length > 1)
+                        ToastService.Flash($"剪贴板有 {files.Length} 个文件，已接收第一个（其余请逐个存入）");
                 }
             }
             catch { /* 剪贴板不可读则留空 */ }
