@@ -132,6 +132,26 @@ public static class ClipboardHelper
         catch { return null; }
     }
 
+    /// <summary>读取系统剪贴板的文件拖放列表（资源管理器「复制」的文件）；无文件/剪贴板不可用 → null。
+    ///
+    /// 存在意义（与 ReadImageOnlyAsPng 的 Ctrl+V 兜底同源）：剪贴板只有 FileDrop 而无文本时，
+    /// TextBox 的粘贴命令 CanExecute=false → **DataObject.Pasting 事件根本不触发** →
+    /// 挂在输入框上的 OnPasting 收不到文件，Ctrl+V 表现为「毫无反应」。
+    /// 必须在 PreviewKeyDown 层直接读剪贴板兜底（v0.7.6-P1 修复：此前只给图片做了兜底，漏了文件）。</summary>
+    public static string[]? GetFileDropList()
+    {
+        try
+        {
+            if (!Clipboard.ContainsFileDropList()) return null;
+            var c = Clipboard.GetFileDropList();
+            if (c == null || c.Count == 0) return null;
+            var a = new string[c.Count];
+            c.CopyTo(a, 0);
+            return a;
+        }
+        catch { return null; } // 剪贴板被占用/无权限：静默（Ctrl+V 兜底路径，不该弹错打断输入）
+    }
+
     /// <summary>从 IDataObject 取 BitmapSource（Bitmap/Dib/PNG 均可）。</summary>
     private static BitmapSource? GetBitmapFrom(IDataObject d)
     {

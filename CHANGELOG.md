@@ -35,6 +35,33 @@
 - **三形态全发**：`clipboard-tool-v0.7.6-exe.zip`（597.2 KB，DEFLATE，单文件 `Clipboard.exe` + 使用说明）、`clipboard-tool-v0.7.6-bat.zip`（430.7 KB）、`clipboard-tool-v0.7.6-platform.zip`（480.6 KB，后两者 STORE 平铺）。
 - Release：<https://github.com/Simiely/clipboard-tool/releases/tag/v0.7.6>
 
+### 🔧 P1 补丁（同版本内 exe 资产重发）：同步失败 mediaType + Ctrl+V 识别不了文件
+
+> 首发 exe 后真机立刻暴露两个问题，**均为 exe 侧**（bat / platform 未受影响）。已修复并**替换 Release 同名资产**（旧包下载次数 0）。
+
+**① 同步失败 `The value cannot be an empty string.(Parameter 'mediaType')`**
+- 根因：`WebDavClient.UploadFile` 里 `new MediaTypeHeaderValue(mime ?? "application/octet-stream")`。
+  **C# 的 `??` 只判 null、不判空字符串**——而 `FileStore.MimeFromPath` 对未知扩展名返回 `""`（很常见），
+  条目 `fileMime` 为空串时原样传入 → 构造 HTTP 头抛异常 → **整个同步被这一个文件中断**，用户只看到「同步失败」。
+- 修复：抽出纯函数 `WebDavClient.MimeOrDefault(mime)`，空/空白 → `application/octet-stream`
+  （对齐 Web 端 `c.fileMime || "application/octet-stream"`——JS 的 `||` 对空串也兜底，故 Web 端从未踩此坑）。
+- **为何现在才暴露**：本版把「同步文件实体」改为默认开启后，上传分支第一次真正被执行
+  （此前 `if (cfg.SyncFiles)` 默认 false，从不上传）——**被新默认值唤醒的潜伏 bug**。
+
+**② Ctrl+V 识别不了剪贴板里的文件**
+- 根因：与代码注释中已记载的图片坑**完全同源**——剪贴板只有 FileDrop、没有文本时，
+  `TextBox` 粘贴命令 `CanExecute=false` → **`DataObject.Pasting` 事件根本不触发** →
+  挂在输入框上的 `OnPasting` 收不到文件。当时只给**图片**做了 `PreviewKeyDown` 兜底，**漏了文件**。
+- 修复：①新增 `ClipboardHelper.GetFileDropList()`（try/catch，剪贴板被占用静默）；
+  ②`Input_KeyDown` 的 Ctrl+V 分支补文件兜底（优先级同 `OnPasting`：纯图片 → 文件）；
+  ③handler 挂到**控件根** `PreviewKeyDown`（隧道，根先收到），焦点不在输入框时也能识别，
+  用 `if (e.Handled) return;` 防同一按键被根与输入框各处理一次。
+
+**验证**：`dotnet build` **0 错误**；`--selftest` **243 断言 ALL PASS**（新增 5 条 `MimeOrDefault` 回归断言：
+null / 空串 / 空白 / 正常 mime / 空 mime 构造 `MediaTypeHeaderValue` 不抛异常——直接复现原崩溃点）；
+发布版单文件 exe 自检同样 243 ALL PASS。
+**Ctrl+V 文件识别属 GUI 交互层，自动化不覆盖，需真机确认**（资源管理器复制文件 → 弹窗内 Ctrl+V 应直接收下）。
+
 ### 🔧 顺带修好两个「一直是死的」测试脚本（与本问题无关的历史债）
 - `scripts/test-auto-sync.mjs` ①找用户只认中文名「WebDAV测试」，而 `test-webdav-sync.mjs` 建的是「WebDAVTest」→ 恒报「未找到测试用户」；现兼容两者并支持 `TEST_USER` 覆盖，失败时打印现有用户名。②远端快照路径仍拼 `userId`（v0.6.13 起已按**账号名**寻址）→ 恒 404 导致 `.json()` 崩溃；改取 `accountName`。修复后 **3/3 通过**（此前 `npm test` 这条从未真跑通过）。
 

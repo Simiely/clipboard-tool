@@ -74,6 +74,12 @@ public partial class PasteDialog : UserControl
         // 粘贴拦截：资源管理器复制文件 Ctrl+V → FileDrop → 选文件（对齐 ta paste ②图片/文件优先）
         InputBox.AddHandler(DataObject.PastingEvent, new DataObjectPastingEventHandler(OnPasting), true);
 
+        // v0.7.6-P1：Ctrl+V 兜底挂到控件根（PreviewKeyDown 是隧道，根先于 InputBox 收到）。
+        //   只挂 InputBox 时，若焦点不在输入框（刚打开弹窗、点过标题/标签/按钮后），
+        //   Ctrl+V 完全没人处理 —— 文件/图片都识别不了。挂根后弹窗内任何位置都能收。
+        //   handler 开头 `if (e.Handled) return;` 防同一按键被根与 InputBox 各处理一次。
+        PreviewKeyDown += Input_KeyDown;
+
         // v0.7.3：dup 编辑窗「＋ 新建」直达本窗 → skipAutoFill=true：
         //   不读剪贴板（否则那段被判定重复的文本又 autoFill 进来、预查再跳回 dup 编辑窗 → 死循环），
         //   直接从空白手动输入态开始。
@@ -317,10 +323,12 @@ public partial class PasteDialog : UserControl
 
     private void Input_KeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Handled) return; // 本 handler 同时挂在控件根与 InputBox 上（见构造函数），隧道阶段会到两次
         var ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
-        // Ctrl+V 纯图片兜底：剪贴板只有图片无文本时，TextBox 粘贴命令 CanPaste=false → DataObject.Pasting
-        // 事件不触发（OnPasting 收不到，图片识别断点③）→ 在 PreviewKeyDown 层直接读图收下。
-        //   有文本时不抢（富文本复制按文本走，用户可按 Ctrl 粘贴文本）；FileDrop 仍走 OnPasting。
+        // Ctrl+V 兜底：剪贴板只有图片/文件而无文本时，TextBox 粘贴命令 CanPaste=false → DataObject.Pasting
+        // 事件不触发（OnPasting 收不到）→ 必须在 PreviewKeyDown 层直接读剪贴板收下。
+        //   有文本时不抢（富文本复制按文本走，用户可按 Ctrl 粘贴文本）。
+        //   优先级与 OnPasting 一致：纯图片 → 文件。
         if (ctrl && e.Key == Key.V)
         {
             var png = ClipboardHelper.ReadImageOnlyAsPng();
@@ -328,6 +336,15 @@ public partial class PasteDialog : UserControl
             {
                 e.Handled = true; // 吞掉本次粘贴，避免 TextBox 对无文本剪贴板无操作后事件继续冒泡
                 PickBytes(png, "clipboard-image.png", "image/png");
+                return;
+            }
+            // v0.7.6-P1 修复：文件兜底。此前只给图片做了 PreviewKeyDown 兜底，
+            // 资源管理器复制文件 → 剪贴板仅 FileDrop → OnPasting 同样收不到 → Ctrl+V 毫无反应。
+            var files = ClipboardHelper.GetFileDropList();
+            if (files != null && files.Length > 0)
+            {
+                e.Handled = true;
+                PickFile(files[0]);
                 return;
             }
         }

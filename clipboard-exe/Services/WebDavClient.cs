@@ -224,11 +224,26 @@ public static class WebDavClient
             throw new WebDavException(502, "WebDAV 目录不可用（HTTP " + r.Status + "）");
     }
 
+    /// <summary>MIME 兜底：null / 空串 / 空白 → application/octet-stream。
+    /// 对齐 Web 端 `c.fileMime || "application/octet-stream"`（JS 空串也走 || 兜底）。
+    ///
+    /// 单独抽成纯函数以便自检覆盖（v0.7.6-P1）：C# 的 `??` **只判 null**，
+    /// 条目的 fileMime 为**空字符串**时（MimeFromPath 对未知扩展名返回 ""，很常见）
+    /// `mime ?? "application/octet-stream"` 会原样把 "" 传下去 →
+    /// `new MediaTypeHeaderValue("")` 抛 "The value cannot be an empty string. (Parameter 'mediaType')"
+    /// → 整个同步被这一个文件中断，用户只看到「同步失败」。</summary>
+    public static string MimeOrDefault(string? mime)
+        => string.IsNullOrWhiteSpace(mime) ? "application/octet-stream" : mime;
+
     /// <summary>上传文件实体（PUT 二进制；对齐 syncFileEntities 的 PUT 分支）。</summary>
     public static async Task UploadFile(SyncConfig c, string url, byte[] data, string? mime)
     {
         using var content = new ByteArrayContent(data);
-        content.Headers.ContentType = new MediaTypeHeaderValue(mime ?? "application/octet-stream");
+        // v0.7.6-P1 修复：`mime ?? "..."` 只判 null，条目的 fileMime 为**空字符串**时原样传入 →
+        // MediaTypeHeaderValue("") 抛 "The value cannot be an empty string. (Parameter 'mediaType')"，
+        // 整个同步被这一次异常中断（用户侧只看到「同步失败」）。
+        // 空/空白一律兜底 octet-stream（对齐 Web 端 `c.fileMime || "application/octet-stream"` 的 JS 语义）。
+        content.Headers.ContentType = new MediaTypeHeaderValue(MimeOrDefault(mime));
         using var cts = new CancellationTokenSource(REQ_TIMEOUT_MS);
         using var req = new HttpRequestMessage(HttpMethod.Put, url)
         {

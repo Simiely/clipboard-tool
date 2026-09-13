@@ -554,6 +554,21 @@ public static class SelfTest
                 Check("M5 配置：无配置文件返回 null", WebDavSync.LoadConfig(Path.Combine(dir, "nope")) == null, Line);
                 Check("M5 配置：未配置时默认地址 = http://192.168.2.1:6086", WebDavSync.DefaultUrl == "http://192.168.2.1:6086", Line);
 
+                // v0.7.6-P1 回归：空 fileMime 曾让 MediaTypeHeaderValue("") 抛异常并中断整次同步
+                Check("MimeOrDefault：null → octet-stream",
+                    WebDavClient.MimeOrDefault(null) == "application/octet-stream", Line);
+                Check("MimeOrDefault：空串 → octet-stream（回归：?? 只判 null，曾抛 mediaType 空串异常）",
+                    WebDavClient.MimeOrDefault("") == "application/octet-stream", Line);
+                Check("MimeOrDefault：空白 → octet-stream",
+                    WebDavClient.MimeOrDefault("   ") == "application/octet-stream", Line);
+                Check("MimeOrDefault：正常 mime 原样返回",
+                    WebDavClient.MimeOrDefault("image/png") == "image/png", Line);
+                // 直接构造 HeaderValue 复现原崩溃点，确保兜底后不再抛
+                var hvOk = true;
+                try { _ = new System.Net.Http.Headers.MediaTypeHeaderValue(WebDavClient.MimeOrDefault("")); }
+                catch { hvOk = false; }
+                Check("MimeOrDefault：空 mime 构造 MediaTypeHeaderValue 不抛异常（原崩溃点）", hvOk, Line);
+
                 // M5 引擎：IsDue 定时判定（对齐 runAutoSync 的 due 逻辑）
                 var nowMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 Check("M5 IsDue：到点应触发", SyncEngine.IsDue(new SyncConfig { AutoSync = true, IntervalMin = 30, LastSyncAt = nowMs - 31 * 60_000L }), Line);
