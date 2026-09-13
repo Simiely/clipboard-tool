@@ -7,7 +7,14 @@
 ### 🐛 语义修正：拉回无条件，只有上传受开关控制（核心）
 - `lib/core/webdav.js` `syncFileEntities`：`cfg.syncFiles` 从此只决定「本地有实体时是否 PUT 上云」；**本地缺失实体时无条件 GET 远端拉回**。未勾选场景新设备也能恢复，不再出现「卡片在、文件死」。
 - 配套：`runSync` ④ 去掉 `if (cfg.syncFiles)` 守卫（改为无条件调用）；`ensureOneDir`（`files/` + `files/<账号名>/` 的 MKCOL）仅在需要上传时执行——只拉回的场景不该在远端凭空建空目录。
-- exe 端同步改（双版本规则一致铁律）：`Services/SyncEngine.cs` `SyncFileEntities` 同样拆分上传/拉回语义，`RunSync` 去掉守卫——**⚠️ 本机无 .NET 9 SDK，exe 侧未编译验证，需装 SDK 后 `dotnet build` 确认**。
+- exe 端同步改（双版本规则一致铁律）：`Services/SyncEngine.cs` `SyncFileEntities` 同样拆分上传/拉回语义，`RunSync` 去掉守卫。
+- AssemblyInfo `0.7.5 → 0.7.6`。
+
+### 🧪 exe 侧验证（.NET 9 SDK 9.0.317 装好后补验，全部通过）
+- **构建**：`dotnet build -c Release` **0 错误**（162 个 CA1416 警告为 TrayIconService/TrayDarkMenu 既有，非本次引入）。
+- **`--selftest`**：**ALL PASS**（含 `M5 配置：round-trip SyncFiles/AutoSync/Interval/Account` 等关键项，零回归）。
+- **双版本差分门禁**：`npm run test:diff` **41 fixtures（dedup 11 + sort 10 + cleanUrl 15 + expiry 5）全部对拍一致**，difftest 构建 0 错误——本次改动跨端规则无漂移。
+- **发布产物自检**：`PublishSingleFile` 单文件 `Clipboard.exe` 839.7 KB，发布版跑 `--selftest` 同样 **ALL PASS**。
 
 ### ✅ 默认开启
 - `saveSyncConfig`（webdav.js）：未显式传 `syncFiles` 时——首次配置 = **true**，后续沿用旧值；显式传 `false` 仍尊重。
@@ -22,7 +29,11 @@
 
 ### 🧪 测试
 - **新增 `scripts/test-cross-device-files.mjs`**（跨设备实体同步回归门禁）：自起 mock-webdav(8181) + 两个独立实例(8133/8134)，同账号名、不同 userId 模拟真实两台设备。18 断言覆盖：A 上传图片→上云 / B 未勾 syncFiles **仍能拉回且下载 200**（核心回归）/ 勾选后自愈+字节一致 / **未勾时不上传**（反向验证上传仍受控）/ 新建配置默认 `syncFiles=true`。
-- 回归：smoke **42/42**、WebDAV 集成 **19/19**、merge-snapshot **17/17** 全绿零回归。
+- 回归：smoke **42/42**、WebDAV 集成 **19/19**、merge-snapshot **17/17**、auto-sync **3/3** 全绿零回归。
+
+### 📦 发布
+- **三形态全发**：`clipboard-tool-v0.7.6-exe.zip`（597.2 KB，DEFLATE，单文件 `Clipboard.exe` + 使用说明）、`clipboard-tool-v0.7.6-bat.zip`（430.7 KB）、`clipboard-tool-v0.7.6-platform.zip`（480.6 KB，后两者 STORE 平铺）。
+- Release：<https://github.com/Simiely/clipboard-tool/releases/tag/v0.7.6>
 
 ### 🔧 顺带修好两个「一直是死的」测试脚本（与本问题无关的历史债）
 - `scripts/test-auto-sync.mjs` ①找用户只认中文名「WebDAV测试」，而 `test-webdav-sync.mjs` 建的是「WebDAVTest」→ 恒报「未找到测试用户」；现兼容两者并支持 `TEST_USER` 覆盖，失败时打印现有用户名。②远端快照路径仍拼 `userId`（v0.6.13 起已按**账号名**寻址）→ 恒 404 导致 `.json()` 崩溃；改取 `accountName`。修复后 **3/3 通过**（此前 `npm test` 这条从未真跑通过）。

@@ -10,8 +10,8 @@ using System.Windows;
 
 [assembly: AssemblyTitle("Clipboard")]
 [assembly: AssemblyProduct("Clipboard")]
-[assembly: AssemblyVersion("0.7.5.0")]
-[assembly: AssemblyFileVersion("0.7.5.0")]
-[assembly: AssemblyInformationalVersion("0.7.5")]
+[assembly: AssemblyVersion("0.7.6.0")]
+[assembly: AssemblyFileVersion("0.7.6.0")]
+[assembly: AssemblyInformationalVersion("0.7.6")]
 [assembly: TargetPlatform("Windows")]
 [assembly: ThemeInfo(ResourceDictionaryLocation.None, ResourceDictionaryLocation.SourceAssembly)]
