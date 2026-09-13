@@ -17,9 +17,15 @@ const webdav = await import("../lib/core/webdav.js");
 
 // 找 WebDAV 测试用户（test-webdav-sync 创建）
 const users = await (await fetch(BASE + "/api/users")).json();
-const u = users.users.find(x => x.name === "WebDAV测试");
-if (!u) { console.log("❌ 未找到测试用户（先跑 test-webdav-sync.mjs）"); process.exit(1); }
+// v0.7.6 修复：此前只认「WebDAV测试」，而 test-webdav-sync.mjs 建的是「WebDAVTest」——
+// 名字不匹配导致本脚本恒报「未找到测试用户」，`npm test` 这条一直是死的。现兼容两种 + 支持 TEST_USER 覆盖。
+const NAMES = [process.env.TEST_USER, "WebDAVTest", "WebDAV测试"].filter(Boolean);
+const u = users.users.find(x => NAMES.includes(x.name));
+if (!u) { console.log("❌ 未找到测试用户（先跑 test-webdav-sync.mjs）；现有用户：" + users.users.map(x => x.name).join(",")); process.exit(1); }
 const uid = u.id;
+// v0.7.6 修复：v0.6.13 起远端快照按【账号名】寻址（clipboard-<accountName>.json），
+// 本脚本仍拼 userId（旧格式）→ 恒 404 → .json() 崩溃。这里统一取账号名。
+const snapName = u.accountName || u.name;
 
 // 1. 配置 autoSync=true、intervalMin=1 分钟、lastSyncAt=0（立即到期）
 webdav.saveSyncConfig(uid, { url: DAV, user: "admin", pass: "admin123", syncFiles: false, autoSync: true, intervalMin: 1 });
@@ -35,10 +41,10 @@ const after1 = JSON.parse(fs.readFileSync(cfgFile, "utf8"));
 ok("到期触发自动同步(lastSyncAt 更新)", after1.lastSyncAt >= t0);
 
 // 3. 立即再跑 → 未到期 → 不触发（快照 syncedAt 不变）
-const snapBefore = await (await fetch(DAV + "workbuddy/剪贴板/clipboard-" + uid + ".json", { headers: AUTH })).json();
+const snapBefore = await (await fetch(DAV + "workbuddy/剪贴板/clipboard-" + snapName + ".json", { headers: AUTH })).json();
 await new Promise(r => setTimeout(r, 200));
 await webdav.runAutoSync();
-const snapAfter = await (await fetch(DAV + "workbuddy/剪贴板/clipboard-" + uid + ".json", { headers: AUTH })).json();
+const snapAfter = await (await fetch(DAV + "workbuddy/剪贴板/clipboard-" + snapName + ".json", { headers: AUTH })).json();
 ok("未到期跳过(快照 syncedAt 不变)", snapBefore.syncedAt === snapAfter.syncedAt);
 
 // 4. 关闭自动同步后不触发（把 lastSyncAt 归零也不会跑）

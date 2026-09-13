@@ -7,8 +7,8 @@
 
 | 形态 | 子目录 | 状态 | 运行方式 | 数据目录 | 适合场景 |
 |---|---|---|---|---|---|
-| **本地服务版**（Web） | `local-service/` | ✅ 在产 v0.6.14 | `node server.mjs 8130` | `./.data`（CAP_STORAGE_DIR 可覆盖） | 个人/局域网多用户，浏览器访问 |
-| **平台版**（tools-center） | `platform/` | ✅ 可用 v0.6.14 | 平台托管（tools/ 挂载 + tool.json 声明） | 平台注入 CAP_STORAGE_DIR | 服务器集中部署，多工具平台统一管理 |
+| **本地服务版**（Web） | `local-service/` | ✅ 在产 v0.7.6 | `node server.mjs 8130` | `./.data`（CAP_STORAGE_DIR 可覆盖） | 个人/局域网多用户，浏览器访问 |
+| **平台版**（tools-center） | `platform/` | ✅ 可用 v0.7.6 | 平台托管（tools/ 挂载 + tool.json 声明） | 平台注入 CAP_STORAGE_DIR | 服务器集中部署，多工具平台统一管理 |
 | **服务器版** | `server/` | 🚧 规划中 | `start-server.cmd`（独立部署） | 默认 ./.data 或参数指定 | 公网/团队，独立部署 |
 | **exe 桌面版** | `clipboard-exe/` | 🚧 规划中 | `Clipboard.exe`（WPF 原生，含置顶按钮） | exe 同目录 `data/`（便携） | 个人单机，免浏览器/免服务器 |
 

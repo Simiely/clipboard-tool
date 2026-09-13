@@ -17,7 +17,7 @@ start-server.cmd 8080 D:/clipboard-data   # 端口 + 数据目录
 - 数据目录默认 `./.data`（可用 `CAP_STORAGE_DIR` 环境变量或第二参数覆盖：`start-server.cmd 8080 D:/clipboard-data`）
 - **端口占用守卫**：检测到端口被占用立即报错退出（2026-08-27 多实例混跑事故教训，防误起第二个实例）
 - **数据目录共用警告**：非默认端口 + 默认数据目录时提示确认（防止第二个实例误用同一 `.data` 导致数据损坏）
-- 前台运行，日志实时可见（含版本指纹 `clipboard v0.6.14 (commit)`）
+- 前台运行，日志实时可见（含版本指纹 `clipboard v0.7.6 (commit)`）
 
 ## 两种部署路径
 

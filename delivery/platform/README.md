@@ -1,6 +1,6 @@
 # 平台版（tools-center 平台托管）
 
-> 状态：✅ **可用**（v0.6.14 起）。接入 tools-center 平台（Simiely/tools-center），作为平台工具之一由平台统一托管。
+> 状态：✅ **可用**（v0.7.6 起）。接入 tools-center 平台（Simiely/tools-center），作为平台工具之一由平台统一托管。
 
 ## 接入原理
 
@@ -9,7 +9,7 @@ tools-center 平台（Docker 镜像 `ghcr.io/simiely/tools-center:main`）扫描
 - **工具目录**：平台挂载卷 `tools/`（如宿主 `/mnt/usb2/Configs/tools-center/tools`），**新增工具 = 放一个子目录 + tool.json**
 - **tool.json**：本目录 `tool.json` 声明 id/name/cmd/port/health/capabilities/dataFiles
 - **数据目录**：`capabilities: ["storage"]` → 平台注入 `CAP_STORAGE_DIR`（工具专属目录，随平台 `data/` 挂载持久化）
-- **版本指纹**：启动日志打印 `clipboard v0.6.14 (commit)`，实例身份可追溯
+- **版本指纹**：启动日志打印 `clipboard v0.7.6 (commit)`，实例身份可追溯
 
 ## 部署步骤
 

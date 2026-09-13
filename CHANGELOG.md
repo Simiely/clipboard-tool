@@ -1,5 +1,32 @@
 # CHANGELOG.md
 
+## v0.7.6 (2026-09-13) — 修复「同步后另一台设备的图片/附件无法下载」+ 实体同步默认开启
+
+> 用户实测反馈：**图片在本机可以正常复制，但同步之后，另外的设备无法下载和使用**。新增跨设备 E2E 复现后定位为**产品语义缺陷**（不是传输/编码 bug）——`syncFiles`「同步文件实体」**默认关闭**且藏在数据管理弹窗里，而该开关**同时管着上传和拉回**：没勾 → 条目（文字/标题/标签）照常同步、卡片在另一台设备可见，但文件实体既不上云也不拉取 → 下载 404、图片裂图，且前端只提示笼统的「下载失败」，用户完全看不出原因。
+
+### 🐛 语义修正：拉回无条件，只有上传受开关控制（核心）
+- `lib/core/webdav.js` `syncFileEntities`：`cfg.syncFiles` 从此只决定「本地有实体时是否 PUT 上云」；**本地缺失实体时无条件 GET 远端拉回**。未勾选场景新设备也能恢复，不再出现「卡片在、文件死」。
+- 配套：`runSync` ④ 去掉 `if (cfg.syncFiles)` 守卫（改为无条件调用）；`ensureOneDir`（`files/` + `files/<账号名>/` 的 MKCOL）仅在需要上传时执行——只拉回的场景不该在远端凭空建空目录。
+- exe 端同步改（双版本规则一致铁律）：`Services/SyncEngine.cs` `SyncFileEntities` 同样拆分上传/拉回语义，`RunSync` 去掉守卫——**⚠️ 本机无 .NET 9 SDK，exe 侧未编译验证，需装 SDK 后 `dotnet build` 确认**。
+
+### ✅ 默认开启
+- `saveSyncConfig`（webdav.js）：未显式传 `syncFiles` 时——首次配置 = **true**，后续沿用旧值；显式传 `false` 仍尊重。
+- **存量一次性迁移**（`webdav.js migrateSyncFilesDefaults` + `server.mjs` 启动调用）：旧版 `!!syncFiles` 把默认 false **写死进了每一份 `webdav.json`**，改代码不会改变已落盘的值——存量用户仍是不备份状态。启动时扫描 `*.webdav.json`，把 `syncFiles:false` 翻成 true 并打 `v0619SyncFiles` 标记；**只翻「从未迁移过」的配置，迁移后用户再主动关闭会被尊重**（不会被再次翻开）。启动时若发生翻转会打印一行日志。
+- exe：`Models/SyncConfig.cs` `SyncFiles` 属性默认值 `false → true`；`DataDialog` 加载既有配置 `?? false → ?? true`。
+- 前端 `app.js`：WebDAV 配置弹窗「同步文件实体」复选框默认勾选；读取时 `r.syncFiles !== false`（缺省视为开，存量显式 false 仍尊重）。
+
+### 💬 提示与文案
+- `apiBlob` 404 分支：由「下载失败」改为**可操作提示**——「文件实体缺失：本机与云端都没有该文件，请在存有该文件的设备上开启『同步文件实体』后同步一次」；其它状态码带 HTTP 码。
+- `downloadFile` 增加空 blob 守卫（`!blob.size` → 抛「文件实体为空」，避免静默下载 0 字节文件）。
+- 两端复选框文案补上关闭后果：「…（关闭后不备份上云，但本机仍会尝试从云端拉回缺失的实体）」。
+
+### 🧪 测试
+- **新增 `scripts/test-cross-device-files.mjs`**（跨设备实体同步回归门禁）：自起 mock-webdav(8181) + 两个独立实例(8133/8134)，同账号名、不同 userId 模拟真实两台设备。18 断言覆盖：A 上传图片→上云 / B 未勾 syncFiles **仍能拉回且下载 200**（核心回归）/ 勾选后自愈+字节一致 / **未勾时不上传**（反向验证上传仍受控）/ 新建配置默认 `syncFiles=true`。
+- 回归：smoke **42/42**、WebDAV 集成 **19/19**、merge-snapshot **17/17** 全绿零回归。
+
+### 🔧 顺带修好两个「一直是死的」测试脚本（与本问题无关的历史债）
+- `scripts/test-auto-sync.mjs` ①找用户只认中文名「WebDAV测试」，而 `test-webdav-sync.mjs` 建的是「WebDAVTest」→ 恒报「未找到测试用户」；现兼容两者并支持 `TEST_USER` 覆盖，失败时打印现有用户名。②远端快照路径仍拼 `userId`（v0.6.13 起已按**账号名**寻址）→ 恒 404 导致 `.json()` 崩溃；改取 `accountName`。修复后 **3/3 通过**（此前 `npm test` 这条从未真跑通过）。
+
 ## v0.7.5 (2026-09-08) — 开机自启 + 开机静默托盘 + 图标去「方角」改超椭圆 squircle
 
 > 本版是 exe 桌面版的两个增强：①顶栏加 **⚡ 开机自启**开关（写注册表 Run，开机 `/startup` 静默驻留托盘、不弹主窗），方案对齐 WindowTinter proto-shadow（README 明写"勾选开机自启后开机仅驻留托盘、不弹主窗"）；②修复图标「方角」问题——源图是整张方形不透明画布，旧脚本纯缩放导致开始菜单/任务栏图标四角直边粉色，改为**超椭圆 alpha 裁剪**（同 WindowTinter `DEV.md §17 超椭圆图标`：n=4 大尺寸 squircle / n=8 小尺寸近圆）。bat/platform 形态代码未变，不重打 zip（仅 exe zip 重打）。
