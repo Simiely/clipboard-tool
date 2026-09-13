@@ -83,7 +83,8 @@ public static class SyncEngine
             storage.SaveTombstones(merged.Tombstones);
 
             // ⑤ 实体同步（勾选时）
-            if (cfg.SyncFiles) await SyncFileEntities(cfg, name, fileStore, merged.Clips);
+            // v0.6.19：无条件执行（拉回不受 SyncFiles 约束，仅上传受控）
+            await SyncFileEntities(cfg, name, fileStore, merged.Clips);
 
             // ⑥ 上传保护：合并前本地无数据 → 跳过上传，防空备份覆盖远端（对齐 runSync hadLocal 判定）
             var hadLocal = localClips.Count > 0 || localTomb.Count > 0;
@@ -122,12 +123,20 @@ public static class SyncEngine
         finally { lock (InFlightLock) { InFlight.Remove(cfg.AccountName); } }
     }
 
-    /// <summary>实体同步（对齐 webdav.js syncFileEntities）：本地有实体 → PUT 上传；本地缺失（恢复）→ GET 拉回本地。</summary>
+    /// <summary>实体同步（对齐 webdav.js syncFileEntities）：
+    /// 本地有实体 → PUT 上传；本地缺失（恢复）→ GET 拉回本地。
+    /// v0.6.19 语义修正（对齐 Web 端）：<c>SyncFiles</c> 只控制「是否备份实体上云」，**不再控制拉回**。
+    /// 旧行为开关同时管上传与拉回 → 未勾选时其它设备同步后条目可见但实体永远缺失（下载失败/图片裂图）。
+    /// 新行为：拉回无条件执行；上传仍受开关约束（不想把大文件备份上云可关，但不影响他端恢复）。</summary>
     private static async Task SyncFileEntities(SyncConfig cfg, string name, FileStore fileStore, List<ClipItem> clips)
     {
         var fBase = WebDavClient.FilesDirUrlFor(cfg, name);
-        await WebDavClient.EnsureOneDir(cfg, WebDavClient.FilesRootUrlFor(cfg)); // files/
-        await WebDavClient.EnsureOneDir(cfg, fBase); // files/<账号名>/
+        // v0.6.19：仅「需要上传」时才建目录——只拉回的场景不该在远端凭空建空目录
+        if (cfg.SyncFiles)
+        {
+            await WebDavClient.EnsureOneDir(cfg, WebDavClient.FilesRootUrlFor(cfg)); // files/
+            await WebDavClient.EnsureOneDir(cfg, fBase); // files/<账号名>/
+        }
         foreach (var c in clips)
         {
             if (c.Type != "file" || string.IsNullOrEmpty(c.FileId)) continue;
@@ -137,6 +146,7 @@ public static class SyncEngine
             try { local = fileStore.ReadAllBytes(c.FileId); } catch { local = null; }
             if (local != null)
             {
+                if (!cfg.SyncFiles) continue; // 未勾选：不备份实体上云（v0.6.19）
                 await WebDavClient.UploadFile(cfg, remote, local, c.FileMime ?? "application/octet-stream");
             }
             else

@@ -71,7 +71,7 @@
                     <PasswordBox x:Name="PwdBox" Style="{StaticResource EditPassword}" Margin="0,0,0,2"/>
                     <TextBlock x:Name="PwdHint" Foreground="{StaticResource DimBrush}" FontSize="11" Margin="0,2,0,12"/>
 
-                    <CheckBox x:Name="SyncFilesChk" Content="同步文件实体（图片 / 附件）"
+                    <CheckBox x:Name="SyncFilesChk" Content="同步文件实体（图片 / 附件；关闭后不备份上云，但本机仍会尝试从云端拉回缺失的实体）"
                               Foreground="{StaticResource TextBrush}" Margin="0,2,0,8"/>
                     <CheckBox x:Name="AutoSyncChk" Content="自动同步"
                               Foreground="{StaticResource TextBrush}" Margin="0,2,0,12"/>

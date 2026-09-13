@@ -55,7 +55,11 @@ async function apiBlob(path) {
   }
   clearTimeout(timer);
   if (r.status === 401 && state.current) handleSessionLost();
-  if (!r.ok) throw new Error("下载失败");
+  // v0.6.19：404 = 本地缺少文件实体（多为WebDAV 同步时未备份/远端也无），给出可操作提示而非笼统「下载失败」
+  if (!r.ok) {
+    if (r.status === 404) throw new Error("文件实体缺失：本机与云端都没有该文件，请在存有该文件的设备上开启「同步文件实体」后同步一次");
+    throw new Error("下载失败（HTTP " + r.status + "）");
+  }
   return r.blob();
 }
 /** 会话失效：清理本地状态回选用户页（被删号/被踢/服务重启后 token 失效） */
@@ -1293,6 +1297,7 @@ function bindImageHoverPreview(c, card) {
 async function downloadFile(c) {
   try {
     const blob = await apiBlob("/api/files/" + c.fileId);
+    if (!blob || !blob.size) throw new Error("文件实体为空");
     const u = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = u; a.download = c.fileName || "file";
@@ -2048,7 +2053,10 @@ function renderWebdavSection(container) {
   container.append(davUrl, davUser, davPass);
   // 实体同步 + 自动同步选项
   const davFiles = el("input"); davFiles.type = "checkbox";
-  const davFilesLbl = el("label", "dm-opt", ""); davFilesLbl.append(davFiles, " 同步文件实体（图片/文件也备份到 WebDAV）");
+  davFiles.checked = true; // v0.6.19：默认开启（此前默认关闭 → 另一台设备图片/附件下载 404）
+  // v0.6.19：文案补上「关闭的后果」——旧文案只说「也备份」，用户看不出关掉会导致他端用不了
+  const davFilesLbl = el("label", "dm-opt", "");
+  davFilesLbl.append(davFiles, " 同步文件实体（图片/附件；关闭后不备份上云，但本机仍会尝试从云端拉回缺失的实体）");
   const davAuto = el("input"); davAuto.type = "checkbox";
   const davInt = el("select");
   // v0.6.11：选项含 30 分钟——此前只有 1/6/12/24 小时，后端允许最小 30 分钟，
@@ -2071,7 +2079,7 @@ function renderWebdavSection(container) {
       const r = await api("/api/sync/config");
       if (r.configured) {
         davUrl.value = r.url; davUser.value = r.user;
-        davFiles.checked = !!r.syncFiles;
+        davFiles.checked = r.syncFiles !== false; // v0.6.19：缺省/未配置视为开启（存量 false 尊重其选择）
         davAuto.checked = !!r.autoSync;
         // v0.6.11：精确读回间隔（分钟→小时，30 分钟=0.5）——旧实现 Math.round 把 30 分钟变 1 小时
         davInt.value = String((r.intervalMin || 720) / 60);

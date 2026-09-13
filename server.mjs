@@ -9,7 +9,7 @@ import { CONFIG } from "./lib/core/config.js";
 import { matchRoute, withParams } from "./lib/routes/index.js";
 import { sweepExpired } from "./lib/core/clips.js";
 import { deleteFile } from "./lib/core/files.js";
-import { runAutoSync } from "./lib/core/webdav.js";
+import { runAutoSync, migrateSyncFilesDefaults } from "./lib/core/webdav.js";
 import { pruneExpiredSessions } from "./lib/core/users.js";
 import { sendJson } from "./lib/routes/helpers.js";
 
@@ -31,6 +31,13 @@ const STATIC = {
   // v0.6.11：diag.html 并入缓存——此前每次请求 readFileSync，与静态策略不一致
   diag: { type: "text/html; charset=utf-8", body: fs.readFileSync(path.join(__dirname, "public", "diag.html")) },
 };
+
+// v0.6.19 一次性迁移：存量「同步文件实体」由 false 翻 true（旧默认值导致实体从未备份上云，
+// 换设备后条目可见但下载 404）。仅对从未迁移过的配置生效，之后用户主动关闭会被尊重。
+try {
+  const flipped = migrateSyncFilesDefaults();
+  if (flipped) console.log(`[v0.6.19] 已为 ${flipped} 个用户开启「同步文件实体」（旧默认值导致文件/图片未备份上云）`);
+} catch { /* 迁移失败不影响启动 */ }
 
 // 后台过期清扫：60s 周期，删除过期条目并联动清理文件实体
 setInterval(() => {
