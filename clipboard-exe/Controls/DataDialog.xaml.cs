@@ -33,7 +33,7 @@ public partial class DataDialog : UserControl
         UrlBox.Text = current?.Url ?? WebDavSync.DefaultUrl;
         UserBox.Text = current?.User ?? "";
         // 密码不回显：留空 = 复用已保存密码（对齐 saveSyncConfig 语义）
-        SyncFilesChk.IsChecked = current?.SyncFiles ?? true; // v0.6.19：默认开启（此前默认关闭 → 他端图片/附件下载失败）
+        SyncFilesChk.IsChecked = current?.SyncFiles ?? true; // v0.7.6：默认开启（此前默认关闭 → 他端图片/附件下载失败）
         AutoSyncChk.IsChecked = current?.AutoSync ?? false;
         IntervalBox.Text = (current != null && current.IntervalMin > 0 ? current.IntervalMin : WebDavSync.DefaultIntervalMin).ToString();
         _saved = current;

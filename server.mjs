@@ -32,11 +32,11 @@ const STATIC = {
   diag: { type: "text/html; charset=utf-8", body: fs.readFileSync(path.join(__dirname, "public", "diag.html")) },
 };
 
-// v0.6.19 一次性迁移：存量「同步文件实体」由 false 翻 true（旧默认值导致实体从未备份上云，
+// v0.7.6 一次性迁移：存量「同步文件实体」由 false 翻 true（旧默认值导致实体从未备份上云，
 // 换设备后条目可见但下载 404）。仅对从未迁移过的配置生效，之后用户主动关闭会被尊重。
 try {
   const flipped = migrateSyncFilesDefaults();
-  if (flipped) console.log(`[v0.6.19] 已为 ${flipped} 个用户开启「同步文件实体」（旧默认值导致文件/图片未备份上云）`);
+  if (flipped) console.log(`[v0.7.6] 已为 ${flipped} 个用户开启「同步文件实体」（旧默认值导致文件/图片未备份上云）`);
 } catch { /* 迁移失败不影响启动 */ }
 
 // 后台过期清扫：60s 周期，删除过期条目并联动清理文件实体

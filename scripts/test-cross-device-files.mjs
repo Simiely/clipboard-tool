@@ -98,7 +98,7 @@ async function main() {
   const tkB = ub.data.token, uidB = ub.data.user.id;
   ok("B 与 A 的 userId 不同（真实跨设备）", uidA !== uidB, uidA + " vs " + uidB);
 
-  // ---- 场景X（v0.6.19 核心回归）：B 首次同步【未勾 syncFiles】→ 拉回必须无条件生效 ----
+  // ---- 场景X（v0.7.6 核心回归）：B 首次同步【未勾 syncFiles】→ 拉回必须无条件生效 ----
   // 旧行为：此处本地无实体 + 下载 404 = 用户报的「另一台设备用不了」。新行为：实体照样拉回。
   await api(DEV_B, "POST", "/api/sync/config", { token: tkB, json: { url: DAV, user: "admin", pass: "admin123", syncFiles: false } });
   await api(DEV_B, "POST", "/api/sync/run", { token: tkB });

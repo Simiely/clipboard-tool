@@ -10,7 +10,7 @@ public sealed class SyncConfig
     [JsonPropertyName("url")] public string Url { get; set; } = "";
     [JsonPropertyName("user")] public string User { get; set; } = "";
     [JsonPropertyName("pass")] public string Pass { get; set; } = "";
-    // v0.6.19：默认 true（对齐 Web 端 saveSyncConfig）。此前默认 false —— 用户根本不知道有这个开关，
+    // v0.7.6：默认 true（对齐 Web 端 saveSyncConfig）。此前默认 false —— 用户根本不知道有这个开关，
     // 结果「条目同步过去了、图片/附件在另一台设备下载失败」。
     // 注意：JSON 反序列化时若文件里显式写了 "syncFiles": false，会覆盖此默认值（尊重用户既有选择）。
     [JsonPropertyName("syncFiles")] public bool SyncFiles { get; set; } = true;
