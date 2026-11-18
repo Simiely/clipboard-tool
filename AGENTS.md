@@ -1,5 +1,7 @@
 # AGENTS.md · 项目规则
 
+> 📌 **文档基线**：2026-11-18（commit `5c52956`）接入 repo-kit 机器层（link-only / 规范 2.1.4）
+
 > 📌 **⚠️ C# `??` 只判 null、不判空字符串（v0.7.6-P1 真机血案）**：`WebDavClient.UploadFile` 原写 `new MediaTypeHeaderValue(mime ?? "application/octet-stream")`，而 `FileStore.MimeFromPath` 对**未知扩展名返回 `""`**（很常见）→ 空串被原样传给 HTTP 头 → 抛 `The value cannot be an empty string. (Parameter 'mediaType')` → **整个同步被这一个文件中断**，用户只看到「同步失败」。已抽 `WebDavClient.MimeOrDefault()`（用 `string.IsNullOrWhiteSpace`）统一兜底，并加 5 条 selftest 回归断言。**防回归规则：任何可能为 `""` 的字符串（mime / 路径 / 头值）一律用 `IsNullOrWhiteSpace` 兜底，不要用 `??`；JS 侧 `||` 对空串会兜底，所以 Web 端天然没这个坑——跨端移植时别把 `??` 当等价物。** 另注：此坑是 v0.7.6 把 syncFiles 默认改 true 后才被"唤醒"的（上传分支此前从不执行）——**改默认值会唤醒沉睡代码路径，必须评估该路径从未跑过的风险**。
 
 > 📌 **⚠️ Ctrl+V 识别不了剪贴板文件（v0.7.6-P1，GUI 交互层）**：与已记载的图片坑**同源**——剪贴板只有 FileDrop 无文本时 `TextBox` 粘贴命令 `CanExecute=false` → **`DataObject.Pasting` 事件根本不触发** → 挂在 `InputBox` 上的 `OnPasting` 收不到文件。当时只给图片做了 `PreviewKeyDown` 兜底，**漏了文件**。修复：`ClipboardHelper.GetFileDropList()` + `Input_KeyDown` 补文件分支 + **handler 挂到控件根**（`PreviewKeyDown +=`，焦点不在输入框也能收；开头 `if (e.Handled) return;` 防根与输入框重复处理）。**防回归规则：凡"无文本剪贴板"的内容（图片 / 文件）都必须在按键层兜底，不能只依赖 Pasting 事件；弹窗级快捷键要挂根而非只挂输入框。**
