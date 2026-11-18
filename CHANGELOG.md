@@ -1,5 +1,15 @@
 # CHANGELOG.md
 
+## 2026-11-18 · 文档维护：AGENTS 的巨型历史块迁入 rules/（111 → 84 行）
+
+- `AGENTS.md` 从 **32,399 字符 / 111 行** 降到 **9,973 字符 / 84 行**
+- 原因：第 34 行单条 **9,223 字符**（一整段 changelog 塞在「文档基线」行里），第 22 行 1,987 字符、
+  第 18/26/24/15 行各 1,000+ 字符 —— 行数看着合规，实际是一本账本
+- 与 `CHANGELOG.md` **不重复**（抽样核过：`syncFiles 默认关闭`、`无边框弹窗`、`双版本差分门禁` 等
+  在 CHANGELOG 里都搜不到），所以不能删，只能搬 → 逐字迁入 [`rules/基线历史.md`](rules/基线历史.md)（36 行）
+- `AGENTS.md` 只留两行指引；逐行核对 90 行非空内容 **零丢失**
+- 验收：`REPO CHECK: PASS`（ERROR=0、WARN=0）
+
 ## 2026-11-18 · 文档维护：接入 repo-kit 机器层（link-only）
 
 - `schema/taxonomy.json` + `schema/kit.lock.json`（kit `2.9.0` / 规范 `2.1.4` / `link-only`）+ `tools/repo-kit/check_repo.py`
