@@ -74,6 +74,13 @@
 - **滚动归档**（v0.2.0）：`saveClips` 内部自动滚动超限条目进 `<uid>.archive.json`（零丢失）；**v0.6.13 起同步快照 = 活跃区 ∪ 归档区**（归档条目带 `archived` 标记，WebDAV 完整备份）；拉回分拣写回**顺序关键：先 `saveArchive`（归档组替换）再 `saveClips`（活跃组，内部滚动会追加进归档）**——反了会覆盖刚滚出的条目；归档条目前端只读（archived 标记）+ ✕ 可删除（deleteArchivedClip，墓碑传播远端）；清空/删用户/过期清扫都要覆盖归档文件
 - **Windows 沙箱删除**（v0.3.1）：`rmForce` 的 unlinkSync/rmdirSync 在 safe-delete 拦截下"抛错但实际已删"——已容错吞掉；判定删除结果用"文件是否存在"，别用"是否抛错"
 
+## 机器层（repo-kit · link-only）
+
+- `schema/taxonomy.json` + `schema/kit.lock.json`（kit `2.9.0` / 规范 `2.1.4` / `link-only`）+ `tools/repo-kit/check_repo.py`
+- 校验：`python tools/repo-kit/check_repo.py --root .`；锁哈希：`pwsh tools/update-repo-kit.ps1 -Check`
+- 只查**链接与锚点**：全仓 md 豁免 frontmatter（本仓 docs 不套知识库 schema）
+- `schema/kit.lock.json` **不要手改**，升级只能跑 `tools/update-repo-kit.ps1`
+
 ## 常用命令
 ```bash
 node server.mjs 8130               # 独立运行（开发调试，数据落 ./.data/）

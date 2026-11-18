@@ -1,5 +1,11 @@
 # CHANGELOG.md
 
+## 2026-11-18 · 文档维护：接入 repo-kit 机器层（link-only）
+
+- `schema/taxonomy.json` + `schema/kit.lock.json`（kit `2.9.0` / 规范 `2.1.4` / `link-only`）+ `tools/repo-kit/check_repo.py`
+- `.github/workflows/repo-check.yml`：md / `schema/**` / `tools/**` 变更时跑链接与锚点检查 + 锁哈希校验
+- 只改文档基建，不动产品代码；验收 `REPO CHECK: PASS`（ERROR=0、WARN=0）、`KIT LOCK: PASS`
+
 ## v0.7.6 (2026-09-13) — 修复「同步后另一台设备的图片/附件无法下载」+ 实体同步默认开启
 
 > 用户实测反馈：**图片在本机可以正常复制，但同步之后，另外的设备无法下载和使用**。新增跨设备 E2E 复现后定位为**产品语义缺陷**（不是传输/编码 bug）——`syncFiles`「同步文件实体」**默认关闭**且藏在数据管理弹窗里，而该开关**同时管着上传和拉回**：没勾 → 条目（文字/标题/标签）照常同步、卡片在另一台设备可见，但文件实体既不上云也不拉取 → 下载 404、图片裂图，且前端只提示笼统的「下载失败」，用户完全看不出原因。
